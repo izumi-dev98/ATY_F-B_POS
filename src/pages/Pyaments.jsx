@@ -4,8 +4,10 @@ import supabase from "../createClients";
 
 export default function Pyaments({ inventory, setInventory }) {
   const [menu, setMenu] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [ingredientsMap, setIngredientsMap] = useState({});
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
@@ -49,16 +51,30 @@ export default function Pyaments({ inventory, setInventory }) {
     }
   };
 
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase.from("categories").select("*").order("name", { ascending: true });
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (err) {
+      console.error("Failed to load categories:", err);
+    }
+  };
+
   useEffect(() => {
     fetchMenu();
+    fetchCategories();
   }, []);
 
   const filteredMenu = useMemo(
     () =>
-      menu.filter((m) =>
-        (m.menu_name || "").toLowerCase().includes(search.toLowerCase()),
-      ),
-    [menu, search],
+      menu.filter((m) => {
+        const matchesSearch = (m.menu_name || "").toLowerCase().includes(search.toLowerCase());
+        const matchesCategory = selectedCategory === "all" || m.category_id === Number(selectedCategory);
+        return matchesSearch && matchesCategory;
+      }),
+    [menu, search, selectedCategory],
   );
 
   const addToCart = (item) => {
@@ -278,8 +294,36 @@ export default function Pyaments({ inventory, setInventory }) {
           placeholder="Search menu..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full p-3 mb-6 border rounded-xl"
+          className="w-full p-3 mb-4 border rounded-xl"
         />
+
+        {/* Category Filter Tabs */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedCategory("all")}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${
+              selectedCategory === "all"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            All
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id.toString())}
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${
+                selectedCategory === cat.id.toString()
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filteredMenu.map((item) => (
             <button
