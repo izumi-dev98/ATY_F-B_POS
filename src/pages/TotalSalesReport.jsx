@@ -123,7 +123,33 @@ export default function TotalSalesReport() {
   const currentData = filteredData.slice(indexOfFirst, indexOfLast);
   const totalPages = Math.ceil(filteredData.length / rowsPerPage);
 
-  const totalSales = filteredData.reduce((sum, i) => sum + i.price * i.qty, 0);
+  // Calculate totals from orders
+  const getOrderTotals = () => {
+    const orderMap = {};
+    filteredData.forEach(item => {
+      if (!orderMap[item.order_id]) {
+        const order = orders.find(o => o.id === item.order_id);
+        orderMap[item.order_id] = {
+          subtotal: order?.subtotal || 0,
+          discount_percent: order?.discount_percent || 0,
+          discount_amount: order?.discount_amount || 0,
+          tax_percent: order?.tax_percent || 0,
+          tax_amount: order?.tax_amount || 0,
+          total: order?.total || 0,
+        };
+      }
+    });
+
+    const totals = Object.values(orderMap);
+    const totalSubtotal = totals.reduce((sum, o) => sum + o.subtotal, 0);
+    const totalDiscount = totals.reduce((sum, o) => sum + o.discount_amount, 0);
+    const totalTax = totals.reduce((sum, o) => sum + o.tax_amount, 0);
+    const grandTotal = totals.reduce((sum, o) => sum + o.total, 0);
+
+    return { totalSubtotal, totalDiscount, totalTax, grandTotal };
+  };
+
+  const { totalSubtotal, totalDiscount, totalTax, grandTotal } = getOrderTotals();
 
   const exportToExcel = () => {
     const exportData = filteredData.map((item) => ({
@@ -204,9 +230,24 @@ export default function TotalSalesReport() {
 
       {/* Total sales */}
       <div className="bg-white p-4 rounded-xl shadow mb-4">
-        <h2 className="text-lg font-semibold text-gray-700">
-          Total Sales: {mmkFormatter.format(totalSales)}
-        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div>
+            <p className="text-sm text-gray-500">Subtotal</p>
+            <p className="text-lg font-semibold">{mmkFormatter.format(totalSubtotal)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Discount</p>
+            <p className="text-lg font-semibold text-red-500">-{mmkFormatter.format(totalDiscount)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Tax</p>
+            <p className="text-lg font-semibold text-blue-500">+{mmkFormatter.format(totalTax)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Grand Total</p>
+            <p className="text-xl font-bold text-green-600">{mmkFormatter.format(grandTotal)}</p>
+          </div>
+        </div>
       </div>
 
       {/* Search */}
@@ -225,34 +266,45 @@ export default function TotalSalesReport() {
         <table className="min-w-full text-left">
           <thead className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
             <tr>
-              <th className="px-6 py-3">Slip ID</th>
-              <th className="px-6 py-3">Menu</th>
-              <th className="px-6 py-3">Qty</th>
-              <th className="px-6 py-3">Price</th>
-              <th className="px-6 py-3">Total</th>
-              <th className="px-6 py-3">Date</th>
+              <th className="px-4 py-3">Slip ID</th>
+              <th className="px-4 py-3">Menu</th>
+              <th className="px-4 py-3">Qty</th>
+              <th className="px-4 py-3">Price</th>
+              <th className="px-4 py-3">Total</th>
+              <th className="px-4 py-3">Subtotal</th>
+              <th className="px-4 py-3">Discount</th>
+              <th className="px-4 py-3">Tax</th>
+              <th className="px-4 py-3">Grand Total</th>
+              <th className="px-4 py-3">Date</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" className="text-center py-6">Loading...</td>
+                <td colSpan="10" className="text-center py-6">Loading...</td>
               </tr>
             ) : currentData.length === 0 ? (
               <tr>
-                <td colSpan="6" className="text-center py-6">No Data Found</td>
+                <td colSpan="10" className="text-center py-6">No Data Found</td>
               </tr>
             ) : (
-              currentData.map((item) => (
+              currentData.map((item) => {
+                const order = orders.find(o => o.id === item.order_id);
+                return (
                 <tr key={item.id} className="border-b hover:bg-blue-50 transition">
-                  <td className="px-6 py-3">{item.order_id}</td>
-                  <td className="px-6 py-3 font-medium text-gray-700">{item.menu_name}</td>
-                  <td className="px-6 py-3">{item.qty}</td>
-                  <td className="px-6 py-3 text-green-600">{mmkFormatter.format(item.price)}</td>
-                  <td className="px-6 py-3 text-green-600 font-semibold">{mmkFormatter.format(item.price * item.qty)}</td>
-                  <td className="px-6 py-3 text-gray-600">{new Date(item.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">{item.order_id}</td>
+                  <td className="px-4 py-3 font-medium text-gray-700">{item.menu_name}</td>
+                  <td className="px-4 py-3">{item.qty}</td>
+                  <td className="px-4 py-3 text-green-600">{mmkFormatter.format(item.price)}</td>
+                  <td className="px-4 py-3 text-green-600 font-semibold">{mmkFormatter.format(item.price * item.qty)}</td>
+                  <td className="px-4 py-3">{mmkFormatter.format(order?.subtotal || 0)}</td>
+                  <td className="px-4 py-3 text-red-500">{mmkFormatter.format(order?.discount_amount || 0)}</td>
+                  <td className="px-4 py-3 text-blue-500">{mmkFormatter.format(order?.tax_amount || 0)}</td>
+                  <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(order?.total || 0)}</td>
+                  <td className="px-4 py-3 text-gray-600">{new Date(item.created_at).toLocaleDateString()}</td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

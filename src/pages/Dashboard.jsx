@@ -17,6 +17,8 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [mostSelling, setMostSelling] = useState(null);
+  const [menuList, setMenuList] = useState([]);
+  const [selectedMenu, setSelectedMenu] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -27,6 +29,15 @@ export default function Dashboard() {
     currency: "MMK",
     maximumFractionDigits: 0,
   });
+
+  // Fetch menu list
+  useEffect(() => {
+    const fetchMenus = async () => {
+      const { data } = await supabase.from("menu").select("id, menu_name");
+      setMenuList(data || []);
+    };
+    fetchMenus();
+  }, []);
 
   const fetchDashboardData = async (monthYear) => {
     try {
@@ -64,8 +75,13 @@ export default function Dashboard() {
         orders.some((o) => o.id === i.order_id)
       );
 
+      // Filter by selected menu
+      const filteredItems = selectedMenu === "all"
+        ? monthItems
+        : monthItems.filter(i => i.menu_name === selectedMenu);
+
       const salesMap = {};
-      monthItems.forEach((i) => {
+      filteredItems.forEach((i) => {
         if (!salesMap[i.menu_name]) salesMap[i.menu_name] = 0;
         salesMap[i.menu_name] += i.total_price;
       });
@@ -86,7 +102,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData(selectedMonth);
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedMenu]);
 
   const chartData = {
     labels: monthlyData.map((d) => d.name),
@@ -140,7 +156,17 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 flex flex-col flex-1 overflow-hidden">
 
         {/* Month selector */}
-        <div className="flex justify-end mb-3">
+        <div className="flex justify-end mb-3 gap-2">
+          <select
+            value={selectedMenu}
+            onChange={(e) => setSelectedMenu(e.target.value)}
+            className="px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Menu</option>
+            {menuList.map((m) => (
+              <option key={m.id} value={m.menu_name}>{m.menu_name}</option>
+            ))}
+          </select>
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
