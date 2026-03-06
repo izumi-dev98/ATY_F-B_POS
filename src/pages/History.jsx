@@ -89,6 +89,11 @@ export default function History({ setInventory }) {
   const printReceipt = (order) => {
     const date = new Date(order.created_at).toLocaleString();
     const statusLabel = order.status === 'pending' ? 'PENDING' : order.status === 'completed' ? 'COMPLETED' : 'CANCELLED';
+    const subtotal = order.subtotal || 0;
+    const discountPercent = order.discount_percent || 0;
+    const discountAmount = order.discount_amount || 0;
+    const taxPercent = order.tax_percent || 0;
+    const taxAmount = order.tax_amount || 0;
     const receiptContent = `
       <html>
         <head><title>Order #${order.id}</title></head>
@@ -107,8 +112,14 @@ export default function History({ setInventory }) {
                 <td>${mmkFormatter.format(i.price * i.qty)}</td>
               </tr>`).join("")}
             </tbody>
-            <tfoot><tr><td colspan="3">Total</td><td>${mmkFormatter.format(order.total)}</td></tr></tfoot>
           </table>
+          <hr/>
+          <div style="text-align:right;">
+            <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
+            ${discountAmount > 0 ? `<p style="color:red;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ''}
+            ${taxAmount > 0 ? `<p style="color:blue;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ''}
+            <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(order.total)}</p>
+          </div>
           <p style="text-align:center;">Thank you!</p>
         </body>
       </html>
@@ -222,6 +233,9 @@ export default function History({ setInventory }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedHistory.map((order , index) => {
               const statusBadge = getStatusBadge(order.status);
+              const subtotal = order.subtotal || 0;
+              const discountAmount = order.discount_amount || 0;
+              const taxAmount = order.tax_amount || 0;
               return (
                 <div key={index} className="bg-white rounded-2xl shadow-lg p-6 flex flex-col justify-between">
                   <div className="mb-4">
@@ -245,6 +259,26 @@ export default function History({ setInventory }) {
                         </li>
                       ))}
                     </ul>
+
+                    {/* Price Breakdown */}
+                    <div className="mt-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>{mmkFormatter.format(subtotal)}</span>
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="flex justify-between text-red-500">
+                          <span>Discount:</span>
+                          <span>-{mmkFormatter.format(discountAmount)}</span>
+                        </div>
+                      )}
+                      {taxAmount > 0 && (
+                        <div className="flex justify-between text-blue-500">
+                          <span>Tax:</span>
+                          <span>+{mmkFormatter.format(taxAmount)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-4">
