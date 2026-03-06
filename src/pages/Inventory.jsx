@@ -13,6 +13,10 @@ export default function Inventory({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
+  // Get user role
+  const user = JSON.parse(localStorage.getItem("user"));
+  const isSuperAdmin = user?.role === "superadmin";
+
   const [formData, setFormData] = useState({
     item_name: "",
     qty: "",
@@ -95,6 +99,7 @@ export default function Inventory({
           <button
             onClick={openAddModal}
             className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:opacity-90 transition"
+            disabled={!isSuperAdmin}
           >
             + Add Item
           </button>
@@ -132,18 +137,23 @@ export default function Inventory({
                     <td className="p-3 text-center">{item.qty}</td>
                     <td className="p-3">{item.type}</td>
                     <td className="p-3 flex justify-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => openEditModal(item)}
-                        className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteInventoryItem(item.id)}
-                        className="px-3 py-1 text-sm bg-red-500 text-white rounded-md hover:bg-red-600"
-                      >
-                        Delete
-                      </button>
+                      {isSuperAdmin && (
+                        <>
+                          <button
+                            onClick={() => openEditModal(item)}
+                            className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => deleteInventoryItem(item.id)}
+                            className="px-3 py-1 text-sm bg-red-500 text-white rounded-md hover:bg-red-600"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                      {!isSuperAdmin && <span className="text-gray-400 text-sm">View Only</span>}
                     </td>
                   </tr>
                 ))

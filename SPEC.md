@@ -141,3 +141,106 @@
 
 ### Created Files
 - `SPEC.md` - This specification
+
+---
+
+# Internal Consumption Feature Specification
+
+## Overview
+- **Purpose**: Track internal inventory usage (waste, samples, staff consumption)
+- **Access**: All roles (superadmin, admin, chef, user)
+- **Permission**: Only superadmin can delete/edit records
+
+---
+
+## UI/UX Specification
+
+### Layout
+- Sidebar: "Internal Consumption" link
+- Page: List of consumption records with expand/collapse
+- Modal: Multi-item selection with quantity input
+
+### Visual Design
+- Consistent with existing POS styling
+- Blue primary buttons, red for delete
+- Expandable record cards
+
+---
+
+## Functionality Specification
+
+### 1. View Usage Records
+- List all internal consumption records
+- Expand to see individual items used
+- Show date, notes, status
+
+### 2. Record Usage (All Roles)
+- Select multiple inventory items
+- Enter quantity for each item
+- Add optional notes
+- Deduct from inventory on save
+
+### 3. Permission Control
+- **All roles**: View inventory, record usage
+- **Only superadmin**: Delete consumption records (restores inventory)
+- Other roles cannot edit/delete consumption records
+
+### 4. Export Report
+- Export all records to CSV/Excel
+- Include: Date, Item Name, Quantity, Unit, Notes
+
+---
+
+## Database Schema
+
+### Table: internal_consumption
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | bigint | primary key |
+| notes | text | nullable |
+| status | text | default 'completed' |
+| user_name | text | nullable (who recorded the usage) |
+| created_at | timestamp | default now |
+
+### Table: internal_consumption_items
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | bigint | primary key |
+| consumption_id | bigint | FK to internal_consumption |
+| inventory_id | bigint | FK to inventory |
+| qty | numeric | not null |
+
+---
+
+## Acceptance Criteria
+
+### Records
+- [ ] View list of consumption records
+- [ ] Expand record to see item details
+
+### Recording Usage
+- [ ] Select multiple inventory items
+- [ ] Enter quantity for each selected item
+- [ ] Validate quantity doesn't exceed available stock
+- [ ] Deduct inventory on save
+
+### Permissions
+- [ ] All roles can record usage
+- [ ] All roles can view inventory units
+- [ ] Only superadmin can delete records
+
+### Reporting
+- [ ] Export report as CSV/Excel
+- [ ] Report includes date, item, quantity, unit, notes
+
+---
+
+## File Changes
+
+### Created
+- `src/pages/InternalConsumption.jsx` - Main component
+- `SPEC.md` - This specification
+
+### Modified
+- `src/App.jsx` - Added route and access rights
+- `src/components/Sidebar.jsx` - Added navigation link
