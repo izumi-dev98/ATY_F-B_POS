@@ -24,6 +24,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
   const user = JSON.parse(localStorage.getItem("user"));
   const isSuperAdmin = user?.role === "superadmin";
+  const currentUsername = user?.username || "Unknown";
 
   // Fetch consumption records
   const fetchRecords = async () => {
@@ -145,8 +146,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
     setLoading(true);
     try {
-      // Get user info
-      const userName = user?.email || user?.name || "Unknown";
+      // Get user info from user table
+      const userName = currentUsername;
 
       // Create consumption record with user info
       const { data: record, error: recordErr } = await supabase
@@ -164,7 +165,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
       // Create consumption items and deduct inventory
       for (const item of selectedItems) {
-        const usageQty = parseInt(item.usage_qty);
+        const usageQty = parseFloat(item.usage_qty);
         const currentInv = inventory.find(inv => inv.id === item.id);
         const currentQty = currentInv ? currentInv.qty : 0;
 
@@ -186,7 +187,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
       const updatedInventory = inventory.map((inv) => {
         const used = selectedItems.find((s) => s.id === inv.id);
         if (used) {
-          return { ...inv, qty: inv.qty - parseInt(used.usage_qty) };
+          return { ...inv, qty: inv.qty - parseFloat(used.usage_qty) };
         }
         return inv;
       });
@@ -272,11 +273,11 @@ export default function InternalConsumption({ inventory, setInventory }) {
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
           "Item Name": inv?.item_name || "Unknown",
-          "Before Qty": beforeQty,
+          "Qty": beforeQty,
           "Used Qty": item.qty,
-          "After Qty": afterQty,
-          Unit: inv?.unit || "-",
-          "Used By": record.user_name || "Unknown",
+          "Closing Qty": afterQty,
+          Unit: inv?.type || "-",
+          "User Name": record.user_name || user?.email || "Unknown",
           Notes: record.notes || "-",
         });
       }
@@ -287,17 +288,17 @@ export default function InternalConsumption({ inventory, setInventory }) {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>Used By</td><td>Notes</td>
+<td>Date</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>Closing Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
   <td>${row.Date}</td>
   <td>${row["Item Name"]}</td>
-  <td>${row["Before Qty"]}</td>
+  <td>${row["Qty"]}</td>
   <td>${row["Used Qty"]}</td>
-  <td>${row["After Qty"]}</td>
+  <td>${row["Closing Qty"]}</td>
   <td>${row.Unit}</td>
-  <td>${row["Used By"]}</td>
+  <td>${row["User Name"]}</td>
   <td>${row.Notes}</td>
   </tr>`
 ).join("")}
@@ -359,6 +360,19 @@ ${reportData.map(row =>
       {/* Date Filter */}
       <div className="bg-white rounded-2xl shadow p-4 mb-4">
         <div className="flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              placeholder="Search records..."
+              value={recordSearch}
+              onChange={(e) => {
+                setRecordSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border rounded-xl"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Date</label>
             <select
@@ -544,8 +558,19 @@ ${reportData.map(row =>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Items *
                 </label>
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl mb-2"
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
-                  {inventory.map((item) => {
+                  {inventory
+                    .filter(item =>
+                      item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
+                    )
+                    .map((item) => {
                     const isSelected = selectedItems.some(
                       (s) => s.id === item.id,
                     );
@@ -591,13 +616,14 @@ ${reportData.map(row =>
                         <span className="flex-1 text-sm">{item.item_name}</span>
                         <input
                           type="number"
-                          min="1"
+                          step="any"
+                          min="0"
                           max={item.qty}
                           value={item.usage_qty}
                           onChange={(e) =>
                             updateItemUsageQty(
                               item.id,
-                              e.target.value === "" ? "" : parseInt(e.target.value) || 0
+                              e.target.value === "" ? "" : parseFloat(e.target.value) || 0
                             )
                           }
                           className="w-24 px-2 py-1 border rounded-xl"
@@ -636,6 +662,7 @@ ${reportData.map(row =>
                     setShowModal(false);
                     setSelectedItems([]);
                     setFormData({ notes: "" });
+                    setItemSearch("");
                   }}
                   className="px-4 py-2 bg-gray-300 rounded-xl hover:bg-gray-400"
                 >
