@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Payments from "./pages/Pyaments";
 import History from "./pages/History";
 import Menu from "./pages/Menu";
+import Category from "./pages/Category";
 import Inventory from "./pages/Inventory";
 
 import supabase from "./createClients";
@@ -146,6 +147,7 @@ export default function App() {
             <Route path="/payments" element={<PrivateRoute user={user}><Payments inventory={inventory} setInventory={setInventory} menu={menu} /></PrivateRoute>} />
             <Route path="/history" element={<PrivateRoute user={user}><History setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/menu" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'chef']}><Menu menu={menu} inventory={inventory} addMenuItem={addMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem} /></PrivateRoute>} />
+            <Route path="/category" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'chef']}><Category /></PrivateRoute>} />
             <Route path="/inventory" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Inventory inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} /></PrivateRoute>} />
             <Route path="/reports/inventory" element={<PrivateRoute user={user}><InventoryReport /></PrivateRoute>} />
             <Route path="/reports/total-sales" element={<PrivateRoute user={user}><TotalSalesReport /></PrivateRoute>} />

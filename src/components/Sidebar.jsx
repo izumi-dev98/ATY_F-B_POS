@@ -3,9 +3,9 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 const accessRights = {
-  superadmin: ["dashboard", "payments", "history", "menu", "inventory", "report", "user-create"],
-  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu",],
-  chef: ["dashboard",  "history", "report", "menu"],
+  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create"],
+  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category",],
+  chef: ["dashboard",  "history", "report", "menu", "category"],
   user: ["dashboard", "payments", "history", "report"],
 };
 
@@ -81,6 +81,17 @@ export default function Sidebar({ isOpen }) {
             }
           >
             Menu
+          </NavLink>
+        )}
+
+        {roleAccess.includes("category") && (
+          <NavLink
+            to="/category"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? active : normal}`
+            }
+          >
+            Category
           </NavLink>
         )}
 
