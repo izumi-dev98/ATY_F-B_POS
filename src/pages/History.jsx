@@ -7,6 +7,9 @@ export default function History({ setInventory }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [ingredientsMap, setIngredientsMap] = useState({});
+  const [dateFilter, setDateFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const ordersPerPage = 8;
 
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
@@ -14,6 +17,50 @@ export default function History({ setInventory }) {
     currency: "MMK",
     maximumFractionDigits: 0,
   });
+
+  // Get date range based on filter type
+  const getDateRange = () => {
+    const now = new Date();
+    let start = null;
+    let end = new Date(now);
+
+    switch (dateFilter) {
+      case "day":
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case "week":
+        start = new Date(now);
+        start.setDate(now.getDate() - 7);
+        break;
+      case "month":
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case "year":
+        start = new Date(now.getFullYear(), 0, 1);
+        break;
+      case "custom":
+        if (startDate && endDate) {
+          start = new Date(startDate);
+          end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+        }
+        break;
+      default:
+        return null;
+    }
+    return start ? { start, end } : null;
+  };
+
+  // Filter history by date
+  const filteredByDate = (orders) => {
+    const range = getDateRange();
+    if (!range) return orders;
+
+    return orders.filter((order) => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= range.start && orderDate <= range.end;
+    });
+  };
 
   // Fetch all orders, items, and menu
   const fetchHistory = async () => {
@@ -68,8 +115,8 @@ export default function History({ setInventory }) {
     fetchHistory();
   }, []);
 
-  // Filtered history based on search
-  const filteredHistory = history.filter((order) => {
+  // Filtered history based on search and date
+  const filteredHistory = filteredByDate(history).filter((order) => {
     const searchLower = search.toLowerCase();
     const matchOrderId = order.id.toString().includes(searchLower);
     const matchMenuItem = order.items.some((item) =>
@@ -215,14 +262,57 @@ export default function History({ setInventory }) {
     <div className="min-h-screen p-6 bg-gray-100">
       <h1 className="text-3xl font-bold mb-6 text-center">Order History</h1>
 
-      {/* Search */}
-      <div className="flex justify-center mb-6">
+      {/* Search and Filter */}
+      <div className="flex flex-wrap justify-center gap-3 mb-6">
+        {/* Date Filter */}
+        <select
+          value={dateFilter}
+          onChange={(e) => {
+            setDateFilter(e.target.value);
+            setPage(1);
+          }}
+          className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Time</option>
+          <option value="day">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
+          <option value="custom">Custom Date</option>
+        </select>
+
+        {/* Custom Date Range */}
+        {dateFilter === "custom" && (
+          <>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setPage(1);
+              }}
+              className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="self-center">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setPage(1);
+              }}
+              className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </>
+        )}
+
+        {/* Search Input */}
         <input
           type="text"
           placeholder="Search by Order ID or Item Name..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="w-full max-w-md px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
