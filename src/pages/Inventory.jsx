@@ -117,7 +117,7 @@ export default function Inventory({
                 <th className="p-3 text-left">No</th>
                 <th className="p-3 text-left">Item</th>
                 <th className="p-3 text-center">Qty</th>
-                <th className="p-3 text-left">Uint</th>
+                <th className="p-3 text-left">Unit</th>
                 <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>

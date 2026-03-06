@@ -457,9 +457,9 @@ ${reportData.map(row =>
                       <thead>
                         <tr className="text-left">
                           <th className="pb-2">Item</th>
-                          <th className="pb-2">Before Qty</th>
+                          <th className="pb-2">Qty</th>
                           <th className="pb-2">Used</th>
-                          <th className="pb-2">After Qty</th>
+                          <th className="pb-2">Closing Qty</th>
                           <th className="pb-2">Unit</th>
                         </tr>
                       </thead>
@@ -478,7 +478,7 @@ ${reportData.map(row =>
                               <td className="py-2">{beforeQty}</td>
                               <td className="py-2 text-red-600">-{item.qty}</td>
                               <td className="py-2">{afterQty}</td>
-                              <td className="py-2">{inv?.unit || "-"}</td>
+                              <td className="py-2">{inv?.type || "-"}</td>
                             </tr>
                           );
                         })}

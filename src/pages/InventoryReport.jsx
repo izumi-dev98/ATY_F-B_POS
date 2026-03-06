@@ -93,7 +93,7 @@ export default function InventoryReport() {
             <tr>
               <th className="px-6 py-3">Item Name</th>
               <th className="px-6 py-3">Quantity</th>
-              <th className="px-6 py-3">Uint</th>
+              <th className="px-6 py-3">Unit</th>
             </tr>
           </thead>
 
