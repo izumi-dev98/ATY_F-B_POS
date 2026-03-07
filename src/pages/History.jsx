@@ -163,8 +163,8 @@ export default function History({ setInventory }) {
           <hr/>
           <div style="text-align:right;">
             <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
-            ${discountAmount > 0 ? `<p style="color:red;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ''}
-            ${taxAmount > 0 ? `<p style="color:blue;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ''}
+            ${discountAmount > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ''}
+            ${taxAmount > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ''}
             <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(order.total)}</p>
           </div>
           <p style="text-align:center;">Thank you!</p>

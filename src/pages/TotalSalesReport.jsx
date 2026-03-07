@@ -13,6 +13,9 @@ export default function TotalSalesReport() {
   // Preset filter: "all", "day", "week", "month", "year"
   const [presetFilter, setPresetFilter] = useState("all");
 
+  // Payment type filter: "all", "cash", "card"
+  const [paymentFilter, setPaymentFilter] = useState("all");
+
   // Custom date range
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -66,6 +69,7 @@ export default function TotalSalesReport() {
           total: order?.total || 0,
           created_at: order?.created_at,
           menu_name: menu?.menu_name || "Unknown",
+          payment_type: order?.payment_type || "cash",
         };
       });
 
@@ -115,7 +119,12 @@ export default function TotalSalesReport() {
       default:
         return true;
     }
-  }).filter((item) => item.menu_name.toLowerCase().includes(search.toLowerCase()));
+  }).filter((item) => item.menu_name.toLowerCase().includes(search.toLowerCase()))
+  .filter((item) => {
+    if (paymentFilter === "all") return true;
+    const paymentType = item.payment_type || "Cash";
+    return paymentType === paymentFilter;
+  });
 
   // Pagination
   const indexOfLast = currentPage * rowsPerPage;
@@ -152,14 +161,22 @@ export default function TotalSalesReport() {
   const { totalSubtotal, totalDiscount, totalTax, grandTotal } = getOrderTotals();
 
   const exportToExcel = () => {
-    const exportData = filteredData.map((item) => ({
-      Order_ID: item.order_id,
-      Menu: item.menu_name,
-      Quantity: item.qty,
-      Price: item.price,
-      Total: item.qty * item.price,
-      Date: item.created_at,
-    }));
+    const exportData = filteredData.map((item) => {
+      const order = orders.find(o => o.id === item.order_id);
+      return {
+        Slip_ID: item.order_id,
+        Menu: item.menu_name,
+        Quantity: item.qty,
+        Price: item.price,
+        Item_Total: item.qty * item.price,
+        Subtotal: order?.subtotal || 0,
+        Discount: order?.discount_amount || 0,
+        Tax: order?.tax_amount || 0,
+        Grand_Total: order?.total || 0,
+        Payment: item.payment_type || "Cash",
+        Date: item.created_at,
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -228,6 +245,27 @@ export default function TotalSalesReport() {
         </button>
       </div>
 
+      {/* Payment Type Filter */}
+      <div className="flex gap-2 mb-4 items-center">
+        <span className="text-sm font-medium text-gray-700">Payment:</span>
+        {["all", "Cash", "Kpay"].map((p) => (
+          <button
+            key={p}
+            onClick={() => {
+              setPaymentFilter(p);
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg capitalize ${
+              paymentFilter === p
+                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : "bg-blue-600 text-white"
+                : "bg-white border"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
       {/* Total sales */}
       <div className="bg-white p-4 rounded-xl shadow mb-4">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -275,21 +313,23 @@ export default function TotalSalesReport() {
               <th className="px-4 py-3">Discount</th>
               <th className="px-4 py-3">Tax</th>
               <th className="px-4 py-3">Grand Total</th>
+              <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Date</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="10" className="text-center py-6">Loading...</td>
+                <td colSpan="11" className="text-center py-6">Loading...</td>
               </tr>
             ) : currentData.length === 0 ? (
               <tr>
-                <td colSpan="10" className="text-center py-6">No Data Found</td>
+                <td colSpan="11" className="text-center py-6">No Data Found</td>
               </tr>
             ) : (
               currentData.map((item) => {
                 const order = orders.find(o => o.id === item.order_id);
+                const paymentType = item.payment_type || "Cash";
                 return (
                 <tr key={item.id} className="border-b hover:bg-blue-50 transition">
                   <td className="px-4 py-3">{item.order_id}</td>
@@ -301,6 +341,13 @@ export default function TotalSalesReport() {
                   <td className="px-4 py-3 text-red-500">{mmkFormatter.format(order?.discount_amount || 0)}</td>
                   <td className="px-4 py-3 text-blue-500">{mmkFormatter.format(order?.tax_amount || 0)}</td>
                   <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(order?.total || 0)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      paymentType === "Cash" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
+                    }`}>
+                      {paymentType === "Cash" ? "Cash" : "Kpay"}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{new Date(item.created_at).toLocaleDateString()}</td>
                 </tr>
               );

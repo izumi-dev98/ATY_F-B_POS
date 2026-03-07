@@ -11,6 +11,7 @@ export default function Pyaments({ inventory, setInventory }) {
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
+  const [paymentType, setPaymentType] = useState("Cash"); // "Cash" or "Kpay"
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
 
@@ -152,6 +153,7 @@ export default function Pyaments({ inventory, setInventory }) {
     setCart([]);
     setDiscount(0);
     setTax(0);
+    setPaymentType("Cash");
   };
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -193,6 +195,7 @@ export default function Pyaments({ inventory, setInventory }) {
             tax_amount: taxAmount,
             total,
             status: "pending",
+            payment_type: paymentType,
           },
         ])
         .select()
@@ -424,6 +427,35 @@ export default function Pyaments({ inventory, setInventory }) {
           <div className="flex justify-between font-bold text-xl mt-2">
             <span>Total</span>
             <span>{mmkFormatter.format(total)}</span>
+          </div>
+        </div>
+
+        {/* Payment Type Selection */}
+        <div className="mt-4 border-t pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Payment Type
+          </label>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPaymentType("Kpay")}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Kpay"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Kpay
+            </button>
+            <button
+              onClick={() => setPaymentType("Cash")}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Cash"
+                  ? "bg-green-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Cash
+            </button>
           </div>
         </div>
 

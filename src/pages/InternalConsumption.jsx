@@ -5,14 +5,20 @@ import supabase from "../createClients";
 export default function InternalConsumption({ inventory, setInventory }) {
   const [records, setRecords] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
+  const [selectedAddItems, setSelectedAddItems] = useState([]);
   const [formData, setFormData] = useState({
+    notes: "",
+  });
+  const [addFormData, setAddFormData] = useState({
     notes: "",
   });
   const [loading, setLoading] = useState(false);
 
   // Filter states
   const [dateFilter, setDateFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,6 +86,12 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (startDate && recordDate < startDate) return false;
       if (endDate && recordDate > endDate) return false;
 
+      // Status filter
+      if (statusFilter !== "all") {
+        if (statusFilter === "add_stock" && record.status !== "add_stock") return false;
+        if (statusFilter === "usage" && record.status !== "completed") return false;
+      }
+
       // Record search filter
       if (recordSearch) {
         const searchLower = recordSearch.toLowerCase();
@@ -91,7 +103,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
       return true;
     });
-  }, [records, dateFilter, customStart, customEnd, recordSearch]);
+  }, [records, dateFilter, customStart, customEnd, recordSearch, statusFilter]);
 
   // Paginated records
   const paginatedRecords = useMemo(() => {
@@ -117,6 +129,118 @@ export default function InternalConsumption({ inventory, setInventory }) {
         i.id === itemId ? { ...i, usage_qty: qty } : i,
       ),
     );
+  };
+
+  // Add Stock Functions
+  const toggleAddItemSelection = (item) => {
+    setSelectedAddItems((prev) => {
+      const exists = prev.find((i) => i.id === item.id);
+      if (exists) {
+        return prev.filter((i) => i.id !== item.id);
+      }
+      return [...prev, { ...item, add_qty: "" }];
+    });
+  };
+
+  const updateItemAddQty = (itemId, qty) => {
+    setSelectedAddItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, add_qty: qty } : i,
+      ),
+    );
+  };
+
+  const handleAddStockSubmit = async (e) => {
+    e.preventDefault();
+    if (selectedAddItems.length === 0) {
+      return Swal.fire("Error", "Please select at least one item", "error");
+    }
+
+    // Validate quantities
+    for (const item of selectedAddItems) {
+      const qty = item.add_qty === "" ? 0 : item.add_qty;
+      if (!qty || qty <= 0) {
+        return Swal.fire(
+          "Error",
+          `Please enter valid quantity for ${item.item_name}`,
+          "error",
+        );
+      }
+    }
+
+    setLoading(true);
+    try {
+      const userName = currentUsername;
+
+      // Create add stock record
+      const { data: record, error: recordErr } = await supabase
+        .from("internal_consumption")
+        .insert([
+          {
+            notes: addFormData.notes,
+            status: "add_stock",
+            user_name: userName,
+          },
+        ])
+        .select()
+        .single();
+      if (recordErr) throw recordErr;
+
+      // Create records and add inventory
+      for (const item of selectedAddItems) {
+        const addQty = parseFloat(item.add_qty);
+        const currentInv = inventory.find(inv => inv.id === item.id);
+        const currentQty = currentInv ? currentInv.qty : 0;
+
+        try {
+          // Insert consumption item
+          const result = await supabase
+            .from("internal_consumption_items")
+            .insert({
+              consumption_id: record.id,
+              inventory_id: item.id,
+              qty: addQty,
+            });
+
+          if (result.error) {
+            console.error("Insert error:", result.error);
+            alert(`Error saving item: ${result.error.message}`);
+          }
+        } catch (err) {
+          console.error("Insert exception:", err);
+        }
+
+        // Add inventory
+        const newQty = currentQty + addQty;
+        await supabase
+          .from("inventory")
+          .update({ qty: newQty })
+          .eq("id", item.id);
+      }
+
+      // Refresh data
+      await fetchRecords();
+
+      // Update local inventory state
+      const updatedInventory = inventory.map((inv) => {
+        const added = selectedAddItems.find((s) => s.id === inv.id);
+        if (added) {
+          return { ...inv, qty: inv.qty + parseFloat(added.add_qty) };
+        }
+        return inv;
+      });
+      setInventory(updatedInventory);
+
+      Swal.fire("Success", "Stock added successfully!", "success");
+      setShowAddModal(false);
+      setSelectedAddItems([]);
+      setAddFormData({ notes: "" });
+      fetchRecords();
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -254,10 +378,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
     }
   };
 
-  const exportToExcel = async () => {
-    // Build data with items - for filtered records only
+  const exportAddStockExcel = async () => {
+    // Filter only add stock records
+    const addStockRecords = filteredRecords.filter(r => r.status === "add_stock");
+
+    // Build data with items - for add stock records only
     const reportData = [];
-    for (const record of filteredRecords) {
+    for (const record of addStockRecords) {
       const items = await supabase
         .from("internal_consumption_items")
         .select("*")
@@ -265,16 +392,17 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
       for (const item of items.data || []) {
         const inv = inventory.find((i) => i.id === item.inventory_id);
-        // Find the record at that time - before usage
-        const currentInv = inventory.find(i => i.id === item.inventory_id);
-        const beforeQty = currentInv ? currentInv.qty + item.qty : item.qty;
-        const afterQty = currentInv ? currentInv.qty : 0;
+
+        // Calculate before and after qty for add stock
+        const beforeQty = inv ? inv.qty - item.qty : item.qty;
+        const afterQty = inv ? inv.qty : item.qty;
 
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
+          "Record ID": record.id,
           "Item Name": inv?.item_name || "Unknown",
-          "Qty": beforeQty,
-          "Used Qty": item.qty,
+          "Before Qty": beforeQty,
+          "Added Qty": item.qty,
           "Closing Qty": afterQty,
           Unit: inv?.type || "-",
           "User Name": record.user_name || user?.email || "Unknown",
@@ -288,15 +416,16 @@ export default function InternalConsumption({ inventory, setInventory }) {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>Closing Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
   <td>${row.Date}</td>
+  <td>${row["Record ID"]}</td>
   <td>${row["Item Name"]}</td>
-  <td>${row["Qty"]}</td>
-  <td>${row["Used Qty"]}</td>
-  <td>${row["Closing Qty"]}</td>
+  <td>${row["Before Qty"]}</td>
+  <td>${row["Added Qty"]}</td>
+  <td>${row["After Qty"]}</td>
   <td>${row.Unit}</td>
   <td>${row["User Name"]}</td>
   <td>${row.Notes}</td>
@@ -307,7 +436,69 @@ ${reportData.map(row =>
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `internal_consumption_report_${new Date().toISOString().split("T")[0]}.xls`;
+    link.download = `add_stock_report_${new Date().toISOString().split("T")[0]}.xls`;
+    link.click();
+  };
+
+  const exportUsageExcel = async () => {
+    // Filter only usage records
+    const usageRecords = filteredRecords.filter(r => r.status === "completed");
+
+    // Build data with items - for usage records only
+    const reportData = [];
+    for (const record of usageRecords) {
+      const items = await supabase
+        .from("internal_consumption_items")
+        .select("*")
+        .eq("consumption_id", record.id);
+
+      for (const item of items.data || []) {
+        const inv = inventory.find((i) => i.id === item.inventory_id);
+
+        // Calculate before and after qty for usage
+        const beforeQty = inv ? inv.qty + item.qty : item.qty;
+        const afterQty = inv ? inv.qty : 0;
+
+        reportData.push({
+          Date: new Date(record.created_at).toLocaleDateString(),
+          "Record ID": record.id,
+          "Item Name": inv?.item_name || "Unknown",
+          "Before Qty": beforeQty,
+          "Used Qty": item.qty,
+          "After Qty": afterQty,
+          Unit: inv?.type || "-",
+          "User Name": record.user_name || user?.email || "Unknown",
+          Notes: record.notes || "-",
+        });
+      }
+    }
+
+    // Create Excel file using HTML table approach
+    let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"></head><body>
+<table border="1">
+<tr style="background:#ddd;font-weight:bold;">
+<td>Date</td><td>Record ID</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+</tr>
+${reportData.map(row =>
+  `<tr>
+  <td>${row.Date}</td>
+  <td>${row["Record ID"]}</td>
+  <td>${row["Item Name"]}</td>
+  <td>${row["Before Qty"]}</td>
+  <td>${row["Used Qty"]}</td>
+  <td>${row["After Qty"]}</td>
+  <td>${row.Unit}</td>
+  <td>${row["User Name"]}</td>
+  <td>${row.Notes}</td>
+  </tr>`
+).join("")}
+</table></body></html>`;
+
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `usage_report_${new Date().toISOString().split("T")[0]}.xls`;
     link.click();
   };
 
@@ -328,10 +519,9 @@ ${reportData.map(row =>
       setExpandedRecord(null);
     } else {
       setExpandedRecord(record.id);
-      if (!recordItems[record.id]) {
-        const items = await fetchRecordItems(record.id);
-        setRecordItems((prev) => ({ ...prev, [record.id]: items }));
-      }
+      // Always fetch fresh data when expanding
+      const items = await fetchRecordItems(record.id);
+      setRecordItems((prev) => ({ ...prev, [record.id]: items }));
     }
   };
 
@@ -341,13 +531,27 @@ ${reportData.map(row =>
         <h2 className="text-2xl font-bold">Internal Consumption</h2>
         <div className="flex gap-2">
           {filteredRecords.length > 0 && (
-            <button
-              onClick={exportToExcel}
-              className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition"
-            >
-              Export Report
-            </button>
+            <>
+              <button
+                onClick={exportAddStockExcel}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition"
+              >
+                Add Stock Report
+              </button>
+              <button
+                onClick={exportUsageExcel}
+                className="px-4 py-2 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 transition"
+              >
+                Usage Report
+              </button>
+            </>
           )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition"
+          >
+            + Add Stock
+          </button>
           <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition"
@@ -419,6 +623,21 @@ ${reportData.map(row =>
               </div>
             </>
           )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border rounded-xl"
+            >
+              <option value="all">All Status</option>
+              <option value="add_stock">Add Stock</option>
+              <option value="usage">Usage</option>
+            </select>
+          </div>
           <div className="ml-auto text-sm text-gray-600">
             Showing {filteredRecords.length} record(s)
           </div>
@@ -456,8 +675,12 @@ ${reportData.map(row =>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-green-600 font-medium">
-                      {record.status}
+                    <span className={`text-sm font-medium px-2 py-1 rounded ${
+                      record.status === "add_stock"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}>
+                      {record.status === "add_stock" ? "Add Stock" : "Usage"}
                     </span>
                     <span className="text-2xl">
                       {expandedRecord === record.id ? "−" : "+"}
@@ -471,31 +694,43 @@ ${reportData.map(row =>
                       <thead>
                         <tr className="text-left">
                           <th className="pb-2">Item</th>
-                          <th className="pb-2">Qty</th>
-                          <th className="pb-2">Used</th>
+                          <th className="pb-2">{record.status === "add_stock" ? "Before" : "Before"}</th>
+                          <th className="pb-2">{record.status === "add_stock" ? "Added" : "Used"}</th>
                           <th className="pb-2">Closing Qty</th>
                           <th className="pb-2">Unit</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(recordItems[record.id] || []).map((item, idx) => {
-                          const inv = inventory.find(
-                            (i) => i.id === item.inventory_id,
-                          );
-                          const beforeQty = inv ? inv.qty + item.qty : item.qty;
-                          const afterQty = inv ? inv.qty : 0;
-                          return (
-                            <tr key={idx} className="border-t">
-                              <td className="py-2">
-                                {inv?.item_name || "Unknown"}
-                              </td>
-                              <td className="py-2">{beforeQty}</td>
-                              <td className="py-2 text-red-600">-{item.qty}</td>
-                              <td className="py-2">{afterQty}</td>
-                              <td className="py-2">{inv?.type || "-"}</td>
-                            </tr>
-                          );
-                        })}
+                        {(recordItems[record.id] || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-gray-500">
+                              No items found for this record
+                            </td>
+                          </tr>
+                        ) : (
+                          (recordItems[record.id] || []).map((item, idx) => {
+                            const inv = inventory.find(
+                              (i) => i.id === item.inventory_id,
+                            );
+                            const isAddStock = record.status === "add_stock";
+                            const isAdd = item.type === "add" || isAddStock;
+                            const beforeQty = isAdd ? (inv?.qty || 0) - item.qty : (inv?.qty || 0) + item.qty;
+                            const afterQty = inv ? inv.qty : 0;
+                            return (
+                              <tr key={idx} className="border-t">
+                                <td className="py-2">
+                                  {inv?.item_name || `Item ID: ${item.inventory_id}`}
+                                </td>
+                                <td className="py-2">{beforeQty}</td>
+                                <td className={`py-2 ${isAdd ? "text-green-600" : "text-red-600"}`}>
+                                  {isAdd ? "+" : "-"}{item.qty}
+                                </td>
+                                <td className="py-2">{afterQty}</td>
+                                <td className="py-2">{inv?.type || "-"}</td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                     {isSuperAdmin && (
@@ -672,6 +907,146 @@ ${reportData.map(row =>
                   type="submit"
                   disabled={loading || selectedItems.length === 0}
                   className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg">
+            <h3 className="text-2xl font-bold mb-4">Add Stock</h3>
+
+            {!isSuperAdmin && (
+              <p className="text-sm text-gray-600 mb-4 bg-yellow-50 p-2 rounded">
+                Note: You can view inventory and add stock. Only superadmin can edit inventory directly.
+              </p>
+            )}
+
+            <form onSubmit={handleAddStockSubmit} className="space-y-4">
+              {/* Inventory Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Items *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl mb-2"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
+                  {inventory
+                    .filter(item =>
+                      item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
+                    )
+                    .map((item) => {
+                    const isSelected = selectedAddItems.some(
+                      (s) => s.id === item.id,
+                    );
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggleAddItemSelection(item)}
+                        className={`p-3 rounded-xl border cursor-pointer transition ${
+                          isSelected
+                            ? "bg-green-50 border-green-500"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{item.item_name}</p>
+                            <p className="text-sm text-gray-500">
+                              Current Stock: {item.qty} {item.type}
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-5 h-5"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Add Quantities */}
+              {selectedAddItems.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Add Quantity *
+                  </label>
+                  <div className="space-y-2">
+                    {selectedAddItems.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <span className="flex-1 text-sm">{item.item_name}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={item.add_qty}
+                          onChange={(e) =>
+                            updateItemAddQty(
+                              item.id,
+                              e.target.value === "" ? "" : parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-24 px-2 py-1 border rounded-xl"
+                          placeholder="Enter qty"
+                        />
+
+                        <span className="text-sm text-gray-500 w-12">
+                          {item.type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={addFormData.notes}
+                  onChange={(e) =>
+                    setAddFormData({ ...addFormData, notes: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full px-3 py-2 border rounded-xl"
+                  placeholder="Optional notes..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setSelectedAddItems([]);
+                    setAddFormData({ notes: "" });
+                    setItemSearch("");
+                  }}
+                  className="px-4 py-2 bg-gray-300 rounded-xl hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || selectedAddItems.length === 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50"
                 >
                   {loading ? "Saving..." : "Save"}
                 </button>

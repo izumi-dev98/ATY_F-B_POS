@@ -17,6 +17,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [mostSelling, setMostSelling] = useState(null);
+  const [grandTotal, setGrandTotal] = useState(0);
   const [menuList, setMenuList] = useState([]);
   const [selectedMenu, setSelectedMenu] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -79,6 +80,12 @@ export default function Dashboard() {
       const filteredItems = selectedMenu === "all"
         ? monthItems
         : monthItems.filter(i => i.menu_name === selectedMenu);
+
+      // Calculate grand total from filtered orders
+      const filteredOrderIds = [...new Set(filteredItems.map(i => i.order_id))];
+      const filteredOrders = orders.filter(o => filteredOrderIds.includes(o.id));
+      const grandTotal = filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+      setGrandTotal(grandTotal);
 
       const salesMap = {};
       filteredItems.forEach((i) => {
@@ -203,6 +210,15 @@ export default function Dashboard() {
               <h3 className="font-semibold">Most Selling Menu</h3>
               <p>
                 {mostSelling[0]} — {mmkFormatter.format(mostSelling[1])}
+              </p>
+            </div>
+          )}
+
+          {grandTotal > 0 && (
+            <div className="mt-4 p-4 bg-green-50 border-l-4 border-green-600 rounded-lg">
+              <h3 className="font-semibold">Grand Total</h3>
+              <p className="text-xl font-bold text-green-700">
+                {mmkFormatter.format(grandTotal)}
               </p>
             </div>
           )}
