@@ -255,8 +255,8 @@ export default function Pyaments({ inventory, setInventory }) {
             <hr/>
             <div style="text-align:right;">
               <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
-              ${discountPercent > 0 ? `<p style="color:red;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ""}
-              ${taxPercent > 0 ? `<p style="color:blue;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ""}
+              ${discountPercent > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ""}
+              ${taxPercent > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ""}
               <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(total)}</p>
             </div>
             <p style="text-align:center;">Thank you!</p>
