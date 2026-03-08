@@ -147,8 +147,8 @@ export default function App() {
             <Route path="/dashboard" element={<PrivateRoute user={user}><Dashboard /></PrivateRoute>} />
             <Route path="/payments" element={<PrivateRoute user={user}><Payments inventory={inventory} setInventory={setInventory} menu={menu} /></PrivateRoute>} />
             <Route path="/history" element={<PrivateRoute user={user}><History setInventory={setInventory} /></PrivateRoute>} />
-            <Route path="/menu" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'chef']}><Menu menu={menu} inventory={inventory} addMenuItem={addMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem} /></PrivateRoute>} />
-            <Route path="/category" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'chef']}><Category /></PrivateRoute>} />
+            <Route path="/menu" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']}><Menu menu={menu} inventory={inventory} addMenuItem={addMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem} /></PrivateRoute>} />
+            <Route path="/category" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']}><Category /></PrivateRoute>} />
             <Route path="/inventory" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Inventory inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} /></PrivateRoute>} />
             <Route path="/reports/inventory" element={<PrivateRoute user={user}><InventoryReport /></PrivateRoute>} />
             <Route path="/reports/total-sales" element={<PrivateRoute user={user}><TotalSalesReport /></PrivateRoute>} />
