@@ -11,7 +11,8 @@ export default function Pyaments({ inventory, setInventory }) {
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
-  const [paymentType, setPaymentType] = useState("Cash"); // "Cash" or "Kpay"
+  const [paymentType, setPaymentType] = useState("Cash"); // "Cash", "Kpay", or "FOC"
+  const [remark, setRemark] = useState("");
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
 
@@ -154,6 +155,7 @@ export default function Pyaments({ inventory, setInventory }) {
     setDiscount(0);
     setTax(0);
     setPaymentType("Cash");
+    setRemark("");
   };
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -196,6 +198,7 @@ export default function Pyaments({ inventory, setInventory }) {
             total,
             status: "pending",
             payment_type: paymentType,
+            remark: remark || null,
           },
         ])
         .select()
@@ -237,6 +240,7 @@ export default function Pyaments({ inventory, setInventory }) {
             <p>Slip ID: ${order.id}</p>
             <p>Date: ${date}</p>
             <p>Status: PENDING</p>
+            ${remark ? `<p>Remark: ${remark}</p>` : ""}
             <table style="width:100%; border-collapse: collapse;">
               <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
               <tbody>
@@ -280,6 +284,7 @@ export default function Pyaments({ inventory, setInventory }) {
       setCart([]);
       setDiscount(0);
       setTax(0);
+      setRemark("");
       Swal.fire("Success", "Order printed successfully!", "success");
       fetchMenu();
     } catch (err) {
@@ -384,6 +389,7 @@ export default function Pyaments({ inventory, setInventory }) {
             }
             className="w-full p-2 border rounded-xl"
             placeholder="Enter discount %"
+            disabled={paymentType === "FOC"}
           />
         </div>
 
@@ -437,7 +443,10 @@ export default function Pyaments({ inventory, setInventory }) {
           </label>
           <div className="flex gap-3">
             <button
-              onClick={() => setPaymentType("Kpay")}
+              onClick={() => {
+                setPaymentType("Kpay");
+                setDiscount(0);
+              }}
               className={`flex-1 py-3 rounded-xl font-medium transition ${
                 paymentType === "Kpay"
                   ? "bg-blue-600 text-white"
@@ -447,7 +456,10 @@ export default function Pyaments({ inventory, setInventory }) {
               Kpay
             </button>
             <button
-              onClick={() => setPaymentType("Cash")}
+              onClick={() => {
+                setPaymentType("Cash");
+                setDiscount(0);
+              }}
               className={`flex-1 py-3 rounded-xl font-medium transition ${
                 paymentType === "Cash"
                   ? "bg-green-600 text-white"
@@ -456,7 +468,34 @@ export default function Pyaments({ inventory, setInventory }) {
             >
               Cash
             </button>
+            <button
+              onClick={() => {
+                setPaymentType("FOC");
+                setDiscount(100);
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "FOC"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              FOC
+            </button>
           </div>
+        </div>
+
+        {/* Remark Input */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Remark
+          </label>
+          <input
+            type="text"
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            className="w-full p-2 border rounded-xl"
+            placeholder="Enter remark..."
+          />
         </div>
 
         {/* Action Buttons */}

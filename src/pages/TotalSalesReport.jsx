@@ -70,6 +70,7 @@ export default function TotalSalesReport() {
           created_at: order?.created_at,
           menu_name: menu?.menu_name || "Unknown",
           payment_type: order?.payment_type || "cash",
+          remark: order?.remark || null,
         };
       });
 
@@ -126,34 +127,49 @@ export default function TotalSalesReport() {
     return paymentType === paymentFilter;
   });
 
+  // Group order items by slip (order_id)
+  const groupedBySlip = () => {
+    const groups = {};
+    filteredData.forEach((item) => {
+      if (!groups[item.order_id]) {
+        const order = orders.find((o) => o.id === item.order_id);
+        groups[item.order_id] = {
+          order_id: item.order_id,
+          menus: [],
+          qty: 0,
+          price: 0,
+          item_total: 0,
+          subtotal: order?.subtotal || 0,
+          discount_amount: order?.discount_amount || 0,
+          tax_amount: order?.tax_amount || 0,
+          total: order?.total || 0,
+          payment_type: item.payment_type || "Cash",
+          remark: item.remark || null,
+          created_at: item.created_at,
+        };
+      }
+      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price });
+      groups[item.order_id].qty += item.qty;
+      groups[item.order_id].price += item.price;
+      groups[item.order_id].item_total += item.qty * item.price;
+    });
+    return Object.values(groups).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  };
+
+  const slipData = groupedBySlip();
+
   // Pagination
   const indexOfLast = currentPage * rowsPerPage;
   const indexOfFirst = indexOfLast - rowsPerPage;
-  const currentData = filteredData.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  const currentData = slipData.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil(slipData.length / rowsPerPage);
 
-  // Calculate totals from orders
+  // Calculate totals from slip data
   const getOrderTotals = () => {
-    const orderMap = {};
-    filteredData.forEach(item => {
-      if (!orderMap[item.order_id]) {
-        const order = orders.find(o => o.id === item.order_id);
-        orderMap[item.order_id] = {
-          subtotal: order?.subtotal || 0,
-          discount_percent: order?.discount_percent || 0,
-          discount_amount: order?.discount_amount || 0,
-          tax_percent: order?.tax_percent || 0,
-          tax_amount: order?.tax_amount || 0,
-          total: order?.total || 0,
-        };
-      }
-    });
-
-    const totals = Object.values(orderMap);
-    const totalSubtotal = totals.reduce((sum, o) => sum + o.subtotal, 0);
-    const totalDiscount = totals.reduce((sum, o) => sum + o.discount_amount, 0);
-    const totalTax = totals.reduce((sum, o) => sum + o.tax_amount, 0);
-    const grandTotal = totals.reduce((sum, o) => sum + o.total, 0);
+    const totalSubtotal = slipData.reduce((sum, s) => sum + s.subtotal, 0);
+    const totalDiscount = slipData.reduce((sum, s) => sum + s.discount_amount, 0);
+    const totalTax = slipData.reduce((sum, s) => sum + s.tax_amount, 0);
+    const grandTotal = slipData.reduce((sum, s) => sum + s.total, 0);
 
     return { totalSubtotal, totalDiscount, totalTax, grandTotal };
   };
@@ -161,21 +177,36 @@ export default function TotalSalesReport() {
   const { totalSubtotal, totalDiscount, totalTax, grandTotal } = getOrderTotals();
 
   const exportToExcel = () => {
-    const exportData = filteredData.map((item) => {
-      const order = orders.find(o => o.id === item.order_id);
+    const exportData = slipData.map((slip) => {
+      const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
+      const paymentText = slip.payment_type === "Cash" ? "Cash" : slip.payment_type === "Kpay" ? "Kpay" : "FOC";
+      const displayRemark = slip.remark || "";
       return {
-        Slip_ID: item.order_id,
-        Menu: item.menu_name,
-        Quantity: item.qty,
-        Price: item.price,
-        Item_Total: item.qty * item.price,
-        Subtotal: order?.subtotal || 0,
-        Discount: order?.discount_amount || 0,
-        Tax: order?.tax_amount || 0,
-        Grand_Total: order?.total || 0,
-        Payment: item.payment_type || "Cash",
-        Date: item.created_at,
+        Slip_ID: slip.order_id,
+        Menu: menusText,
+        Qty: slip.qty,
+        Subtotal: slip.subtotal,
+        Discount: slip.discount_amount,
+        Tax: slip.tax_amount,
+        Grand_Total: slip.total,
+        Payment: paymentText,
+        Remark: displayRemark,
+        Date: slip.created_at,
       };
+    });
+
+    // Add total row
+    exportData.push({
+      Slip_ID: "",
+      Menu: "TOTAL AMOUNT",
+      Qty: "",
+      Subtotal: totalSubtotal,
+      Discount: totalDiscount,
+      Tax: totalTax,
+      Grand_Total: grandTotal,
+      Payment: "",
+      Remark: "",
+      Date: "",
     });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -248,7 +279,7 @@ export default function TotalSalesReport() {
       {/* Payment Type Filter */}
       <div className="flex gap-2 mb-4 items-center">
         <span className="text-sm font-medium text-gray-700">Payment:</span>
-        {["all", "Cash", "Kpay"].map((p) => (
+        {["all", "Cash", "Kpay", "FOC"].map((p) => (
           <button
             key={p}
             onClick={() => {
@@ -257,7 +288,7 @@ export default function TotalSalesReport() {
             }}
             className={`px-3 py-1.5 rounded-lg capitalize ${
               paymentFilter === p
-                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : "bg-blue-600 text-white"
+                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
                 : "bg-white border"
             }`}
           >
@@ -307,48 +338,47 @@ export default function TotalSalesReport() {
               <th className="px-4 py-3">Slip ID</th>
               <th className="px-4 py-3">Menu</th>
               <th className="px-4 py-3">Qty</th>
-              <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Subtotal</th>
               <th className="px-4 py-3">Discount</th>
               <th className="px-4 py-3">Tax</th>
               <th className="px-4 py-3">Grand Total</th>
               <th className="px-4 py-3">Payment</th>
+              <th className="px-4 py-3">Remark</th>
               <th className="px-4 py-3">Date</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="11" className="text-center py-6">Loading...</td>
+                <td colSpan="10" className="text-center py-6">Loading...</td>
               </tr>
             ) : currentData.length === 0 ? (
               <tr>
-                <td colSpan="11" className="text-center py-6">No Data Found</td>
+                <td colSpan="10" className="text-center py-6">No Data Found</td>
               </tr>
             ) : (
-              currentData.map((item) => {
-                const order = orders.find(o => o.id === item.order_id);
-                const paymentType = item.payment_type || "Cash";
+              currentData.map((slip) => {
+                const paymentType = slip.payment_type || "Cash";
+                const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
+                const displayRemark = slip.remark || "-";
                 return (
-                <tr key={item.id} className="border-b hover:bg-blue-50 transition">
-                  <td className="px-4 py-3">{item.order_id}</td>
-                  <td className="px-4 py-3 font-medium text-gray-700">{item.menu_name}</td>
-                  <td className="px-4 py-3">{item.qty}</td>
-                  <td className="px-4 py-3 text-green-600">{mmkFormatter.format(item.price)}</td>
-                  <td className="px-4 py-3 text-green-600 font-semibold">{mmkFormatter.format(item.price * item.qty)}</td>
-                  <td className="px-4 py-3">{mmkFormatter.format(order?.subtotal || 0)}</td>
-                  <td className="px-4 py-3 text-red-500">{mmkFormatter.format(order?.discount_amount || 0)}</td>
-                  <td className="px-4 py-3 text-blue-500">{mmkFormatter.format(order?.tax_amount || 0)}</td>
-                  <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(order?.total || 0)}</td>
+                <tr key={slip.order_id} className="border-b hover:bg-blue-50 transition">
+                  <td className="px-4 py-3">{slip.order_id}</td>
+                  <td className="px-4 py-3 font-medium text-gray-700">{menusText}</td>
+                  <td className="px-4 py-3">{slip.qty}</td>
+                  <td className="px-4 py-3">{mmkFormatter.format(slip.subtotal)}</td>
+                  <td className="px-4 py-3 text-red-500">{mmkFormatter.format(slip.discount_amount)}</td>
+                  <td className="px-4 py-3 text-blue-500">{mmkFormatter.format(slip.tax_amount)}</td>
+                  <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(slip.total)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      paymentType === "Cash" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
+                      paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
                     }`}>
-                      {paymentType === "Cash" ? "Cash" : "Kpay"}
+                      {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : "FOC"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{new Date(item.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-600">{displayRemark}</td>
+                  <td className="px-4 py-3 text-gray-600">{new Date(slip.created_at).toLocaleDateString()}</td>
                 </tr>
               );
               })
