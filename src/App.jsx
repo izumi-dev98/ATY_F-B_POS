@@ -17,6 +17,7 @@ import TotalSalesReport from "./pages/TotalSalesReport";
 
 import UserCreate from "./pages/UserCreate";
 import InternalConsumption from "./pages/InternalConsumption";
+import DiscountType from "./pages/DiscountType";
 
 import PrivateRoute from "./pages/PrivateRoute";
 import Login from "./pages/ Login";
@@ -24,8 +25,8 @@ import Logout from "./pages/Logout";
 
 // -------------------- ACCESS RIGHTS --------------------
 const accessRights = {
-  superadmin: ["dashboard", "payments", "history", "menu", "inventory", "report", "internal-consumption"],
-  admin: ["dashboard", "history", "inventory", "report", "payments", "menu", "internal-consumption"],
+  superadmin: ["dashboard", "payments", "history", "menu", "inventory", "report", "internal-consumption", "discount-type"],
+  admin: ["dashboard", "history", "inventory", "report", "payments", "menu", "internal-consumption", "discount-type"],
   chef: ["dashboard", "history", "report", "menu", "internal-consumption"],
   user: ["dashboard", "payments", "history", "report", "internal-consumption"],
 };
@@ -145,7 +146,7 @@ export default function App() {
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<PrivateRoute user={user}><Dashboard /></PrivateRoute>} />
-            <Route path="/payments" element={<PrivateRoute user={user}><Payments inventory={inventory} setInventory={setInventory} menu={menu} /></PrivateRoute>} />
+            <Route path="/payments" element={<PrivateRoute user={user}><Payments inventory={inventory} setInventory={setInventory} menu={menu} user={user} /></PrivateRoute>} />
             <Route path="/history" element={<PrivateRoute user={user}><History setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/menu" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']}><Menu menu={menu} inventory={inventory} addMenuItem={addMenuItem} updateMenuItem={updateMenuItem} deleteMenuItem={deleteMenuItem} /></PrivateRoute>} />
             <Route path="/category" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin', 'chef']}><Category /></PrivateRoute>} />
@@ -154,6 +155,7 @@ export default function App() {
             <Route path="/reports/total-sales" element={<PrivateRoute user={user}><TotalSalesReport /></PrivateRoute>} />
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
+            <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />

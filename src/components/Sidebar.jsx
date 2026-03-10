@@ -3,8 +3,8 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 const accessRights = {
-  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create", "internal-consumption"],
-  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category", "internal-consumption"],
+  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create", "internal-consumption", "discount-type"],
+  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category", "internal-consumption", "discount-type"],
   chef: ["dashboard",  "history", "report", "menu", "category", "internal-consumption"],
   user: ["dashboard", "payments", "history", "report", "internal-consumption"],
 };
@@ -114,6 +114,17 @@ export default function Sidebar({ isOpen }) {
             }
           >
             Internal Consumption
+          </NavLink>
+        )}
+
+        {roleAccess.includes("discount-type") && (
+          <NavLink
+            to="/discount-type"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? active : normal}`
+            }
+          >
+            Discount Type
           </NavLink>
         )}
 

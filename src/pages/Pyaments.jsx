@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 
-export default function Pyaments({ inventory, setInventory }) {
+export default function Pyaments({ inventory, setInventory, user }) {
   const [menu, setMenu] = useState([]);
   const [categories, setCategories] = useState([]);
   const [ingredientsMap, setIngredientsMap] = useState({});
@@ -13,6 +13,10 @@ export default function Pyaments({ inventory, setInventory }) {
   const [tax, setTax] = useState(0);
   const [paymentType, setPaymentType] = useState("Cash"); // "Cash", "Kpay", or "FOC"
   const [remark, setRemark] = useState("");
+  const [discountTypes, setDiscountTypes] = useState([]);
+  const [selectedDiscountType, setSelectedDiscountType] = useState(null);
+
+  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
 
@@ -64,9 +68,21 @@ export default function Pyaments({ inventory, setInventory }) {
     }
   };
 
+  // Fetch discount types
+  const fetchDiscountTypes = async () => {
+    try {
+      const { data, error } = await supabase.from("discount_types").select("*").order("id", { ascending: true });
+      if (error) throw error;
+      setDiscountTypes(data || []);
+    } catch (err) {
+      console.error("Failed to load discount types:", err);
+    }
+  };
+
   useEffect(() => {
     fetchMenu();
     fetchCategories();
+    fetchDiscountTypes();
   }, []);
 
   const filteredMenu = useMemo(
@@ -156,6 +172,7 @@ export default function Pyaments({ inventory, setInventory }) {
     setTax(0);
     setPaymentType("Cash");
     setRemark("");
+    setSelectedDiscountType(null);
   };
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -199,6 +216,8 @@ export default function Pyaments({ inventory, setInventory }) {
             status: "pending",
             payment_type: paymentType,
             remark: remark || null,
+            discount_type: selectedDiscountType?.name || null,
+            role: user?.role || null,
           },
         ])
         .select()
@@ -375,6 +394,46 @@ export default function Pyaments({ inventory, setInventory }) {
 
         {/* Discount Form */}
         <div className="mt-4 border-t pt-4">
+          {discountTypes.length > 0 && (
+            <>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Discount Type
+              </label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDiscountType(null);
+                    setDiscount(0);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                    !selectedDiscountType
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  Manual
+                </button>
+                {discountTypes.map((dt) => (
+                  <button
+                    key={dt.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDiscountType(dt);
+                      setDiscount(dt.discount_percent);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                      selectedDiscountType?.id === dt.id
+                        ? "bg-purple-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {dt.name} ({dt.discount_percent}%)
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Discount (%)
           </label>
@@ -384,9 +443,10 @@ export default function Pyaments({ inventory, setInventory }) {
             min="0"
             max="100"
             value={discount}
-            onChange={(e) =>
-              setDiscount(Math.min(100, Math.max(0, Number(e.target.value))))
-            }
+            onChange={(e) => {
+              setDiscount(Math.min(100, Math.max(0, Number(e.target.value))));
+              setSelectedDiscountType(null);
+            }}
             className="w-full p-2 border rounded-xl"
             placeholder="Enter discount %"
             disabled={paymentType === "FOC"}
