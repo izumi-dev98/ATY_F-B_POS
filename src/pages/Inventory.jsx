@@ -23,6 +23,8 @@ export default function Inventory({
   // Get user role
   const user = JSON.parse(localStorage.getItem("user"));
   const isSuperAdmin = user?.role === "superadmin";
+  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
+  const canManageInventory = isSuperAdmin || isAdmin;
 
   const [formData, setFormData] = useState({
     item_name: "",
@@ -221,7 +223,7 @@ export default function Inventory({
             }}
           />
 
-          {isSuperAdmin && (
+          {canManageInventory && (
             <button
               onClick={openAddCategoryModal}
               className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:opacity-90 transition"
@@ -233,7 +235,7 @@ export default function Inventory({
           <button
             onClick={openAddModal}
             className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:opacity-90 transition"
-            disabled={!isSuperAdmin}
+            disabled={!canManageInventory}
           >
             + Add Item
           </button>
@@ -263,7 +265,7 @@ export default function Inventory({
             }`}
           >
             {cat.name}
-            {isSuperAdmin && (
+            {canManageInventory && (
               <span
                 onClick={(e) => { e.stopPropagation(); openEditCategoryModal(cat); }}
                 className="text-xs opacity-70 hover:opacity-100"
@@ -312,7 +314,7 @@ export default function Inventory({
                       </span>
                     </td>
                     <td className="p-3 flex justify-center gap-2 flex-wrap">
-                      {isSuperAdmin && (
+                      {canManageInventory && (
                         <>
                           <button
                             onClick={() => openEditModal(item)}
@@ -328,7 +330,7 @@ export default function Inventory({
                           </button>
                         </>
                       )}
-                      {!isSuperAdmin && <span className="text-gray-400 text-sm">View Only</span>}
+                      {!canManageInventory && <span className="text-gray-400 text-sm">View Only</span>}
                     </td>
                   </tr>
                 ))
