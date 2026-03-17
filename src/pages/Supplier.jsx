@@ -4,12 +4,11 @@ import supabase from "../createClients";
 
 export default function Supplier() {
   const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editItem, setEditItem] = useState(null);
-
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -21,8 +20,8 @@ export default function Supplier() {
     address: "",
   });
 
-  // Fetch suppliers
   const fetchSuppliers = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from("suppliers")
@@ -31,9 +30,9 @@ export default function Supplier() {
       if (error) throw error;
       setSuppliers(data || []);
     } catch (err) {
-      Swal.fire("Error", err.message || "Failed to load suppliers", "error");
-      setSuppliers([]);
+      console.error("Error fetching suppliers:", err);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -41,13 +40,7 @@ export default function Supplier() {
   }, []);
 
   const openAddModal = () => {
-    setFormData({
-      name: "",
-      contact_person: "",
-      phone: "",
-      email: "",
-      address: "",
-    });
+    setFormData({ name: "", contact_person: "", phone: "", email: "", address: "" });
     setIsEditing(false);
     setEditItem(null);
     setShowModal(true);
@@ -130,7 +123,6 @@ export default function Supplier() {
     }
   };
 
-  // Filter suppliers based on search
   const filteredSuppliers = suppliers.filter((s) =>
     s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,205 +130,161 @@ export default function Supplier() {
     s.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSuppliers = filteredSuppliers.slice(startIndex, startIndex + itemsPerPage);
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-  };
-
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      <h2 className="font-bold text-2xl py-6 font-serif">Suppilers</h2>
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
-        <input
-          type="text"
-          placeholder="Search suppliers..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="px-4 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-md"
-        />
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Supplier Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage your suppliers</p>
+        </div>
         <button
           onClick={openAddModal}
-          className="px-5 py-2 bg-green-600 text-white rounded-2xl shadow hover:bg-green-700 transition ml-4"
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
           + Add Supplier
         </button>
       </div>
 
-      {filteredSuppliers.length === 0 ? (
-        <p className="text-gray-500 text-center mt-10">No suppliers found</p>
-      ) : (
-        <>
-          <div className="bg-white rounded-2xl shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Person</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedSuppliers.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.contact_person || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.phone || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.email || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.address || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => openEditModal(item)}
-                          className="text-blue-600 hover:text-blue-800 mr-3"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <input
+          type="text"
+          placeholder="Search suppliers by name, contact, phone, or email..."
+          value={searchTerm}
+          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        />
+      </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex justify-center items-center mt-6 space-x-2">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-3 py-1 rounded bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300"
-              >
-                Previous
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`px-3 py-1 rounded ${
-                    currentPage === page
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 rounded bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">ID</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Name</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Contact Person</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Phone</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Email</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Address</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+            ) : filteredSuppliers.length === 0 ? (
+              <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No Data Found</td></tr>
+            ) : (
+              paginatedSuppliers.map((item) => (
+                <tr key={item.id} className="border-t border-slate-100 hover:bg-indigo-50/50 transition-colors">
+                  <td className="px-4 py-3 text-slate-500">#{item.id}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">{item.name}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.contact_person || "-"}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.phone || "-"}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.email || "-"}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.address || "-"}</td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => openEditModal(item)} className="text-indigo-600 hover:text-indigo-800 font-medium mr-3">Edit</button>
+                    <button onClick={() => handleDelete(item.id)} className="text-rose-600 hover:text-rose-800 font-medium">Delete</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center mt-6 gap-2">
+          <button
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+          >
+            Previous
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              className={`px-3 py-1.5 border rounded-lg text-sm font-medium ${
+                currentPage === page
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100"
+          >
+            Next
+          </button>
+        </div>
       )}
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg">
-            <h3 className="text-2xl font-bold mb-4">
-              {isEditing ? "Edit Supplier" : "Add Supplier"}
-            </h3>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-xl font-bold text-slate-800 mb-5">{isEditing ? "Edit Supplier" : "Add Supplier"}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier Name *
-                </label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Supplier Name *</label>
                 <input
                   name="name"
-                  placeholder="Supplier Name"
                   value={formData.name}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Person
-                </label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Contact Person</label>
                 <input
                   name="contact_person"
-                  placeholder="Contact Person"
                   value={formData.contact_person}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone</label>
                 <input
                   name="phone"
-                  placeholder="Phone Number"
                   value={formData.phone}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
                 <input
                   name="email"
                   type="email"
-                  placeholder="Email Address"
                   value={formData.email}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address
-                </label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Address</label>
                 <textarea
                   name="address"
-                  placeholder="Address"
                   value={formData.address}
                   onChange={handleFormChange}
                   rows={2}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition"
-                >
-                  {isEditing ? "Update" : "Save"}
-                </button>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{isEditing ? "Update" : "Save"}</button>
               </div>
             </form>
           </div>

@@ -2,9 +2,19 @@ import React from "react";
 
 export default function PurchaseReport() {
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-2xl font-bold text-gray-800">Purchase Report</h1>
-      <p className="text-gray-500 mt-2">Purchase report functionality coming soon...</p>
+    <div className="p-6 bg-slate-50 min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-800">Purchase Report</h1>
+        <p className="text-sm text-slate-500 mt-1">View purchase reports and analytics</p>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <p className="text-slate-500 font-medium">Purchase report functionality coming soon...</p>
+      </div>
     </div>
   );
 }

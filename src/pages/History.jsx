@@ -259,11 +259,15 @@ export default function History({ setInventory }) {
   };
 
   return (
-    <div className="min-h-screen p-6 bg-gray-100">
-      <h1 className="text-3xl font-bold mb-6 text-center">Order History</h1>
+    <div className="p-6 bg-slate-50 min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-800">Order History</h1>
+        <p className="text-sm text-slate-500 mt-1">View all order records</p>
+      </div>
 
       {/* Search and Filter */}
-      <div className="flex flex-wrap justify-center gap-3 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <div className="flex flex-wrap gap-3">
         {/* Date Filter */}
         <select
           value={dateFilter}
@@ -271,7 +275,7 @@ export default function History({ setInventory }) {
             setDateFilter(e.target.value);
             setPage(1);
           }}
-          className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="all">All Time</option>
           <option value="day">Today</option>
@@ -291,9 +295,9 @@ export default function History({ setInventory }) {
                 setStartDate(e.target.value);
                 setPage(1);
               }}
-              className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-            <span className="self-center">to</span>
+            <span className="self-center text-slate-500">to</span>
             <input
               type="date"
               value={endDate}
@@ -314,6 +318,7 @@ export default function History({ setInventory }) {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        </div>
       </div>
 
       {filteredHistory.length === 0 ? (

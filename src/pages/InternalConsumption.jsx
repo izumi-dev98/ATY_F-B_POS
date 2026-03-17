@@ -526,21 +526,24 @@ ${reportData.map(row =>
   };
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Internal Consumption</h2>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Internal Consumption</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage stock and usage</p>
+        </div>
         <div className="flex gap-2">
           {filteredRecords.length > 0 && (
             <>
               <button
                 onClick={exportAddStockExcel}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition"
+                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
               >
                 Add Stock Report
               </button>
               <button
                 onClick={exportUsageExcel}
-                className="px-4 py-2 bg-orange-500 text-white rounded-2xl hover:bg-orange-600 transition"
+                className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
               >
                 Usage Report
               </button>
@@ -548,13 +551,13 @@ ${reportData.map(row =>
           )}
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition"
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           >
             + Add Stock
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition"
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           >
             + Record Usage
           </button>

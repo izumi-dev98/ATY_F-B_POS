@@ -181,31 +181,38 @@ export default function Menu({ inventory }) {
   });
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Menu Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage menu items</p>
+        </div>
+        <button
+          onClick={openAddModal}
+          className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          + Add Menu
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <input
           type="text"
           placeholder="Search menu..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
-        <button
-          onClick={openAddModal}
-          className="px-5 py-2 bg-green-600 text-white rounded-2xl shadow hover:bg-green-700 transition"
-        >
-          + Add Menu
-        </button>
       </div>
 
       {/* Category Filter Tabs */}
       <div className="mb-6 flex flex-wrap gap-2">
         <button
           onClick={() => setSelectedCategory("all")}
-          className={`px-4 py-2 rounded-2xl text-sm font-medium transition ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             selectedCategory === "all"
-              ? "bg-blue-600 text-white"
-              : "bg-white text-gray-700 hover:bg-gray-200"
+              ? "bg-indigo-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
           }`}
         >
           All
@@ -214,10 +221,10 @@ export default function Menu({ inventory }) {
           <button
             key={cat.id}
             onClick={() => setSelectedCategory(cat.id.toString())}
-            className={`px-4 py-2 rounded-2xl text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               selectedCategory === cat.id.toString()
-                ? "bg-blue-600 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-200"
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
           >
             {cat.name}
@@ -225,17 +232,17 @@ export default function Menu({ inventory }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredMenu.map((item) => (
-          <div key={item.id} className="bg-white shadow-lg rounded-2xl p-5 hover:shadow-2xl transition">
-            <h3 className="font-bold text-xl text-gray-800">{item.menu_name}</h3>
-            <p className="text-gray-500 mb-1">{mmkFormatter.format(item.price)}</p>
+          <div key={item.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+            <h3 className="font-bold text-lg text-slate-800">{item.menu_name}</h3>
+            <p className="text-slate-500 mb-1">{mmkFormatter.format(item.price)}</p>
             {item.category_id && (
-              <p className="text-xs text-blue-600 mb-3">
+              <p className="text-xs text-indigo-600 mb-3 font-medium">
                 {categories.find(c => c.id === item.category_id)?.name || "Uncategorized"}
               </p>
             )}
-            <div className="text-sm text-gray-600 mb-3">
+            <div className="text-sm text-slate-600 mb-3">
               {item.ingredients.map((ing, idx) => {
                 const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
                 return (
@@ -245,16 +252,16 @@ export default function Menu({ inventory }) {
                 );
               })}
             </div>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => openEditModal(item)}
-                className="px-3 py-1 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition"
+                className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Edit
               </button>
               <button
                 onClick={() => handleDelete(item.id)}
-                className="px-3 py-1 bg-red-500 text-white rounded-2xl hover:bg-red-600 transition"
+                className="px-3 py-1.5 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 transition-colors"
               >
                 Delete
               </button>

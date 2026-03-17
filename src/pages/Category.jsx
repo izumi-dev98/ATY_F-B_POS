@@ -116,49 +116,56 @@ export default function Category() {
   );
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
-        <input
-          type="text"
-          placeholder="Search categories..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-        />
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Category Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage menu categories</p>
+        </div>
         <button
           onClick={openAddModal}
-          className="px-5 py-2 bg-green-600 text-white rounded-2xl shadow hover:bg-green-700 transition"
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
           + Add Category
         </button>
       </div>
 
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <input
+          type="text"
+          placeholder="Search categories..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+
       {filteredCategories.length === 0 ? (
-        <p className="text-gray-500 text-center mt-10">No categories found</p>
+        <p className="text-slate-500 text-center mt-10">No categories found</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCategories.map((item) => (
             <div
               key={item.id}
-              className="bg-white shadow-lg rounded-2xl p-5 hover:shadow-2xl transition"
+              className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow"
             >
-              <h3 className="font-bold text-xl text-gray-800">{item.name}</h3>
-              <p className="text-gray-500 text-sm mt-1">
+              <h3 className="font-bold text-lg text-slate-800">{item.name}</h3>
+              <p className="text-slate-500 text-sm mt-1">
                 {item.description || "No description"}
               </p>
-              <p className="text-gray-400 text-xs mt-2">
+              <p className="text-slate-400 text-xs mt-2">
                 ID: {item.id}
               </p>
-              <div className="flex justify-end gap-3 mt-4">
+              <div className="flex justify-end gap-2 mt-4">
                 <button
                   onClick={() => openEditModal(item)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition"
+                  className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="px-3 py-1 bg-red-500 text-white rounded-2xl hover:bg-red-600 transition"
+                  className="px-3 py-1.5 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 transition-colors"
                 >
                   Delete
                 </button>
@@ -171,13 +178,13 @@ export default function Category() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg">
-            <h3 className="text-2xl font-bold mb-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">
               {isEditing ? "Edit Category" : "Add Category"}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Category Name *
                 </label>
                 <input
@@ -185,12 +192,12 @@ export default function Category() {
                   placeholder="Category Name"
                   value={formData.name}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Description
                 </label>
                 <textarea
@@ -199,20 +206,20 @@ export default function Category() {
                   value={formData.description}
                   onChange={handleFormChange}
                   rows={3}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-3">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition"
+                  className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition"
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
                 >
                   {isEditing ? "Update" : "Save"}
                 </button>

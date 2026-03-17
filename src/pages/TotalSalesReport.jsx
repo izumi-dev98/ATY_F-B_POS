@@ -220,19 +220,22 @@ export default function TotalSalesReport() {
   };
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50">
+    <div className="p-6 min-h-screen bg-slate-50">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Total Sales Report</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Total Sales Report</h1>
+          <p className="text-sm text-slate-500 mt-1">View sales report</p>
+        </div>
         <button
           onClick={exportToExcel}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow"
+          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
         >
           Export Excel
         </button>
       </div>
 
       {/* Preset filters */}
-      <div className="flex gap-2 flex-wrap mb-4">
+      <div className="flex gap-2 flex-wrap mb-6">
         {["all", "day", "week", "month", "year"].map((f) => (
           <button
             key={f}
@@ -242,10 +245,10 @@ export default function TotalSalesReport() {
               setCustomEnd("");
               setCurrentPage(1);
             }}
-            className={`px-4 py-2 rounded-lg capitalize ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition ${
               presetFilter === f
-                ? "bg-blue-600 text-white"
-                : "bg-white border"
+                ? "bg-indigo-600 text-white"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
             {f}
@@ -298,7 +301,7 @@ export default function TotalSalesReport() {
       </div>
 
       {/* Total sales */}
-      <div className="bg-white p-4 rounded-xl shadow mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <p className="text-sm text-gray-500">Subtotal</p>
@@ -331,20 +334,20 @@ export default function TotalSalesReport() {
       </div>
 
       {/* Table */}
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden">
-        <table className="min-w-full text-left">
-          <thead className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-100">
             <tr>
-              <th className="px-4 py-3">Slip ID</th>
-              <th className="px-4 py-3">Menu</th>
-              <th className="px-4 py-3">Qty</th>
-              <th className="px-4 py-3">Subtotal</th>
-              <th className="px-4 py-3">Discount</th>
-              <th className="px-4 py-3">Tax</th>
-              <th className="px-4 py-3">Grand Total</th>
-              <th className="px-4 py-3">Payment</th>
-              <th className="px-4 py-3">Remark</th>
-              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Slip ID</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Menu</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Qty</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Subtotal</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Discount</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Tax</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Grand Total</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Payment</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Remark</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
             </tr>
           </thead>
           <tbody>
@@ -362,7 +365,7 @@ export default function TotalSalesReport() {
                 const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
                 const displayRemark = slip.remark || "-";
                 return (
-                <tr key={slip.order_id} className="border-b hover:bg-blue-50 transition">
+                <tr key={slip.order_id} className="border-b border-slate-100 hover:bg-indigo-50/50 transition">
                   <td className="px-4 py-3">{slip.order_id}</td>
                   <td className="px-4 py-3 font-medium text-gray-700">{menusText}</td>
                   <td className="px-4 py-3">{slip.qty}</td>

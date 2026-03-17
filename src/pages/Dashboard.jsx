@@ -154,20 +154,20 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex flex-col h-full mt-10">
+    <div className="p-6 bg-slate-50 min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+        <p className="text-sm text-slate-500 mt-1">View sales analytics</p>
+      </div>
 
-      <h1 className="text-2xl md:text-3xl font-bold mb-4 text-center">
-        Dashboard
-      </h1>
-
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 flex flex-col flex-1 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
 
         {/* Month selector */}
-        <div className="flex justify-end mb-3 gap-2">
+        <div className="flex justify-end mb-4 gap-2">
           <select
             value={selectedMenu}
             onChange={(e) => setSelectedMenu(e.target.value)}
-            className="px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="all">All Menu</option>
             {menuList.map((m) => (
@@ -177,7 +177,7 @@ export default function Dashboard() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             {getLast12Months().map((m) => {
               const [year, month] = m.split("-");

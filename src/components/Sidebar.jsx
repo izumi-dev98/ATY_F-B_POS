@@ -1,4 +1,3 @@
-// components/Sidebar.jsx
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -15,183 +14,85 @@ export default function Sidebar({ isOpen }) {
   const user = JSON.parse(localStorage.getItem("user"));
   const roleAccess = user ? accessRights[user.role] : [];
 
-  const baseLink =
-    "block px-4 py-2 rounded-lg border transition text-sm";
-  const normal =
-    "border-gray-300 text-gray-700 hover:text-blue-600 hover:border-blue-400";
-  const active =
-    "bg-blue-50 text-blue-600 border-blue-500 font-semibold";
+  const baseLink = "block px-4 py-2.5 rounded-lg text-sm font-medium transition-all";
+  const normal = "text-slate-600 hover:bg-slate-100 hover:text-indigo-600";
+  const active = "bg-indigo-50 text-indigo-600 font-semibold";
 
   return (
-    <aside
-      className={`
-        fixed
-        top-10
-        left-0
-        z-40
-        h-[calc(100vh-3.5rem)]
-        w-60
-        bg-white
-        border-r
-        transform
-        transition-transform
-        duration-300
-        ${isOpen ? "translate-x-0" : "-translate-x-full"}
-      `}
-    >
-      <nav className="p-4 space-y-2 overflow-y-auto h-full">
+    <aside className={`fixed top-12 left-0 z-40 h-[calc(100vh-3rem)] w-60 bg-white border-r border-slate-200 transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <nav className="p-3 space-y-1 overflow-y-auto h-full">
 
         {roleAccess.includes("dashboard") && (
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/dashboard" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Dashboard
           </NavLink>
         )}
 
         {roleAccess.includes("payments") && (
-          <NavLink
-            to="/payments"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/payments" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Payments
           </NavLink>
         )}
 
         {roleAccess.includes("history") && (
-          <NavLink
-            to="/history"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/history" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             History
           </NavLink>
         )}
 
         {roleAccess.includes("menu") && (
-          <NavLink
-            to="/menu"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/menu" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Menu
           </NavLink>
         )}
 
         {roleAccess.includes("category") && (
-          <NavLink
-            to="/category"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/category" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Category
           </NavLink>
         )}
 
         {roleAccess.includes("inventory") && (
-          <NavLink
-            to="/inventory"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/inventory" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Inventory
           </NavLink>
         )}
 
         {roleAccess.includes("internal-consumption") && (
-          <NavLink
-            to="/internal-consumption"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/internal-consumption" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Internal Consumption
           </NavLink>
         )}
 
         {roleAccess.includes("discount-type") && (
-          <NavLink
-            to="/discount-type"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/discount-type" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Discount Type
           </NavLink>
         )}
 
         {roleAccess.includes("purchase") && (
           <div>
-            <button
-              onClick={() => setPurchaseOpen(!purchaseOpen)}
-              className={`${baseLink} ${normal} w-full text-left`}
-            >
-              Purchase
+            <button onClick={() => setPurchaseOpen(!purchaseOpen)} className={`${baseLink} ${normal} w-full text-left flex justify-between items-center`}>
+              <span>Purchase</span>
+              <svg className={`w-4 h-4 transition-transform ${purchaseOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-
             {purchaseOpen && (
-              <div className="mt-2 ml-3 space-y-1">
-                <NavLink
-                  to="/purchase"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+              <div className="mt-1 ml-3 space-y-1 border-l-2 border-indigo-200 pl-3">
+                <NavLink to="/purchase" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Order
                 </NavLink>
-
-                <NavLink
-                  to="/supplier"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+                <NavLink to="/supplier" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Supplier
                 </NavLink>
-
-                <NavLink
-                  to="/purchase-return"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+                <NavLink to="/purchase-return" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Return
                 </NavLink>
-
-                <NavLink
-                  to="/purchase-report"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+                <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Report
                 </NavLink>
-
-                <NavLink
-                  to="/purchase-return-report"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+                <NavLink to="/purchase-return-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Return Report
                 </NavLink>
               </div>
@@ -201,34 +102,18 @@ export default function Sidebar({ isOpen }) {
 
         {roleAccess.includes("report") && (
           <div>
-            <button
-              onClick={() => setReportOpen(!reportOpen)}
-              className={`${baseLink} ${normal} w-full text-left`}
-            >
-              Reports
+            <button onClick={() => setReportOpen(!reportOpen)} className={`${baseLink} ${normal} w-full text-left flex justify-between items-center`}>
+              <span>Reports</span>
+              <svg className={`w-4 h-4 transition-transform ${reportOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-
             {reportOpen && (
-              <div className="mt-2 ml-3 space-y-1">
-                <NavLink
-                  to="/reports/inventory"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+              <div className="mt-1 ml-3 space-y-1 border-l-2 border-indigo-200 pl-3">
+                <NavLink to="/reports/inventory" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Inventory Report
                 </NavLink>
-
-                <NavLink
-                  to="/reports/total-sales"
-                  className={({ isActive }) =>
-                    `${baseLink} text-xs ${
-                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
-                    }`
-                  }
-                >
+                <NavLink to="/reports/total-sales" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Total Sales Report
                 </NavLink>
               </div>
@@ -237,20 +122,12 @@ export default function Sidebar({ isOpen }) {
         )}
 
         {roleAccess.includes("user-create") && (
-          <NavLink
-            to="/user-create"
-            className={({ isActive }) =>
-              `${baseLink} ${isActive ? active : normal}`
-            }
-          >
+          <NavLink to="/user-create" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Create User
           </NavLink>
         )}
 
-        <NavLink
-          to="/logout"
-          className={`${baseLink} border-red-300 text-red-500 hover:bg-red-50`}
-        >
+        <NavLink to="/logout" className={`${baseLink} text-rose-600 hover:bg-rose-50`}>
           Logout
         </NavLink>
 

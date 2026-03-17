@@ -127,19 +127,22 @@ export default function UserManagement() {
 
   // ------------------- RENDER -------------------
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">User Management</h2>
+    <div className="p-6 bg-slate-50 min-h-screen">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Create and manage users</p>
+        </div>
         <button
           onClick={openAddModal}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          Add User
+          + Add User
         </button>
       </div>
 
       {/* SEARCH */}
-      <div className="mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <input
           type="text"
           placeholder="Search by username or name..."
@@ -148,30 +151,31 @@ export default function UserManagement() {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-          className="w-full px-4 py-2 border rounded"
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
       {/* USER TABLE */}
-      <table className="w-full table-auto border-collapse">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border px-4 py-2">#</th>
-            <th className="border px-4 py-2">Full Name</th>
-            <th className="border px-4 py-2">Username</th>
-            <th className="border px-4 py-2">Role</th>
-            <th className="border px-4 py-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">#</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Full Name</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Username</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Role</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
           {paginatedUsers.map((user, idx) => (
-            <tr key={user.id} className="text-center">
-              <td className="border px-4 py-2">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-              <td className="border px-4 py-2">{user.full_name}</td>
-              <td className="border px-4 py-2">{user.username}</td>
-              <td className="border px-4 py-2">{user.role}</td>
-              <td className="border px-4 py-2 space-x-2">
-                <button
+            <tr key={user.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
+              <td className="px-4 py-3 text-slate-500">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+              <td className="px-4 py-3 font-medium text-slate-800">{user.full_name}</td>
+              <td className="px-4 py-3 text-slate-600">{user.username}</td>
+              <td className="px-4 py-3 text-slate-600 capitalize">{user.role}</td>
+              <td className="px-4 py-3">
+              <button
                   onClick={() => openEditModal(user)}
                   className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
                 >
@@ -207,6 +211,7 @@ export default function UserManagement() {
           </button>
         ))}
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">Next</button>
+      </div>
       </div>
 
       {/* ------------------- MODAL ------------------- */}

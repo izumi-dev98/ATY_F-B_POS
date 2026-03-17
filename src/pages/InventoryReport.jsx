@@ -57,23 +57,24 @@ export default function InventoryReport() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-6 bg-slate-50 min-h-screen">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Inventory Report
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Inventory Report</h1>
+          <p className="text-sm text-slate-500 mt-1">View inventory report</p>
+        </div>
 
         <button
           onClick={exportToExcel}
-          className="bg-green-500 hover:bg-green-600 transition text-white px-4 py-2 rounded-lg shadow-md"
+          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
         >
           Export Excel
         </button>
       </div>
 
       {/* Search */}
-      <div className="mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <input
           type="text"
           placeholder="Search item..."
@@ -87,13 +88,13 @@ export default function InventoryReport() {
       </div>
 
       {/* Table */}
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden">
-        <table className="min-w-full text-left">
-          <thead className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-100">
             <tr>
-              <th className="px-6 py-3">Item Name</th>
-              <th className="px-6 py-3">Quantity</th>
-              <th className="px-6 py-3">Unit</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Quantity</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
             </tr>
           </thead>
 
@@ -114,15 +115,15 @@ export default function InventoryReport() {
               currentData.map((item, index) => (
                 <tr
                   key={index}
-                  className="border-b hover:bg-blue-50 transition duration-200"
+                  className="border-b border-slate-100 hover:bg-indigo-50/50 transition"
                 >
                   {/* Item Name */}
-                  <td className="px-6 py-3 font-medium text-gray-700">
+                  <td className="px-4 py-3 font-medium text-gray-700">
                     {item.item_name}
                   </td>
 
                   {/* Quantity with Low Stock Hover */}
-                  <td className="px-6 py-3 relative group">
+                  <td className="px-4 py-3 relative group">
                     {item.qty < 5 ? (
                       <>
                         <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold cursor-pointer animate-pulse">
@@ -161,7 +162,7 @@ export default function InventoryReport() {
                   </td>
 
                   {/* Type */}
-                  <td className="px-6 py-3 text-gray-600">
+                  <td className="px-4 py-3 text-gray-600">
                     {item.type}
                   </td>
                 </tr>

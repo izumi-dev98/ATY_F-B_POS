@@ -203,19 +203,18 @@ export default function Inventory({
   };
 
   return (
-    <div className="flex flex-col h-screen p-4 md:p-6 gap-4">
-
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h2 className="text-2xl md:text-3xl font-semibold text-gray-800">
-          📦 Inventory
-        </h2>
+    <div className="p-6 bg-slate-50 min-h-screen">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Inventory Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage inventory items</p>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <input
             type="search"
             placeholder="Search items..."
-            className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"
+            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -226,7 +225,7 @@ export default function Inventory({
           {canManageInventory && (
             <button
               onClick={openAddCategoryModal}
-              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:opacity-90 transition"
+              className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
             >
               + Category
             </button>
@@ -234,7 +233,7 @@ export default function Inventory({
 
           <button
             onClick={openAddModal}
-            className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:opacity-90 transition"
+            className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             disabled={!canManageInventory}
           >
             + Add Item
@@ -243,13 +242,13 @@ export default function Inventory({
       </div>
 
       {/* Category Tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 mb-6">
         <button
           onClick={() => { setSelectedCategory("all"); setCurrentPage(1); }}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             selectedCategory === "all"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              ? "bg-indigo-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
           }`}
         >
           All
@@ -260,8 +259,8 @@ export default function Inventory({
             onClick={() => { setSelectedCategory(cat.id); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
               selectedCategory === cat.id
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
           >
             {cat.name}
@@ -278,59 +277,56 @@ export default function Inventory({
       </div>
 
       {/* Table card */}
-      <div className="flex flex-col flex-1 bg-white rounded-xl shadow-lg p-4 md:p-6">
-
-        {/* Table wrapper */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
-          <table className="w-full min-w-[600px] border-collapse">
-            <thead className="bg-gray-100 text-gray-700 sticky top-0 z-10">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100">
               <tr>
-                <th className="p-3 text-left">No</th>
-                <th className="p-3 text-left">Item</th>
-                <th className="p-3 text-center">Qty</th>
-                <th className="p-3 text-left">Unit</th>
-                <th className="p-3 text-left">Category</th>
-                <th className="p-3 text-center">Actions</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">No</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Item</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-700">Qty</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
-
             <tbody>
               {paginatedInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-6 text-center text-gray-400">
+                  <td colSpan="6" className="px-4 py-8 text-center text-slate-500">
                     No inventory found
                   </td>
                 </tr>
               ) : (
                 paginatedInventory.map((item, index) => (
-                  <tr key={item.id} className="border-b hover:bg-gray-50 transition">
-                    <td className="p-3">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                    <td className="p-3 font-medium">{item.item_name}</td>
-                    <td className="p-3 text-center">{item.qty}</td>
-                    <td className="p-3">{item.type}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                  <tr key={item.id} className="border-t border-slate-100 hover:bg-indigo-50/50 transition-colors">
+                    <td className="px-4 py-3 text-slate-500">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{item.item_name}</td>
+                    <td className="px-4 py-3 text-center text-slate-600">{item.qty}</td>
+                    <td className="px-4 py-3 text-slate-600">{item.type}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
                         {getCategoryName(item.category_id)}
                       </span>
                     </td>
-                    <td className="p-3 flex justify-center gap-2 flex-wrap">
+                    <td className="px-4 py-3 text-center">
                       {canManageInventory && (
-                        <>
+                        <div className="flex justify-center gap-2">
                           <button
                             onClick={() => openEditModal(item)}
-                            className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                            className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => deleteInventoryItem(item.id)}
-                            className="px-3 py-1 text-sm bg-red-500 text-white rounded-md hover:bg-red-600"
+                            className="px-3 py-1 text-sm bg-rose-600 text-white rounded-md hover:bg-rose-700"
                           >
                             Delete
                           </button>
-                        </>
+                        </div>
                       )}
-                      {!canManageInventory && <span className="text-gray-400 text-sm">View Only</span>}
+                      {!canManageInventory && <span className="text-slate-400 text-sm">View Only</span>}
                     </td>
                   </tr>
                 ))
@@ -341,14 +337,14 @@ export default function Inventory({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex justify-center gap-4 mt-4">
+          <div className="flex justify-center gap-2 mt-4 pb-4">
             <button
               onClick={handlePrevPage}
               disabled={currentPage === 1}
-              className={`px-4 py-2 rounded-lg ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
                 currentPage === 1
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                  : "bg-blue-500 text-white hover:bg-blue-600"
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-indigo-600 text-white hover:bg-indigo-700"
               }`}
             >
               Prev
@@ -356,10 +352,10 @@ export default function Inventory({
             <button
               onClick={handleNextPage}
               disabled={currentPage === totalPages}
-              className={`px-4 py-2 rounded-lg ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
                 currentPage === totalPages
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                  : "bg-blue-500 text-white hover:bg-blue-600"
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-indigo-600 text-white hover:bg-indigo-700"
               }`}
             >
               Next
@@ -370,9 +366,9 @@ export default function Inventory({
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-xl font-semibold mb-4">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">
               {isEditing ? "Edit Item" : "Add Item"}
             </h3>
 
@@ -382,7 +378,7 @@ export default function Inventory({
                 placeholder="Item name"
                 value={formData.item_name}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
               <input
@@ -391,7 +387,7 @@ export default function Inventory({
                 placeholder="Quantity"
                 value={formData.qty}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
               <input
@@ -399,7 +395,7 @@ export default function Inventory({
                 placeholder="Unit"
                 value={formData.type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
 
@@ -407,7 +403,7 @@ export default function Inventory({
                 name="category_id"
                 value={formData.category_id}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Select Category</option>
                 {categories.map((cat) => (
@@ -421,13 +417,13 @@ export default function Inventory({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 transition"
+                  className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
                 >
                   {isEditing ? "Update" : "Save"}
                 </button>
@@ -439,9 +435,9 @@ export default function Inventory({
 
       {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-xl font-semibold mb-4">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">
               {isEditingCategory ? "Edit Category" : "Add Category"}
             </h3>
 
@@ -451,7 +447,7 @@ export default function Inventory({
                 placeholder="Category name"
                 value={categoryFormData.name}
                 onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
               <textarea
@@ -459,7 +455,7 @@ export default function Inventory({
                 placeholder="Description (optional)"
                 value={categoryFormData.description}
                 onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                className="w-full px-4 py-2 border rounded-lg resize-none"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 rows="3"
               />
 
@@ -468,7 +464,7 @@ export default function Inventory({
                   <button
                     type="button"
                     onClick={() => handleDeleteCategory(editCategoryId)}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                    className="px-4 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
                   >
                     Delete
                   </button>
@@ -477,13 +473,13 @@ export default function Inventory({
                   <button
                     type="button"
                     onClick={() => setShowCategoryModal(false)}
-                    className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 transition"
+                    className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition"
+                    className="px-4 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
                   >
                     {isEditingCategory ? "Update" : "Save"}
                   </button>
