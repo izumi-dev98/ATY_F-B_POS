@@ -23,6 +23,12 @@ import PrivateRoute from "./pages/PrivateRoute";
 import Login from "./pages/ Login";
 import Logout from "./pages/Logout";
 
+import Supplier from "./pages/Supplier";
+import Purchase from "./pages/Purchase";
+import PurchaseReturn from "./pages/PurchaseReturn";
+import PurchaseReport from "./pages/PurchaseReport";
+import PurchaseReturnReport from "./pages/PurchaseReturnReport";
+
 // -------------------- ACCESS RIGHTS --------------------
 const accessRights = {
   superadmin: ["dashboard", "payments", "history", "menu", "inventory", "report", "internal-consumption", "discount-type"],
@@ -156,6 +162,11 @@ export default function App() {
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
+            <Route path="/purchase" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Purchase /></PrivateRoute>} />
+            <Route path="/supplier" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Supplier /></PrivateRoute>} />
+            <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturn /></PrivateRoute>} />
+            <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReport /></PrivateRoute>} />
+            <Route path="/purchase-return-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturnReport /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />

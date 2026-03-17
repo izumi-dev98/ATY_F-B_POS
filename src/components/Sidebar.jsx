@@ -3,14 +3,15 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 const accessRights = {
-  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create", "internal-consumption", "discount-type"],
-  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category", "internal-consumption", "discount-type"],
+  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create", "internal-consumption", "discount-type", "purchase"],
+  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category", "internal-consumption", "discount-type", "purchase"],
   chef: ["dashboard",  "history", "report", "menu", "category", "internal-consumption"],
   user: ["dashboard", "payments", "history", "report", "internal-consumption"],
 };
 
 export default function Sidebar({ isOpen }) {
   const [reportOpen, setReportOpen] = useState(false);
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
   const user = JSON.parse(localStorage.getItem("user"));
   const roleAccess = user ? accessRights[user.role] : [];
 
@@ -126,6 +127,76 @@ export default function Sidebar({ isOpen }) {
           >
             Discount Type
           </NavLink>
+        )}
+
+        {roleAccess.includes("purchase") && (
+          <div>
+            <button
+              onClick={() => setPurchaseOpen(!purchaseOpen)}
+              className={`${baseLink} ${normal} w-full text-left`}
+            >
+              Purchase
+            </button>
+
+            {purchaseOpen && (
+              <div className="mt-2 ml-3 space-y-1">
+                <NavLink
+                  to="/purchase"
+                  className={({ isActive }) =>
+                    `${baseLink} text-xs ${
+                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
+                    }`
+                  }
+                >
+                  Purchase Order
+                </NavLink>
+
+                <NavLink
+                  to="/supplier"
+                  className={({ isActive }) =>
+                    `${baseLink} text-xs ${
+                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
+                    }`
+                  }
+                >
+                  Supplier
+                </NavLink>
+
+                <NavLink
+                  to="/purchase-return"
+                  className={({ isActive }) =>
+                    `${baseLink} text-xs ${
+                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
+                    }`
+                  }
+                >
+                  Purchase Return
+                </NavLink>
+
+                <NavLink
+                  to="/purchase-report"
+                  className={({ isActive }) =>
+                    `${baseLink} text-xs ${
+                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
+                    }`
+                  }
+                >
+                  Purchase Report
+                </NavLink>
+
+                <NavLink
+                  to="/purchase-return-report"
+                  className={({ isActive }) =>
+                    `${baseLink} text-xs ${
+                      isActive ? active : "border-gray-200 text-gray-600 hover:text-blue-500"
+                    }`
+                  }
+                >
+                  Purchase Return Report
+                </NavLink>
+              </div>
+            )}
+          </div>
         )}
 
         {roleAccess.includes("report") && (
