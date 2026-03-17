@@ -149,6 +149,7 @@ export default function Supplier() {
 
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
+      <h2 className="font-bold text-2xl py-6 font-serif">Suppilers</h2>
       <div className="flex justify-between items-center mb-6">
         <input
           type="text"
