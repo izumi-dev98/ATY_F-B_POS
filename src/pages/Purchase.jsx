@@ -16,6 +16,7 @@ export default function Purchase({ setInventory }) {
   const [editId, setEditId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -25,9 +26,10 @@ export default function Purchase({ setInventory }) {
     discount: 0
   });
   const [lineItems, setLineItems] = useState([
-    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }
+    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }
   ]);
   const [nextItemId, setNextItemId] = useState(2);
+  const [inventory, setInventoryLocal] = useState([]);
 
   const user = JSON.parse(localStorage.getItem("user"));
   const canManage = user?.role === "superadmin" || user?.role === "admin";
@@ -41,9 +43,10 @@ export default function Purchase({ setInventory }) {
     setLoading(true);
     setError(null);
     try {
-      const [purchasesRes, suppliersRes] = await Promise.all([
+      const [purchasesRes, suppliersRes, inventoryRes] = await Promise.all([
         supabase.from("purchases").select("*").order("id", { ascending: false }),
-        supabase.from("suppliers").select("*").order("name", { ascending: true })
+        supabase.from("suppliers").select("*").order("name", { ascending: true }),
+        supabase.from("inventory").select("*").order("item_name", { ascending: true })
       ]);
 
       if (purchasesRes.error) {
@@ -51,6 +54,12 @@ export default function Purchase({ setInventory }) {
         setError("Failed to load purchases: " + purchasesRes.error.message);
       } else {
         setPurchases(purchasesRes.data || []);
+      }
+
+      if (!inventoryRes.error) {
+        const invData = inventoryRes.data || [];
+        setInventoryLocal(invData);
+        if (setInventory) setInventory(invData);
       }
 
       if (suppliersRes.error) {
@@ -93,7 +102,7 @@ export default function Purchase({ setInventory }) {
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
     setNextItemId(nextItemId + 1);
   };
 
@@ -108,11 +117,30 @@ export default function Purchase({ setInventory }) {
     setLineItems(lineItems.map((item) => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
+
+        // Auto-fill from inventory when inventory_id changes
+        if (field === "inventory_id" && value) {
+          const invItem = inventory.find(i => i.id === parseInt(value));
+          if (invItem) {
+            updated.item_name = invItem.item_name;
+            updated.type = invItem.type || "";
+            updated.unit_price = invItem.price || "";
+            updated.total_price = (parseFloat(invItem.price || 0) * (parseFloat(item.qty) || 0)).toFixed(2);
+          }
+        }
+
+        // Recalculate total when qty or unit_price changes
         if (field === "qty" || field === "unit_price") {
           const qty = field === "qty" ? parseFloat(value) || 0 : parseFloat(item.qty) || 0;
           const price = field === "unit_price" ? parseFloat(value) || 0 : parseFloat(item.unit_price) || 0;
           updated.total_price = (qty * price).toFixed(2);
         }
+
+        // If item_name changes, clear inventory_id (manual entry)
+        if (field === "item_name") {
+          updated.inventory_id = "";
+        }
+
         return updated;
       }
       return item;
@@ -143,7 +171,7 @@ export default function Purchase({ setInventory }) {
 
   const openAddModal = () => {
     setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0 });
-    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
     setNextItemId(2);
     setIsEditing(false);
     setEditId(null);
@@ -161,17 +189,22 @@ export default function Purchase({ setInventory }) {
     setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0 });
 
     if (items && items.length > 0) {
-      setLineItems(items.map((item, idx) => ({
-        id: idx + 1,
-        item_name: item.item_name || "",
-        qty: item.qty || "",
-        unit_price: item.unit_price || "",
-        total_price: item.total_price || "",
-        type: item.type || ""
-      })));
+      setLineItems(items.map((item, idx) => {
+        // Find matching inventory item
+        const invItem = inventory.find(i => i.item_name.toLowerCase() === item.item_name.toLowerCase());
+        return {
+          id: idx + 1,
+          item_name: item.item_name || "",
+          qty: item.qty || "",
+          unit_price: item.unit_price || "",
+          total_price: item.total_price || "",
+          type: item.type || "",
+          inventory_id: invItem ? String(invItem.id) : ""
+        };
+      }));
       setNextItemId(items.length + 1);
     } else {
-      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
       setNextItemId(2);
     }
 
@@ -538,6 +571,7 @@ export default function Purchase({ setInventory }) {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-100">
                       <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700">Select from Inventory</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700">Item Name</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-700 w-24">Qty</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700 w-24">Unit</th>
@@ -550,7 +584,16 @@ export default function Purchase({ setInventory }) {
                       {lineItems.map((item) => (
                         <tr key={item.id} className="border-t border-slate-100">
                           <td className="px-3 py-2">
-                            <input type="text" value={item.item_name} onChange={(e) => updateLineItem(item.id, "item_name", e.target.value)} placeholder="Enter item name" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                            <select value={item.inventory_id} onChange={(e) => updateLineItem(item.id, "inventory_id", e.target.value)}
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                              <option value="">-- New Item --</option>
+                              {inventory.map((inv) => (
+                                <option key={inv.id} value={inv.id}>{inv.item_name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="text" value={item.item_name} onChange={(e) => updateLineItem(item.id, "item_name", e.target.value)} placeholder="Enter or select item" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" value={item.qty} onChange={(e) => updateLineItem(item.id, "qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
