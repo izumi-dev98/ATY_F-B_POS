@@ -95,19 +95,20 @@ export default function InventoryReport() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Quantity</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Price</th>
             </tr>
           </thead>
 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="3" className="text-center py-6">
+                <td colSpan="4" className="text-center py-6">
                   Loading...
                 </td>
               </tr>
             ) : currentData.length === 0 ? (
               <tr>
-                <td colSpan="3" className="text-center py-6">
+                <td colSpan="4" className="text-center py-6">
                   No Data Found
                 </td>
               </tr>
@@ -164,6 +165,11 @@ export default function InventoryReport() {
                   {/* Type */}
                   <td className="px-4 py-3 text-gray-600">
                     {item.type}
+                  </td>
+
+                  {/* Price */}
+                  <td className="px-4 py-3 text-gray-600">
+                    {item.price ? `$${Number(item.price).toFixed(2)}` : "-"}
                   </td>
                 </tr>
               ))

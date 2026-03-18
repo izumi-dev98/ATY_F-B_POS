@@ -1,20 +1,624 @@
-import React from "react";
+import { useState, useEffect } from "react";
+import Swal from "sweetalert2";
+import supabase from "../createClients";
 
-export default function Purchase() {
+export default function Purchase({ setInventory }) {
+  const [purchases, setPurchases] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedPurchaseItems, setSelectedPurchaseItems] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split("T")[0],
+    supplier_id: "",
+    status: "pending",
+    notes: "",
+    discount: 0
+  });
+  const [lineItems, setLineItems] = useState([
+    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }
+  ]);
+  const [nextItemId, setNextItemId] = useState(2);
+
+  const user = JSON.parse(localStorage.getItem("user"));
+  const canManage = user?.role === "superadmin" || user?.role === "admin";
+
+  const formatMMK = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
+  };
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [purchasesRes, suppliersRes] = await Promise.all([
+        supabase.from("purchases").select("*").order("id", { ascending: false }),
+        supabase.from("suppliers").select("*").order("name", { ascending: true })
+      ]);
+
+      if (purchasesRes.error) {
+        console.error("Purchases fetch error:", purchasesRes.error);
+        setError("Failed to load purchases: " + purchasesRes.error.message);
+      } else {
+        setPurchases(purchasesRes.data || []);
+      }
+
+      if (suppliersRes.error) {
+        console.error("Suppliers fetch error:", suppliersRes.error);
+      } else {
+        setSuppliers(suppliersRes.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Error: " + err.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const generateInvoiceNumber = () => {
+    const date = new Date();
+    const dateStr = date.toISOString().split("T")[0].replace(/-/g, "");
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
+    return `PO-${dateStr}-${random}`;
+  };
+
+  const filteredPurchases = purchases.filter((p) => {
+    const matchesSearch = p.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getSupplierName(p.supplier_id)?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPurchases = filteredPurchases.slice(startIndex, startIndex + itemsPerPage);
+
+  const getSupplierName = (supplierId) => {
+    if (!supplierId) return "-";
+    const sup = suppliers.find((s) => s.id === supplierId);
+    return sup ? sup.name : "-";
+  };
+
+  const addLineItem = () => {
+    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+    setNextItemId(nextItemId + 1);
+  };
+
+  const removeLineItem = (id) => {
+    if (lineItems.length === 1) {
+      return Swal.fire("Warning", "At least one item is required", "warning");
+    }
+    setLineItems(lineItems.filter((item) => item.id !== id));
+  };
+
+  const updateLineItem = (id, field, value) => {
+    setLineItems(lineItems.map((item) => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value };
+        if (field === "qty" || field === "unit_price") {
+          const qty = field === "qty" ? parseFloat(value) || 0 : parseFloat(item.qty) || 0;
+          const price = field === "unit_price" ? parseFloat(value) || 0 : parseFloat(item.unit_price) || 0;
+          updated.total_price = (qty * price).toFixed(2);
+        }
+        return updated;
+      }
+      return item;
+    }));
+  };
+
+  const calculateSubTotal = () => {
+    return lineItems.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
+  };
+
+  const calculateDiscountAmount = () => {
+    const discountPercent = parseFloat(formData.discount) || 0;
+    return (calculateSubTotal() * discountPercent / 100);
+  };
+
+  const calculateGrandTotal = () => {
+    const subtotal = calculateSubTotal();
+    const discount = calculateDiscountAmount();
+    return (subtotal - discount).toFixed(2);
+  };
+
+  const viewDetails = async (purchase) => {
+    const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id).order("id", { ascending: true });
+    setSelectedPurchase(purchase);
+    setSelectedPurchaseItems(items || []);
+    setShowDetailModal(true);
+  };
+
+  const openAddModal = () => {
+    setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0 });
+    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+    setNextItemId(2);
+    setIsEditing(false);
+    setEditId(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = async (purchase) => {
+    const purchaseStatus = purchase.status || "pending";
+    if (purchaseStatus === "received") {
+      return Swal.fire("Info", "Cannot edit completed purchase", "info");
+    }
+
+    const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id);
+
+    setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0 });
+
+    if (items && items.length > 0) {
+      setLineItems(items.map((item, idx) => ({
+        id: idx + 1,
+        item_name: item.item_name || "",
+        qty: item.qty || "",
+        unit_price: item.unit_price || "",
+        total_price: item.total_price || "",
+        type: item.type || ""
+      })));
+      setNextItemId(items.length + 1);
+    } else {
+      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "" }]);
+      setNextItemId(2);
+    }
+
+    setIsEditing(true);
+    setEditId(purchase.id);
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.supplier_id) {
+      return Swal.fire("Error", "Please select a supplier", "error");
+    }
+
+    const validItems = lineItems.filter((item) => item.item_name.trim() && item.qty && item.unit_price);
+    if (validItems.length === 0) {
+      return Swal.fire("Error", "Please add at least one item with quantity and price", "error");
+    }
+
+    const totalAmount = calculateGrandTotal();
+    const discountPercent = parseFloat(formData.discount) || 0;
+
+    try {
+      if (isEditing && editId) {
+        // Update purchase
+        const { error: updateError } = await supabase.from("purchases").update({
+          date: formData.date,
+          supplier_id: parseInt(formData.supplier_id),
+          notes: formData.notes,
+          total_amount: totalAmount,
+          discount: discountPercent
+        }).eq("id", editId);
+
+        if (updateError) throw updateError;
+
+        // Delete old items and insert new ones
+        await supabase.from("purchase_items").delete().eq("purchase_id", editId);
+
+        const itemsToInsert = validItems.map((item) => ({
+          purchase_id: editId,
+          item_name: item.item_name.trim(),
+          qty: parseFloat(item.qty),
+          unit_price: parseFloat(item.unit_price),
+          total_price: parseFloat(item.total_price),
+          type: item.type || "-"
+        }));
+        await supabase.from("purchase_items").insert(itemsToInsert);
+
+        Swal.fire("Success", "Purchase updated!", "success");
+      } else {
+        // Create new purchase
+        const invoiceNumber = generateInvoiceNumber();
+        const { data: newPurchase, error: insertError } = await supabase.from("purchases").insert([{
+          invoice_number: invoiceNumber,
+          date: formData.date,
+          supplier_id: parseInt(formData.supplier_id),
+          total_amount: totalAmount,
+          notes: formData.notes || null,
+          discount: discountPercent
+        }]).select().single();
+
+        if (insertError) throw insertError;
+
+        const itemsToInsert = validItems.map((item) => ({
+          purchase_id: newPurchase.id,
+          item_name: item.item_name.trim(),
+          qty: parseFloat(item.qty),
+          unit_price: parseFloat(item.unit_price),
+          total_price: parseFloat(item.total_price),
+          type: item.type || "-"
+        }));
+        await supabase.from("purchase_items").insert(itemsToInsert);
+
+        Swal.fire("Success", "Purchase created!", "success");
+      }
+
+      setShowModal(false);
+      fetchData();
+    } catch (err) {
+      console.error("Error:", err);
+      Swal.fire("Error", err.message || "Failed to save purchase", "error");
+    }
+  };
+
+  const handleComplete = async (purchase) => {
+    const result = await Swal.fire({
+      title: "Complete Purchase?",
+      text: "This will add items to inventory. This action cannot be undone.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Complete",
+      cancelButtonText: "Cancel"
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id);
+
+        if (!items || items.length === 0) {
+          return Swal.fire("Error", "No items found", "error");
+        }
+
+        // Add to inventory
+        for (const item of items) {
+          const { data: existing } = await supabase.from("inventory").select("*").ilike("item_name", item.item_name.trim()).maybeSingle();
+
+          if (existing) {
+            await supabase.from("inventory").update({
+              qty: existing.qty + item.qty,
+              price: item.unit_price,
+              type: item.type || "-"
+            }).eq("id", existing.id);
+          } else {
+            await supabase.from("inventory").insert([{
+              item_name: item.item_name.trim(),
+              qty: item.qty,
+              type: item.type || "-",
+              price: item.unit_price
+            }]);
+          }
+        }
+
+        // Update status to received
+        await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
+
+        Swal.fire("Success", "Purchase completed and inventory updated!", "success");
+        fetchData();
+
+        if (setInventory) {
+          const { data } = await supabase.from("inventory").select("*").order("id", { ascending: true });
+          setInventory(data || []);
+        }
+      } catch (err) {
+        console.error("Error:", err);
+        Swal.fire("Error", err.message || "Failed to complete purchase", "error");
+      }
+    }
+  };
+
+  const handleCancel = async (purchase) => {
+    const result = await Swal.fire({
+      title: "Cancel Purchase?",
+      text: "This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Cancel",
+      cancelButtonText: "No"
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await supabase.from("purchases").update({ status: "cancelled" }).eq("id", purchase.id);
+        Swal.fire("Cancelled", "Purchase cancelled.", "success");
+        fetchData();
+      } catch (err) {
+        Swal.fire("Error", err.message || "Failed to cancel", "error");
+      }
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Delete this purchase?",
+      text: "This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel"
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await supabase.from("purchase_items").delete().eq("purchase_id", id);
+        const { error } = await supabase.from("purchases").delete().eq("id", id);
+        if (error) throw error;
+        Swal.fire("Deleted!", "Purchase deleted.", "success");
+        fetchData();
+      } catch (err) {
+        Swal.fire("Error", err.message || "Failed to delete", "error");
+      }
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      pending: "bg-amber-100 text-amber-700",
+      received: "bg-emerald-100 text-emerald-700",
+      cancelled: "bg-rose-100 text-rose-700"
+    };
+    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{status || "pending"}</span>;
+  };
+
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Purchase Order</h1>
-        <p className="text-sm text-slate-500 mt-1">Manage purchase orders</p>
-      </div>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-        <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-          </svg>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Purchase Order</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage purchase orders</p>
         </div>
-        <p className="text-slate-500 font-medium">Purchase order functionality coming soon...</p>
+        {canManage && (
+          <button onClick={openAddModal} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
+            + New Purchase
+          </button>
+        )}
       </div>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <input type="text" placeholder="Search by invoice number or supplier..." value={searchTerm}
+          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Invoice #</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+            ) : filteredPurchases.length === 0 ? (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchases found</td></tr>
+            ) : (
+              paginatedPurchases.map((purchase) => (
+                <tr key={purchase.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 underline">{purchase.invoice_number}</button>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
+                  <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
+                  <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(purchase.total_amount)}</td>
+                  <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status)}</td>
+                  <td className="px-4 py-3 text-center">
+                    {canManage && (
+                      <div className="flex justify-center gap-2">
+                        {(purchase.status === "pending" || !purchase.status) && (
+                          <>
+                            <button onClick={() => openEditModal(purchase)} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">Edit</button>
+                            <button onClick={() => handleComplete(purchase)} className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700">Complete</button>
+                            <button onClick={() => handleCancel(purchase)} className="px-2 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700">Cancel</button>
+                          </>
+                        )}
+                        {purchase.status === "cancelled" && (
+                          <button onClick={() => handleDelete(purchase.id)} className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700">Delete</button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center mt-6 gap-2">
+          <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100">Previous</button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+            <button key={page} onClick={() => setCurrentPage(page)}
+              className={`px-3 py-1.5 border rounded-lg text-sm font-medium ${currentPage === page ? "bg-indigo-600 text-white border-indigo-600" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}>{page}</button>
+          ))}
+          <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100">Next</button>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-slate-800">Purchase Details</h3>
+              <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+              <div><span className="text-slate-500">Invoice #:</span><span className="ml-2 font-semibold">{selectedPurchase?.invoice_number}</span></div>
+              <div><span className="text-slate-500">Date:</span><span className="ml-2">{selectedPurchase?.date}</span></div>
+              <div><span className="text-slate-500">Supplier:</span><span className="ml-2">{getSupplierName(selectedPurchase?.supplier_id)}</span></div>
+              <div><span className="text-slate-500">Status:</span><span className="ml-2">{getStatusBadge(selectedPurchase?.status)}</span></div>
+              {selectedPurchase?.discount > 0 && (
+                <div><span className="text-slate-500">Discount:</span><span className="ml-2 text-red-600">{selectedPurchase?.discount}%</span></div>
+              )}
+            </div>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Item</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPurchaseItems.length > 0 ? selectedPurchaseItems.map((item, idx) => (
+                    <tr key={idx} className="border-t border-slate-100">
+                      <td className="px-4 py-2 text-slate-800">{item.item_name}</td>
+                      <td className="px-4 py-2 text-center text-slate-600">{item.qty}</td>
+                      <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
+                      <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
+                      <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-50">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total</td>
+                    <td className="px-4 py-2 text-right font-bold text-indigo-600">{formatMMK(selectedPurchase?.total_amount)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {selectedPurchase?.notes && <div className="mt-4 text-sm"><span className="text-slate-500">Notes:</span><p className="text-slate-700 mt-1">{selectedPurchase.notes}</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl p-6 w-full max-w-3xl shadow-xl mx-4">
+            <h3 className="text-xl font-bold text-slate-800 mb-5">{isEditing ? "Edit Purchase" : "New Purchase"}</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Invoice #</label>
+                  <input type="text" value={isEditing ? selectedPurchase?.invoice_number || "Auto-generated" : generateInvoiceNumber()} disabled className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date *</label>
+                  <input type="date" name="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Supplier *</label>
+                  <select name="supplier_id" value={formData.supplier_id} onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                    <option value="">Select Supplier</option>
+                    {suppliers.map((sup) => <option key={sup.id} value={sup.id}>{sup.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Items *</label>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700">Item Name</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-24">Qty</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700 w-24">Unit</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-28">Unit Price</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-28">Total</th>
+                        {canManage && <th className="px-3 py-2 w-10"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineItems.map((item) => (
+                        <tr key={item.id} className="border-t border-slate-100">
+                          <td className="px-3 py-2">
+                            <input type="text" value={item.item_name} onChange={(e) => updateLineItem(item.id, "item_name", e.target.value)} placeholder="Enter item name" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="number" value={item.qty} onChange={(e) => updateLineItem(item.id, "qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="text" value={item.type} onChange={(e) => updateLineItem(item.id, "type", e.target.value)} placeholder="kg, pcs, box" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-700">{formatMMK(item.total_price)}</td>
+                          {canManage && (
+                            <td className="px-3 py-2 text-center">
+                              <button type="button" onClick={() => removeLineItem(item.id)} className="text-rose-500 hover:text-rose-700 font-bold">X</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {canManage && <button type="button" onClick={addLineItem} className="mt-2 px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add Item</button>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (%)</label>
+                  <input
+                    type="number"
+                    name="discount"
+                    value={formData.discount}
+                    onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+                    placeholder="0"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="text-right">
+                  <div className="mb-2">
+                    <span className="text-sm text-slate-500">Subtotal: </span>
+                    <span className="text-sm font-medium text-slate-700">{formatMMK(calculateSubTotal())}</span>
+                  </div>
+                  <div className="mb-2">
+                    <span className="text-sm text-slate-500">Discount ({formData.discount || 0}%): </span>
+                    <span className="text-sm font-medium text-red-600">-{formatMMK(calculateDiscountAmount())}</span>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-slate-700">Grand Total: </span>
+                    <span className="text-lg font-bold text-indigo-600">{formatMMK(calculateGrandTotal())}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Notes</label>
+                <textarea name="notes" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={2} placeholder="Optional notes..." className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{isEditing ? "Update Purchase" : "Save Purchase"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

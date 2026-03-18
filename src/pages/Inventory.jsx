@@ -30,7 +30,8 @@ export default function Inventory({
     item_name: "",
     qty: "",
     type: "",
-    category_id: ""
+    category_id: "",
+    price: ""
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -81,7 +82,7 @@ export default function Inventory({
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const openAddModal = () => {
-    setFormData({ item_name: "", qty: "", type: "", category_id: "" });
+    setFormData({ item_name: "", qty: "", type: "", category_id: "", price: "" });
     setIsEditing(false);
     setShowModal(true);
   };
@@ -91,7 +92,8 @@ export default function Inventory({
       item_name: item.item_name,
       qty: item.qty,
       type: item.type,
-      category_id: item.category_id || ""
+      category_id: item.category_id || "",
+      price: item.price || ""
     });
     setEditId(item.id);
     setIsEditing(true);
@@ -104,7 +106,8 @@ export default function Inventory({
       item_name: formData.item_name,
       qty: Number(formData.qty),
       type: formData.type,
-      category_id: formData.category_id || null
+      category_id: formData.category_id || null,
+      price: formData.price ? Number(formData.price) : null
     };
 
     isEditing
@@ -286,6 +289,7 @@ export default function Inventory({
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Item</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Qty</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-700">Price</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
               </tr>
@@ -293,7 +297,7 @@ export default function Inventory({
             <tbody>
               {paginatedInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="7" className="px-4 py-8 text-center text-slate-500">
                     No inventory found
                   </td>
                 </tr>
@@ -304,6 +308,9 @@ export default function Inventory({
                     <td className="px-4 py-3 font-semibold text-slate-800">{item.item_name}</td>
                     <td className="px-4 py-3 text-center text-slate-600">{item.qty}</td>
                     <td className="px-4 py-3 text-slate-600">{item.type}</td>
+                    <td className="px-4 py-3 text-center text-slate-600">
+                      {item.price ? `$${Number(item.price).toFixed(2)}` : "-"}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
                         {getCategoryName(item.category_id)}
@@ -397,6 +404,16 @@ export default function Inventory({
                 onChange={handleChange}
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
+              />
+              <input
+                type="number"
+                name="price"
+                placeholder="Price"
+                value={formData.price}
+                onChange={handleChange}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                step="0.01"
+                min="0"
               />
 
               <select

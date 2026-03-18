@@ -162,9 +162,9 @@ export default function App() {
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
-            <Route path="/purchase" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Purchase /></PrivateRoute>} />
+            <Route path="/purchase" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Purchase setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/supplier" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Supplier /></PrivateRoute>} />
-            <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturn /></PrivateRoute>} />
+            <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReport /></PrivateRoute>} />
             <Route path="/purchase-return-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturnReport /></PrivateRoute>} />
 
