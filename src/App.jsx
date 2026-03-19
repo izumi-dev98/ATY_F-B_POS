@@ -27,6 +27,7 @@ import Supplier from "./pages/Supplier";
 import Purchase from "./pages/Purchase";
 import PurchaseReturn from "./pages/PurchaseReturn";
 import PurchaseReport from "./pages/PurchaseReport";
+import SupplierOutstanding from "./pages/SupplierOutstanding";
 
 // -------------------- ACCESS RIGHTS --------------------
 const accessRights = {
@@ -165,6 +166,7 @@ export default function App() {
             <Route path="/supplier" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Supplier /></PrivateRoute>} />
             <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReport /></PrivateRoute>} />
+            <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><SupplierOutstanding /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />
