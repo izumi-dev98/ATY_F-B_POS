@@ -352,8 +352,10 @@ export default function Purchase({ setInventory }) {
           }
         }
 
-        // Update status to received
-        await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
+        // Update status - only set to received for Cash Down, keep pending for Credit
+        if (purchase.payment_type !== "Credit") {
+          await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
+        }
 
         Swal.fire("Success", "Purchase completed and inventory updated!", "success");
         fetchData();

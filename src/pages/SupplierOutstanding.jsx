@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import Swal from "sweetalert2";
 import supabase from "../createClients";
 
 export default function SupplierOutstanding() {
@@ -84,6 +85,28 @@ export default function SupplierOutstanding() {
     }));
   };
 
+  const handlePay = async (purchase) => {
+    const result = await Swal.fire({
+      title: "Pay Invoice?",
+      text: `Mark invoice ${purchase.invoice_number} as paid?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Pay",
+      cancelButtonText: "Cancel"
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
+        Swal.fire("Success", "Invoice marked as paid!", "success");
+        fetchData();
+      } catch (err) {
+        console.error("Error:", err);
+        Swal.fire("Error", err.message || "Failed to process payment", "error");
+      }
+    }
+  };
+
   const exportToExcel = () => {
     const exportData = [];
     filteredData.forEach(s => {
@@ -146,7 +169,7 @@ export default function SupplierOutstanding() {
           <div className="text-2xl font-bold text-slate-800">{filteredData.length}</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-sm text-slate-500">Total Pending Orders</div>
+          <div className="text-sm text-slate-500">Total Pending Payments</div>
           <div className="text-2xl font-bold text-amber-600">{filteredData.reduce((sum, s) => sum + s.purchase_count, 0)}</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
@@ -163,13 +186,14 @@ export default function SupplierOutstanding() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier Name</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Pending Orders</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Payable</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
             ) : filteredData.length === 0 ? (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">No outstanding credit purchases</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No outstanding credit purchases</td></tr>
             ) : (
               filteredData.map((sup) => (
                 <>
@@ -195,6 +219,14 @@ export default function SupplierOutstanding() {
                       </td>
                       <td className="px-4 py-2 text-center text-slate-600">{p.credit_option || "-"}</td>
                       <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => handlePay(p)}
+                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                        >
+                          Pay
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </>
@@ -204,7 +236,7 @@ export default function SupplierOutstanding() {
           {filteredData.length > 0 && (
             <tfoot className="bg-slate-50">
               <tr>
-                <td colSpan={3} className="px-4 py-3 text-right font-bold text-slate-800">Total Outstanding</td>
+                <td colSpan={4} className="px-4 py-3 text-right font-bold text-slate-800">Total Outstanding</td>
                 <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatMMK(totalOutstanding)}</td>
               </tr>
             </tfoot>
