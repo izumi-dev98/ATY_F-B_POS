@@ -181,7 +181,7 @@ export default function Purchase({ setInventory }) {
   };
 
   const openAddModal = () => {
-    setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0, tax: 0, payment_type: "Cash Down", credit_option: "" });
+    setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0, tax: 0, payment_type: "Cash Down", credit_option: "", manual_credit: "" });
     setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
     setNextItemId(2);
     setIsEditing(false);
@@ -197,7 +197,11 @@ export default function Purchase({ setInventory }) {
 
     const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id);
 
-    setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0, tax: purchase.tax || 0, payment_type: purchase.payment_type || "Cash Down", credit_option: purchase.credit_option || "" });
+    const predefinedOptions = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks", "1 Month", "Consign", "Manual"];
+    const creditOpt = purchase.credit_option || "";
+    const isCustomCredit = creditOpt && !predefinedOptions.includes(creditOpt);
+
+    setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0, tax: purchase.tax || 0, payment_type: purchase.payment_type || "Cash Down", credit_option: isCustomCredit ? "Manual" : creditOpt, manual_credit: isCustomCredit ? creditOpt : "" });
 
     if (items && items.length > 0) {
       setLineItems(items.map((item, idx) => {
