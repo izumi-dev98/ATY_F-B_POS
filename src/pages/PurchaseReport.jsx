@@ -114,6 +114,9 @@ export default function PurchaseReport() {
       "Supplier": getSupplierName(p.supplier_id),
       "Total Amount": p.total_amount,
       "Discount (%)": p.discount || 0,
+      "Tax (%)": p.tax || 0,
+      "Payment Type": p.payment_type || "Cash Down",
+      "Credit Option": p.credit_option || "-",
       "Status": p.status,
       "Notes": p.notes || ""
     }));
@@ -269,15 +272,18 @@ export default function PurchaseReport() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">Total</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Discount</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Tax</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Payment</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
             ) : filteredPurchases.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchase records found</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">No purchase records found</td></tr>
             ) : (
               paginatedPurchases.map((purchase) => (
                 <tr key={purchase.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
@@ -289,6 +295,13 @@ export default function PurchaseReport() {
                   <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
                   <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
                   <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(purchase.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-slate-600">{purchase.discount ? `${purchase.discount}%` : "-"}</td>
+                  <td className="px-4 py-3 text-right text-slate-600">{purchase.tax ? `${purchase.tax}%` : "-"}</td>
+                  <td className="px-4 py-3 text-center text-slate-600">
+                    {purchase.payment_type === "Credit" && purchase.credit_option
+                      ? `Credit (${purchase.credit_option})`
+                      : purchase.payment_type || "Cash Down"}
+                  </td>
                   <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status)}</td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 font-medium">

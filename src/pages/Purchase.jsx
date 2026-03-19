@@ -23,7 +23,10 @@ export default function Purchase({ setInventory }) {
     supplier_id: "",
     status: "pending",
     notes: "",
-    discount: 0
+    discount: 0,
+    tax: 0,
+    payment_type: "Cash Down",
+    credit_option: ""
   });
   const [lineItems, setLineItems] = useState([
     { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }
@@ -156,10 +159,17 @@ export default function Purchase({ setInventory }) {
     return (calculateSubTotal() * discountPercent / 100);
   };
 
+  const calculateTaxAmount = () => {
+    const taxPercent = parseFloat(formData.tax) || 0;
+    const subtotal = calculateSubTotal() - calculateDiscountAmount();
+    return (subtotal * taxPercent / 100);
+  };
+
   const calculateGrandTotal = () => {
     const subtotal = calculateSubTotal();
     const discount = calculateDiscountAmount();
-    return (subtotal - discount).toFixed(2);
+    const tax = calculateTaxAmount();
+    return (subtotal - discount + tax).toFixed(2);
   };
 
   const viewDetails = async (purchase) => {
@@ -170,7 +180,7 @@ export default function Purchase({ setInventory }) {
   };
 
   const openAddModal = () => {
-    setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0 });
+    setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0, tax: 0, payment_type: "Cash Down", credit_option: "" });
     setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
     setNextItemId(2);
     setIsEditing(false);
@@ -186,7 +196,7 @@ export default function Purchase({ setInventory }) {
 
     const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id);
 
-    setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0 });
+    setFormData({ date: purchase.date || "", supplier_id: purchase.supplier_id || "", status: purchaseStatus, notes: purchase.notes || "", discount: purchase.discount || 0, tax: purchase.tax || 0, payment_type: purchase.payment_type || "Cash Down", credit_option: purchase.credit_option || "" });
 
     if (items && items.length > 0) {
       setLineItems(items.map((item, idx) => {
@@ -227,6 +237,9 @@ export default function Purchase({ setInventory }) {
 
     const totalAmount = calculateGrandTotal();
     const discountPercent = parseFloat(formData.discount) || 0;
+    const taxPercent = parseFloat(formData.tax) || 0;
+    const paymentType = formData.payment_type || "Cash Down";
+    const creditOption = formData.credit_option || "";
 
     try {
       if (isEditing && editId) {
@@ -236,7 +249,10 @@ export default function Purchase({ setInventory }) {
           supplier_id: parseInt(formData.supplier_id),
           notes: formData.notes,
           total_amount: totalAmount,
-          discount: discountPercent
+          discount: discountPercent,
+          tax: taxPercent,
+          payment_type: paymentType,
+          credit_option: creditOption
         }).eq("id", editId);
 
         if (updateError) throw updateError;
@@ -264,7 +280,10 @@ export default function Purchase({ setInventory }) {
           supplier_id: parseInt(formData.supplier_id),
           total_amount: totalAmount,
           notes: formData.notes || null,
-          discount: discountPercent
+          discount: discountPercent,
+          tax: taxPercent,
+          payment_type: paymentType,
+          credit_option: creditOption
         }]).select().single();
 
         if (insertError) throw insertError;
@@ -503,6 +522,13 @@ export default function Purchase({ setInventory }) {
               {selectedPurchase?.discount > 0 && (
                 <div><span className="text-slate-500">Discount:</span><span className="ml-2 text-red-600">{selectedPurchase?.discount}%</span></div>
               )}
+              {selectedPurchase?.tax > 0 && (
+                <div><span className="text-slate-500">Tax:</span><span className="ml-2 text-blue-600">{selectedPurchase?.tax}%</span></div>
+              )}
+              <div><span className="text-slate-500">Payment:</span><span className="ml-2 font-medium">{selectedPurchase?.payment_type || "Cash Down"}</span></div>
+              {selectedPurchase?.payment_type === "Credit" && selectedPurchase?.credit_option && (
+                <div><span className="text-slate-500">Credit:</span><span className="ml-2 font-medium">{selectedPurchase?.credit_option}</span></div>
+              )}
             </div>
             <div className="border border-slate-200 rounded-lg overflow-hidden">
               <table className="w-full text-sm">
@@ -554,7 +580,7 @@ export default function Purchase({ setInventory }) {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date *</label>
-                  <input type="date" name="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+                  <input type="date" name="date" value={formData.date} disabled className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Supplier *</label>
@@ -619,19 +645,67 @@ export default function Purchase({ setInventory }) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (%)</label>
-                  <input
-                    type="number"
-                    name="discount"
-                    value={formData.discount}
-                    onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
-                    placeholder="0"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (%)</label>
+                    <input
+                      type="number"
+                      name="discount"
+                      value={formData.discount}
+                      onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+                      placeholder="0"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Tax (%)</label>
+                    <input
+                      type="number"
+                      name="tax"
+                      value={formData.tax}
+                      onChange={(e) => setFormData({ ...formData, tax: e.target.value })}
+                      placeholder="0"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Payment Type</label>
+                    <select
+                      name="payment_type"
+                      value={formData.payment_type}
+                      onChange={(e) => setFormData({ ...formData, payment_type: e.target.value, credit_option: e.target.value === "Credit" ? formData.credit_option : "" })}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="Cash Down">Cash Down</option>
+                      <option value="Credit">Credit</option>
+                    </select>
+                  </div>
+                  {formData.payment_type === "Credit" && (
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Credit Option</label>
+                      <select
+                        name="credit_option"
+                        value={formData.credit_option}
+                        onChange={(e) => setFormData({ ...formData, credit_option: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Select Option</option>
+                        <option value="1 Week">1 Week</option>
+                        <option value="2 Weeks">2 Weeks</option>
+                        <option value="3 Weeks">3 Weeks</option>
+                        <option value="4 Weeks">4 Weeks</option>
+                        <option value="1 Month">1 Month</option>
+                        <option value="Consign">Consign</option>
+                        <option value="Manual">Manual</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="mb-2">
@@ -642,6 +716,12 @@ export default function Purchase({ setInventory }) {
                     <span className="text-sm text-slate-500">Discount ({formData.discount || 0}%): </span>
                     <span className="text-sm font-medium text-red-600">-{formatMMK(calculateDiscountAmount())}</span>
                   </div>
+                  {formData.tax > 0 && (
+                    <div className="mb-2">
+                      <span className="text-sm text-slate-500">Tax ({formData.tax || 0}%): </span>
+                      <span className="text-sm font-medium text-blue-600">+{formatMMK(calculateTaxAmount())}</span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-sm font-semibold text-slate-700">Grand Total: </span>
                     <span className="text-lg font-bold text-indigo-600">{formatMMK(calculateGrandTotal())}</span>

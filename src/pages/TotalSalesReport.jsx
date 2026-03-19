@@ -234,70 +234,81 @@ export default function TotalSalesReport() {
         </button>
       </div>
 
-      {/* Preset filters */}
-      <div className="flex gap-2 flex-wrap mb-6">
-        {["all", "day", "week", "month", "year"].map((f) => (
-          <button
-            key={f}
-            onClick={() => {
-              setPresetFilter(f);
+      {/* Search and Filter */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <div className="flex flex-wrap gap-3">
+          {/* Date Filter */}
+          <select
+            value={presetFilter}
+            onChange={(e) => {
+              setPresetFilter(e.target.value);
               setCustomStart("");
               setCustomEnd("");
               setCurrentPage(1);
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition ${
-              presetFilter === f
-                ? "bg-indigo-600 text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            {f}
-          </button>
-        ))}
-      </div>
+            <option value="all">All Time</option>
+            <option value="day">This Day</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="custom">Custom Date</option>
+          </select>
 
-      {/* Custom date range */}
-      <div className="flex gap-2 mb-4 items-center">
-        <input
-          type="date"
-          value={customStart}
-          onChange={(e) => setCustomStart(e.target.value)}
-          className="border px-3 py-2 rounded-lg"
-        />
-        <span>-</span>
-        <input
-          type="date"
-          value={customEnd}
-          onChange={(e) => setCustomEnd(e.target.value)}
-          className="border px-3 py-2 rounded-lg"
-        />
-        <button
-          onClick={() => setCurrentPage(1)}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg"
-        >
-          Apply
-        </button>
-      </div>
+          {/* Custom Date Range */}
+          {presetFilter === "custom" && (
+            <>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="border px-3 py-2 rounded-lg"
+              />
+              <span className="text-slate-500 self-center">-</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="border px-3 py-2 rounded-lg"
+              />
+              <button
+                onClick={() => setCurrentPage(1)}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg"
+              >
+                Apply
+              </button>
+            </>
+          )}
 
-      {/* Payment Type Filter */}
-      <div className="flex gap-2 mb-4 items-center">
-        <span className="text-sm font-medium text-gray-700">Payment:</span>
-        {["all", "Cash", "Kpay", "FOC"].map((p) => (
-          <button
-            key={p}
-            onClick={() => {
-              setPaymentFilter(p);
-              setCurrentPage(1);
-            }}
-            className={`px-3 py-1.5 rounded-lg capitalize ${
-              paymentFilter === p
-                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
-                : "bg-white border"
-            }`}
-          >
-            {p}
-          </button>
-        ))}
+          {/* Payment Type Filter */}
+          <span className="text-sm font-medium text-gray-700 self-center">Payment:</span>
+          {["all", "Cash", "Kpay", "FOC"].map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                setPaymentFilter(p);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg capitalize ${
+                paymentFilter === p
+                  ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
+                  : "bg-white border"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search menu..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
       </div>
 
       {/* Total sales */}
@@ -320,17 +331,6 @@ export default function TotalSalesReport() {
             <p className="text-xl font-bold text-green-600">{mmkFormatter.format(grandTotal)}</p>
           </div>
         </div>
-      </div>
-
-      {/* Search */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search menu..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full md:w-1/3 border px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-400"
-        />
       </div>
 
       {/* Table */}
