@@ -76,6 +76,12 @@ export default function PurchaseReport() {
     return true;
   });
 
+  const getSupplierName = (supplierId) => {
+    if (!supplierId) return "-";
+    const sup = suppliers.find((s) => s.id === supplierId);
+    return sup ? sup.name : "-";
+  };
+
   // Filter by status
   const filteredByStatus = filteredByDate.filter(p => {
     if (statusFilter === "all") return true;
@@ -85,19 +91,13 @@ export default function PurchaseReport() {
   // Filter by search
   const filteredPurchases = filteredByStatus.filter(p => {
     const matchesSearch = p.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getSupplierName(p.supplier_id)?.toLowerCase().includes(searchTerm.toLowerCase());
+      (getSupplierName(p.supplier_id) || "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedPurchases = filteredPurchases.slice(startIndex, startIndex + itemsPerPage);
-
-  const getSupplierName = (supplierId) => {
-    if (!supplierId) return "-";
-    const sup = suppliers.find((s) => s.id === supplierId);
-    return sup ? sup.name : "-";
-  };
 
   const viewDetails = async (purchase) => {
     const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id).order("id", { ascending: true });

@@ -26,7 +26,8 @@ export default function Purchase({ setInventory }) {
     discount: 0,
     tax: 0,
     payment_type: "Cash Down",
-    credit_option: ""
+    credit_option: "",
+    manual_credit: ""
   });
   const [lineItems, setLineItems] = useState([
     { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }
@@ -689,21 +690,32 @@ export default function Purchase({ setInventory }) {
                   {formData.payment_type === "Credit" && (
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Credit Option</label>
-                      <select
-                        name="credit_option"
-                        value={formData.credit_option}
-                        onChange={(e) => setFormData({ ...formData, credit_option: e.target.value })}
-                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Select Option</option>
-                        <option value="1 Week">1 Week</option>
-                        <option value="2 Weeks">2 Weeks</option>
-                        <option value="3 Weeks">3 Weeks</option>
-                        <option value="4 Weeks">4 Weeks</option>
-                        <option value="1 Month">1 Month</option>
-                        <option value="Consign">Consign</option>
-                        <option value="Manual">Manual</option>
-                      </select>
+                      {formData.credit_option === "Manual" ? (
+                        <input
+                          type="text"
+                          name="manual_credit"
+                          value={formData.manual_credit || ""}
+                          onChange={(e) => setFormData({ ...formData, manual_credit: e.target.value, credit_option: e.target.value })}
+                          placeholder="Enter credit terms..."
+                          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      ) : (
+                        <select
+                          name="credit_option"
+                          value={formData.credit_option}
+                          onChange={(e) => setFormData({ ...formData, credit_option: e.target.value, manual_credit: "" })}
+                          className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">Select Option</option>
+                          <option value="1 Week">1 Week</option>
+                          <option value="2 Weeks">2 Weeks</option>
+                          <option value="3 Weeks">3 Weeks</option>
+                          <option value="4 Weeks">4 Weeks</option>
+                          <option value="1 Month">1 Month</option>
+                          <option value="Consign">Consign</option>
+                          <option value="Manual">Manual</option>
+                        </select>
+                      )}
                     </div>
                   )}
                 </div>
