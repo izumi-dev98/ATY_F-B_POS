@@ -244,7 +244,7 @@ export default function Purchase({ setInventory }) {
     const discountPercent = parseFloat(formData.discount) || 0;
     const taxPercent = parseFloat(formData.tax) || 0;
     const paymentType = formData.payment_type || "Cash Down";
-    const creditOption = formData.credit_option || "";
+    const creditOption = formData.payment_type === "Credit" ? (formData.credit_option === "Manual" ? formData.manual_credit || "" : formData.credit_option || "") : "";
 
     try {
       if (isEditing && editId) {
@@ -699,7 +699,7 @@ export default function Purchase({ setInventory }) {
                           type="text"
                           name="manual_credit"
                           value={formData.manual_credit || ""}
-                          onChange={(e) => setFormData({ ...formData, manual_credit: e.target.value, credit_option: e.target.value })}
+                          onChange={(e) => setFormData({ ...formData, manual_credit: e.target.value })}
                           placeholder="Enter credit terms..."
                           className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
