@@ -352,10 +352,8 @@ export default function Purchase({ setInventory }) {
           }
         }
 
-        // Update status - only set to received for Cash Down, keep pending for Credit
-        if (purchase.payment_type !== "Credit") {
-          await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
-        }
+        // Update status to received for both Cash Down and Credit
+        await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
 
         Swal.fire("Success", "Purchase completed and inventory updated!", "success");
         fetchData();
@@ -421,10 +419,10 @@ export default function Purchase({ setInventory }) {
       received: "bg-emerald-100 text-emerald-700",
       cancelled: "bg-rose-100 text-rose-700"
     };
-    // For Credit purchases that haven't been paid yet (status is pending or null), show custom text
+    // For Credit purchases that are received (staying to pay), show custom text
     const paymentTypeStr = String(paymentType || "").toLowerCase();
-    const isCreditUnpaid = paymentTypeStr === "credit" && (!status || status === "pending");
-    const statusText = isCreditUnpaid ? "Received  (Stay to pay)" : (status || "pending");
+    const isCreditUnpaid = paymentTypeStr === "credit" && status === "received";
+    const statusText = isCreditUnpaid ? "Received " : (status || "pending");
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{statusText}</span>;
   };
 
@@ -472,8 +470,10 @@ export default function Purchase({ setInventory }) {
             ) : filteredPurchases.length === 0 ? (
               <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchases found</td></tr>
             ) : (
-              paginatedPurchases.map((purchase) => (
-                <tr key={purchase.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
+              paginatedPurchases.map((purchase) => {
+                const isStayToPay = purchase.status === "received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
+                return (
+                <tr key={purchase.id} className={`border-t border-slate-100 hover:bg-indigo-50/50 ${isStayToPay ? "bg-red-50" : ""}`}>
                   <td className="px-4 py-3 font-semibold text-slate-800">
                     <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 underline">{purchase.invoice_number}</button>
                   </td>
@@ -491,6 +491,13 @@ export default function Purchase({ setInventory }) {
                             <button onClick={() => handleCancel(purchase)} className="px-2 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700">Cancel</button>
                           </>
                         )}
+                        {purchase.status === "received" && (
+                          purchase.paid ? (
+                            <span className="text-xs text-emerald-600 font-medium">Completed</span>
+                          ) : (
+                            <span className="text-xs text-blue-600 font-medium">Stay to Pay</span>
+                          )
+                        )}
                         {purchase.status === "cancelled" && (
                           <button onClick={() => handleDelete(purchase.id)} className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700">Delete</button>
                         )}
@@ -498,7 +505,8 @@ export default function Purchase({ setInventory }) {
                     )}
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

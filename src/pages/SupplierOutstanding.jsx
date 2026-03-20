@@ -42,10 +42,12 @@ export default function SupplierOutstanding() {
     return sup ? sup.name : "-";
   };
 
-  // Calculate supplier outstanding (Credit purchases that are not received/cancelled)
+  // Calculate supplier outstanding (Credit purchases - pending or received but not paid)
   const supplierOutstanding = () => {
     const creditPurchases = purchases.filter(p =>
-      p.payment_type === "Credit" && p.status !== "cancelled" && p.status !== "received"
+      p.payment_type === "Credit" &&
+      p.status !== "cancelled" &&
+      p.paid !== true
     );
     const supplierData = {};
 
@@ -97,7 +99,7 @@ export default function SupplierOutstanding() {
 
     if (result.isConfirmed) {
       try {
-        await supabase.from("purchases").update({ status: "received" }).eq("id", purchase.id);
+        await supabase.from("purchases").update({ status: "received", paid: true }).eq("id", purchase.id);
         Swal.fire("Success", "Invoice marked as paid!", "success");
         fetchData();
       } catch (err) {
@@ -220,12 +222,14 @@ export default function SupplierOutstanding() {
                       <td className="px-4 py-2 text-center text-slate-600">{p.credit_option || "-"}</td>
                       <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
                       <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => handlePay(p)}
-                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                        >
-                          Pay
-                        </button>
+                        {!p.paid && (
+                          <button
+                            onClick={() => handlePay(p)}
+                            className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                          >
+                            Pay
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
