@@ -89,12 +89,12 @@ export default function Sidebar({ isOpen }) {
                 <NavLink to="/purchase-return" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Return
                 </NavLink>
-                <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
-                  Purchase Report
-                </NavLink>
+                
                 <NavLink to="/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Supplier Outstanding
                 </NavLink>
+
+               
               </div>
             )}
           </div>
@@ -115,6 +115,10 @@ export default function Sidebar({ isOpen }) {
                 </NavLink>
                 <NavLink to="/reports/total-sales" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Total Sales Report
+                </NavLink>
+
+                 <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
+                  Purchase Report
                 </NavLink>
               </div>
             )}

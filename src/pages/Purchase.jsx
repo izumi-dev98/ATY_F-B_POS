@@ -89,21 +89,21 @@ export default function Purchase({ setInventory }) {
     return `PO-${dateStr}-${random}`;
   };
 
+  const getSupplierName = (supplierId) => {
+    if (!supplierId) return "-";
+    const sup = suppliers.find((s) => s.id === supplierId);
+    return sup ? sup.name : "-";
+  };
+
   const filteredPurchases = purchases.filter((p) => {
     const matchesSearch = p.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getSupplierName(p.supplier_id)?.toLowerCase().includes(searchTerm.toLowerCase());
+      (getSupplierName(p.supplier_id) || "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedPurchases = filteredPurchases.slice(startIndex, startIndex + itemsPerPage);
-
-  const getSupplierName = (supplierId) => {
-    if (!supplierId) return "-";
-    const sup = suppliers.find((s) => s.id === supplierId);
-    return sup ? sup.name : "-";
-  };
 
   const addLineItem = () => {
     setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
