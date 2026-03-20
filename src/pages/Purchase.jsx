@@ -415,13 +415,17 @@ export default function Purchase({ setInventory }) {
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, paymentType) => {
     const styles = {
       pending: "bg-amber-100 text-amber-700",
       received: "bg-emerald-100 text-emerald-700",
       cancelled: "bg-rose-100 text-rose-700"
     };
-    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{status || "pending"}</span>;
+    // For Credit purchases that haven't been paid yet (status is pending or null), show custom text
+    const paymentTypeStr = String(paymentType || "").toLowerCase();
+    const isCreditUnpaid = paymentTypeStr === "credit" && (!status || status === "pending");
+    const statusText = isCreditUnpaid ? "Received  (Stay to pay)" : (status || "pending");
+    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{statusText}</span>;
   };
 
   return (
@@ -476,7 +480,7 @@ export default function Purchase({ setInventory }) {
                   <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
                   <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
                   <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(purchase.total_amount)}</td>
-                  <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status)}</td>
+                  <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status, purchase.payment_type)}</td>
                   <td className="px-4 py-3 text-center">
                     {canManage && (
                       <div className="flex justify-center gap-2">
@@ -525,7 +529,7 @@ export default function Purchase({ setInventory }) {
               <div><span className="text-slate-500">Invoice #:</span><span className="ml-2 font-semibold">{selectedPurchase?.invoice_number}</span></div>
               <div><span className="text-slate-500">Date:</span><span className="ml-2">{selectedPurchase?.date}</span></div>
               <div><span className="text-slate-500">Supplier:</span><span className="ml-2">{getSupplierName(selectedPurchase?.supplier_id)}</span></div>
-              <div><span className="text-slate-500">Status:</span><span className="ml-2">{getStatusBadge(selectedPurchase?.status)}</span></div>
+              <div><span className="text-slate-500">Status:</span><span className="ml-2">{getStatusBadge(selectedPurchase?.status, selectedPurchase?.payment_type)}</span></div>
               {selectedPurchase?.discount > 0 && (
                 <div><span className="text-slate-500">Discount:</span><span className="ml-2 text-red-600">{selectedPurchase?.discount}%</span></div>
               )}
