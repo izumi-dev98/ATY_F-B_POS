@@ -16,6 +16,8 @@ export default function Purchase({ setInventory }) {
   const [editId, setEditId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [dateFilter, setDateFilter] = useState("all");
+  const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
   
 
   const [formData, setFormData] = useState({
@@ -98,7 +100,40 @@ export default function Purchase({ setInventory }) {
   const filteredPurchases = purchases.filter((p) => {
     const matchesSearch = p.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (getSupplierName(p.supplier_id) || "").toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+
+    // Date filter
+    let matchesDate = true;
+    if (dateFilter !== "all" && p.date) {
+      const purchaseDate = new Date(p.date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (dateFilter === "day") {
+        const dayStart = new Date(today);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(today);
+        dayEnd.setHours(23, 59, 59, 999);
+        matchesDate = purchaseDate >= dayStart && purchaseDate <= dayEnd;
+      } else if (dateFilter === "week") {
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        matchesDate = purchaseDate >= weekStart;
+      } else if (dateFilter === "month") {
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        matchesDate = purchaseDate >= monthStart;
+      } else if (dateFilter === "year") {
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+        matchesDate = purchaseDate >= yearStart;
+      } else if (dateFilter === "custom" && customDateRange.start && customDateRange.end) {
+        const start = new Date(customDateRange.start);
+        const end = new Date(customDateRange.end);
+        end.setHours(23, 59, 59, 999);
+        matchesDate = purchaseDate >= start && purchaseDate <= end;
+      }
+    }
+
+    return matchesSearch && matchesDate;
   });
 
   const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
@@ -447,9 +482,28 @@ export default function Purchase({ setInventory }) {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <input type="text" placeholder="Search by invoice number or supplier..." value={searchTerm}
-          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <div className="flex flex-col md:flex-row gap-4">
+          <input type="text" placeholder="Search by invoice number or supplier..." value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <select value={dateFilter} onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="all">All Time</option>
+            <option value="day">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="custom">Custom Date</option>
+          </select>
+          {dateFilter === "custom" && (
+            <div className="flex gap-2">
+              <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -472,8 +526,9 @@ export default function Purchase({ setInventory }) {
             ) : (
               paginatedPurchases.map((purchase) => {
                 const isStayToPay = purchase.status === "received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
+                const isCompleted = purchase.status === "received" && purchase.paid;
                 return (
-                <tr key={purchase.id} className={`border-t border-slate-100 hover:bg-indigo-50/50 ${isStayToPay ? "bg-red-50" : ""}`}>
+                <tr key={purchase.id} className={`border-t border-slate-100 hover:bg-white ${isStayToPay ? "bg-red-50" : ""} ${isCompleted ? "bg-green-50" : ""}`}>
                   <td className="px-4 py-3 font-semibold text-slate-800">
                     <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 underline">{purchase.invoice_number}</button>
                   </td>
