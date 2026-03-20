@@ -10,6 +10,11 @@ export default function SupplierOutstanding() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedSuppliers, setExpandedSuppliers] = useState({});
+  const [dateFilter, setDateFilter] = useState("all");
+  const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedPurchaseItems, setSelectedPurchaseItems] = useState([]);
 
   const formatMMK = (amount) => {
     const num = Number(amount) || 0;
@@ -44,11 +49,42 @@ export default function SupplierOutstanding() {
 
   // Calculate supplier outstanding (Credit purchases - pending or received but not paid)
   const supplierOutstanding = () => {
-    const creditPurchases = purchases.filter(p =>
-      p.payment_type === "Credit" &&
-      p.status !== "cancelled" &&
-      p.paid !== true
-    );
+    const creditPurchases = purchases.filter(p => {
+      // Date filter
+      let matchesDate = true;
+      if (dateFilter !== "all" && p.date) {
+        const purchaseDate = new Date(p.date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (dateFilter === "day") {
+          const dayStart = new Date(today);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(today);
+          dayEnd.setHours(23, 59, 59, 999);
+          matchesDate = purchaseDate >= dayStart && purchaseDate <= dayEnd;
+        } else if (dateFilter === "week") {
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - today.getDay());
+          weekStart.setHours(0, 0, 0, 0);
+          matchesDate = purchaseDate >= weekStart;
+        } else if (dateFilter === "month") {
+          const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+          matchesDate = purchaseDate >= monthStart;
+        } else if (dateFilter === "year") {
+          const yearStart = new Date(today.getFullYear(), 0, 1);
+          matchesDate = purchaseDate >= yearStart;
+        } else if (dateFilter === "custom" && customDateRange.start && customDateRange.end) {
+          const start = new Date(customDateRange.start);
+          const end = new Date(customDateRange.end);
+          end.setHours(23, 59, 59, 999);
+          matchesDate = purchaseDate >= start && purchaseDate <= end;
+        }
+      }
+
+      return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && p.paid !== true;
+    });
+
     const supplierData = {};
 
     creditPurchases.forEach(p => {
@@ -85,6 +121,13 @@ export default function SupplierOutstanding() {
       ...prev,
       [supplierId]: !prev[supplierId]
     }));
+  };
+
+  const viewDetails = async (purchase) => {
+    const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchase.id).order("id", { ascending: true });
+    setSelectedPurchase(purchase);
+    setSelectedPurchaseItems(items || []);
+    setShowDetailModal(true);
   };
 
   const handlePay = async (purchase) => {
@@ -156,13 +199,32 @@ export default function SupplierOutstanding() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search by supplier name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        <div className="flex flex-col md:flex-row gap-4">
+          <input
+            type="text"
+            placeholder="Search by supplier name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="all">All Time</option>
+            <option value="day">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="custom">Custom Date</option>
+          </select>
+          {dateFilter === "custom" && (
+            <div className="flex gap-2">
+              <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -216,7 +278,7 @@ export default function SupplierOutstanding() {
                     <tr key={p.id} className="bg-slate-50 border-t border-slate-200">
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 pl-10 text-slate-600">
-                        <span className="font-medium">{p.invoice_number}</span>
+                        <button onClick={() => viewDetails(p)} className="font-medium text-indigo-600 hover:text-indigo-800 underline">{p.invoice_number}</button>
                         <span className="ml-2 text-slate-400">| {p.date}</span>
                       </td>
                       <td className="px-4 py-2 text-center text-slate-600">{p.credit_option || "-"}</td>
@@ -247,6 +309,67 @@ export default function SupplierOutstanding() {
           )}
         </table>
       </div>
+
+      {/* Details Modal */}
+      {showDetailModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-slate-800">Purchase Details</h3>
+              <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+              <div><span className="text-slate-500">Invoice #:</span><span className="ml-2 font-semibold">{selectedPurchase?.invoice_number}</span></div>
+              <div><span className="text-slate-500">Date:</span><span className="ml-2">{selectedPurchase?.date}</span></div>
+              <div><span className="text-slate-500">Supplier:</span><span className="ml-2">{getSupplierName(selectedPurchase?.supplier_id)}</span></div>
+              <div><span className="text-slate-500">Status:</span><span className="ml-2">{selectedPurchase?.status}</span></div>
+              {selectedPurchase?.discount > 0 && (
+                <div><span className="text-slate-500">Discount:</span><span className="ml-2 text-red-600">{selectedPurchase?.discount}%</span></div>
+              )}
+              {selectedPurchase?.tax > 0 && (
+                <div><span className="text-slate-500">Tax:</span><span className="ml-2 text-blue-600">{selectedPurchase?.tax}%</span></div>
+              )}
+              <div><span className="text-slate-500">Payment:</span><span className="ml-2 font-medium">{selectedPurchase?.payment_type || "Cash Down"}</span></div>
+              {selectedPurchase?.payment_type === "Credit" && selectedPurchase?.credit_option && (
+                <div><span className="text-slate-500">Credit:</span><span className="ml-2 font-medium">{selectedPurchase?.credit_option}</span></div>
+              )}
+            </div>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Item</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPurchaseItems.length > 0 ? selectedPurchaseItems.map((item, idx) => (
+                    <tr key={idx} className="border-t border-slate-100">
+                      <td className="px-4 py-2 text-slate-800">{item.item_name}</td>
+                      <td className="px-4 py-2 text-center text-slate-600">{item.qty}</td>
+                      <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
+                      <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
+                      <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={5} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-50">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total</td>
+                    <td className="px-4 py-2 text-right font-bold text-indigo-600">{formatMMK(selectedPurchase?.total_amount)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {selectedPurchase?.notes && <div className="mt-4 text-sm"><span className="text-slate-500">Notes:</span><p className="text-slate-700 mt-1">{selectedPurchase.notes}</p></div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
