@@ -12,11 +12,8 @@ export default function Inventory({
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [isEditingCategory, setIsEditingCategory] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [editCategoryId, setEditCategoryId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
@@ -37,11 +34,6 @@ export default function Inventory({
     type: "",
     category_id: "",
     price: ""
-  });
-
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: "",
-    description: ""
   });
 
   // Get category name by ID
@@ -124,84 +116,6 @@ export default function Inventory({
     setEditId(null);
   };
 
-  // Category CRUD
-  const openAddCategoryModal = () => {
-    setCategoryFormData({ name: "", description: "" });
-    setIsEditingCategory(false);
-    setEditCategoryId(null);
-    setShowCategoryModal(true);
-  };
-
-  const openEditCategoryModal = (cat) => {
-    setCategoryFormData({ name: cat.name || "", description: cat.description || "" });
-    setEditCategoryId(cat.id);
-    setIsEditingCategory(true);
-    setShowCategoryModal(true);
-  };
-
-  const handleCategorySubmit = async (e) => {
-    e.preventDefault();
-    if (!categoryFormData.name.trim()) {
-      return Swal.fire("Error", "Category name is required", "error");
-    }
-
-    try {
-      if (isEditingCategory && editCategoryId) {
-        const { error } = await supabase
-          .from("inventory_categories")
-          .update({
-            name: categoryFormData.name.trim(),
-            description: categoryFormData.description.trim()
-          })
-          .eq("id", editCategoryId);
-        if (error) throw error;
-        Swal.fire("Success", "Category updated!", "success");
-      } else {
-        const { error } = await supabase
-          .from("inventory_categories")
-          .insert([{
-            name: categoryFormData.name.trim(),
-            description: categoryFormData.description.trim()
-          }]);
-        if (error) throw error;
-        Swal.fire("Success", "Category created!", "success");
-      }
-      setShowCategoryModal(false);
-      fetchCategories();
-    } catch (err) {
-      Swal.fire("Error", err.message || "Failed to save category", "error");
-    }
-  };
-
-  const handleDeleteCategory = async (id) => {
-    const result = await Swal.fire({
-      title: "Delete this category?",
-      text: "Inventory items in this category will have no category.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, Delete",
-      cancelButtonText: "Cancel"
-    });
-    if (result.isConfirmed) {
-      try {
-        // Update inventory items to remove category
-        await supabase
-          .from("inventory")
-          .update({ category_id: null })
-          .eq("category_id", id);
-
-        // Delete category
-        const { error } = await supabase.from("inventory_categories").delete().eq("id", id);
-        if (error) throw error;
-        Swal.fire("Deleted!", "Category deleted.", "success");
-        fetchCategories();
-        if (selectedCategory === id) setSelectedCategory("all");
-      } catch (err) {
-        Swal.fire("Error", err.message || "Failed to delete", "error");
-      }
-    }
-  };
-
   const handlePrevPage = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
@@ -230,15 +144,6 @@ export default function Inventory({
             }}
           />
 
-          {canManageInventory && (
-            <button
-              onClick={openAddCategoryModal}
-              className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-            >
-              + Category
-            </button>
-          )}
-
           <button
             onClick={openAddModal}
             className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
@@ -265,21 +170,13 @@ export default function Inventory({
           <button
             key={cat.id}
             onClick={() => { setSelectedCategory(cat.id); setCurrentPage(1); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               selectedCategory === cat.id
                 ? "bg-indigo-600 text-white"
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
           >
             {cat.name}
-            {canManageInventory && (
-              <span
-                onClick={(e) => { e.stopPropagation(); openEditCategoryModal(cat); }}
-                className="text-xs opacity-70 hover:opacity-100"
-              >
-                ✏️
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -449,63 +346,6 @@ export default function Inventory({
                 >
                   {isEditing ? "Update" : "Save"}
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Category Modal */}
-      {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
-              {isEditingCategory ? "Edit Category" : "Add Category"}
-            </h3>
-
-            <form onSubmit={handleCategorySubmit} className="space-y-4">
-              <input
-                name="name"
-                placeholder="Category name"
-                value={categoryFormData.name}
-                onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-              <textarea
-                name="description"
-                placeholder="Description (optional)"
-                value={categoryFormData.description}
-                onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                rows="3"
-              />
-
-              <div className="flex justify-between pt-2">
-                {isEditingCategory && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCategory(editCategoryId)}
-                    className="px-4 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
-                  >
-                    Delete
-                  </button>
-                )}
-                <div className="flex gap-3 ml-auto">
-                  <button
-                    type="button"
-                    onClick={() => setShowCategoryModal(false)}
-                    className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
-                  >
-                    {isEditingCategory ? "Update" : "Save"}
-                  </button>
-                </div>
               </div>
             </form>
           </div>
