@@ -14,6 +14,8 @@ import Inventory from "./pages/Inventory";
 import supabase from "./createClients";
 import InventoryReport from "./pages/InventoryReport";
 import TotalSalesReport from "./pages/TotalSalesReport";
+import UsageReport from "./pages/UsageReport";
+import AddStockReport from "./pages/AddStockReport";
 
 import UserCreate from "./pages/UserCreate";
 import InternalConsumption from "./pages/InternalConsumption";
@@ -159,6 +161,8 @@ export default function App() {
             <Route path="/inventory" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><Inventory inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} /></PrivateRoute>} />
             <Route path="/reports/inventory" element={<PrivateRoute user={user}><InventoryReport /></PrivateRoute>} />
             <Route path="/reports/total-sales" element={<PrivateRoute user={user}><TotalSalesReport /></PrivateRoute>} />
+            <Route path="/reports/usage" element={<PrivateRoute user={user}><UsageReport /></PrivateRoute>} />
+            <Route path="/reports/add-stock" element={<PrivateRoute user={user}><AddStockReport /></PrivateRoute>} />
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
