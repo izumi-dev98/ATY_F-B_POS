@@ -58,17 +58,32 @@ export default function TotalSalesReport() {
       const { data: menuData, error: menuErr } = await supabase.from("menu").select("id, menu_name");
       if (menuErr) throw menuErr;
 
+      const { data: menuSetsData, error: setsErr } = await supabase.from("menu_sets").select("id, set_name");
+      if (setsErr) throw setsErr;
+
       setOrders(ordersData || []);
       setMenus(menuData || []);
 
       const merged = (items || []).map((item) => {
         const order = (ordersData || []).find((o) => o.id === item.order_id);
-        const menu = (menuData || []).find((m) => m.id === item.menu_id);
+        let menu_name = "Unknown";
+        let isSet = false;
+
+        if (item.menu_set_id) {
+          const menuSet = (menuSetsData || []).find((s) => s.id === item.menu_set_id);
+          menu_name = menuSet?.set_name || "Unknown Set";
+          isSet = true;
+        } else {
+          const menu = (menuData || []).find((m) => m.id === item.menu_id);
+          menu_name = menu?.menu_name || "Unknown";
+        }
+
         return {
           ...item,
           total: order?.total || 0,
           created_at: order?.created_at,
-          menu_name: menu?.menu_name || "Unknown",
+          menu_name,
+          isSet,
           payment_type: order?.payment_type || "cash",
           remark: order?.remark || null,
         };
@@ -148,7 +163,7 @@ export default function TotalSalesReport() {
           created_at: item.created_at,
         };
       }
-      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price });
+      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, isSet: item.isSet });
       groups[item.order_id].qty += item.qty;
       groups[item.order_id].price += item.price;
       groups[item.order_id].item_total += item.qty * item.price;
@@ -178,7 +193,7 @@ export default function TotalSalesReport() {
 
   const exportToExcel = () => {
     const exportData = slipData.map((slip) => {
-      const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
+      const menusText = slip.menus.map(m => `${m.menu_name}${m.isSet ? ' (Set)' : ''} x${m.qty}`).join(", ");
       const paymentText = slip.payment_type === "Cash" ? "Cash" : slip.payment_type === "Kpay" ? "Kpay" : "FOC";
       const displayRemark = slip.remark || "";
       return {
@@ -362,7 +377,14 @@ export default function TotalSalesReport() {
             ) : (
               currentData.map((slip) => {
                 const paymentType = slip.payment_type || "Cash";
-                const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
+                const menusText = slip.menus.map(m => (
+                  <span key={m.menu_name}>
+                    {m.menu_name}
+                    {m.isSet && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">SET</span>}
+                    {' x'}{m.qty}
+                    {slip.menus.indexOf(m) < slip.menus.length - 1 ? ', ' : ''}
+                  </span>
+                ));
                 const displayRemark = slip.remark || "-";
                 return (
                 <tr key={slip.order_id} className="border-b border-slate-100 hover:bg-indigo-50/50 transition">

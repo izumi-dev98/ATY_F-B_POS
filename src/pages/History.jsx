@@ -82,6 +82,16 @@ export default function History({ setInventory }) {
         .select("*");
       if (menuErr) throw menuErr;
 
+      const { data: menuSetsData, error: setsErr } = await supabase
+        .from("menu_sets")
+        .select("*");
+      if (setsErr) throw setsErr;
+
+      const { data: menuSetItemsData, error: setItemsErr } = await supabase
+        .from("menu_set_items")
+        .select("*");
+      if (setItemsErr) throw setItemsErr;
+
       const { data: ingData, error: ingErr } = await supabase.from("menu_ingredients").select("*");
       if (ingErr) throw ingErr;
 
@@ -93,14 +103,34 @@ export default function History({ setInventory }) {
       });
       setIngredientsMap(ingMap);
 
+      // Build menu set items map
+      const setItemsMap = {};
+      menuSetItemsData.forEach((item) => {
+        if (!setItemsMap[item.set_id]) setItemsMap[item.set_id] = [];
+        setItemsMap[item.set_id].push(item);
+      });
+
       // Merge menu names
       const historyData = orders.map((order) => {
         const items = orderItems
           .filter((i) => i.order_id === order.id)
-          .map((i) => ({
-            ...i,
-            menu_name: menuData.find((m) => m.id === i.menu_id)?.menu_name || "Unknown Menu",
-          }));
+          .map((i) => {
+            if (i.menu_set_id) {
+              const menuSet = menuSetsData.find((s) => s.id === i.menu_set_id);
+              return {
+                ...i,
+                menu_name: menuSet?.set_name || "Unknown Set",
+                isSet: true,
+                setItems: setItemsMap[i.menu_set_id] || [],
+              };
+            } else {
+              return {
+                ...i,
+                menu_name: menuData.find((m) => m.id === i.menu_id)?.menu_name || "Unknown Menu",
+                isSet: false,
+              };
+            }
+          });
         return { ...order, items };
       });
 
@@ -153,7 +183,7 @@ export default function History({ setInventory }) {
             <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
             <tbody>
               ${order.items.map(i => `<tr>
-                <td>${i.menu_name}</td>
+                <td>${i.menu_name}${i.isSet ? ' (Set)' : ''}</td>
                 <td>${i.qty}</td>
                 <td>${mmkFormatter.format(i.price)}</td>
                 <td>${mmkFormatter.format(i.price * i.qty)}</td>
@@ -216,15 +246,37 @@ export default function History({ setInventory }) {
       const { data: inventoryData } = await supabase.from("inventory").select("*");
       const updatedInventory = inventoryData.map((i) => ({ ...i }));
 
+      // Get menu data for set items
+      const { data: menuData } = await supabase.from("menu").select("*");
+
       // Return inventory
       for (const item of order.items) {
-        const ingredients = ingredientsMap[item.menu_id] || [];
-        for (const ing of ingredients) {
-          const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
-          if (inv) {
-            const newQty = inv.qty + ing.qty * item.qty;
-            await supabase.from("inventory").update({ qty: newQty }).eq("id", ing.inventory_id);
-            inv.qty = newQty;
+        if (item.isSet) {
+          // Handle menu set - return inventory for all items in the set
+          for (const setItem of item.setItems) {
+            const menuItem = menuData.find(m => m.id === setItem.menu_id);
+            if (!menuItem) continue;
+
+            const ingredients = ingredientsMap[menuItem.id] || [];
+            for (const ing of ingredients) {
+              const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+              if (inv) {
+                const newQty = inv.qty + ing.qty * item.qty;
+                await supabase.from("inventory").update({ qty: newQty }).eq("id", ing.inventory_id);
+                inv.qty = newQty;
+              }
+            }
+          }
+        } else {
+          // Handle regular menu item
+          const ingredients = ingredientsMap[item.menu_id] || [];
+          for (const ing of ingredients) {
+            const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+            if (inv) {
+              const newQty = inv.qty + ing.qty * item.qty;
+              await supabase.from("inventory").update({ qty: newQty }).eq("id", ing.inventory_id);
+              inv.qty = newQty;
+            }
           }
         }
       }
@@ -349,7 +401,11 @@ export default function History({ setInventory }) {
                     <ul className="border-t border-b py-2 text-sm max-h-48 overflow-y-auto">
                       {order.items.map((item, idx) => (
                         <li key={idx} className="flex justify-between py-1 border-b last:border-b-0">
-                          <span>{item.menu_name} × {item.qty}</span>
+                          <span>
+                            {item.menu_name}
+                            {item.isSet && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">SET</span>}
+                            {' × '}{item.qty}
+                          </span>
                           <span>{mmkFormatter.format(item.price * item.qty)}</span>
                         </li>
                       ))}

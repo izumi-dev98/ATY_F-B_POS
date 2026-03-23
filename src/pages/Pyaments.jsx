@@ -4,8 +4,10 @@ import supabase from "../createClients";
 
 export default function Pyaments({ inventory, setInventory, user }) {
   const [menu, setMenu] = useState([]);
+  const [menuSets, setMenuSets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [ingredientsMap, setIngredientsMap] = useState({});
+  const [menuSetItemsMap, setMenuSetItemsMap] = useState({});
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState([]);
@@ -49,11 +51,39 @@ export default function Pyaments({ inventory, setInventory, user }) {
       const merged = menuData.map((m) => ({
         ...m,
         ingredients: map[m.id] || [],
+        isSet: false,
       }));
       setMenu(merged);
+
+      // Fetch menu sets
+      const { data: setsData, error: setsErr } = await supabase
+        .from("menu_sets")
+        .select("*");
+      if (setsErr) throw setsErr;
+
+      const { data: setItemsData, error: setItemsErr } = await supabase
+        .from("menu_set_items")
+        .select("*");
+      if (setItemsErr) throw setItemsErr;
+
+      const setItemsMap = {};
+      setItemsData.forEach((item) => {
+        if (!setItemsMap[item.set_id]) setItemsMap[item.set_id] = [];
+        setItemsMap[item.set_id].push(item);
+      });
+      setMenuSetItemsMap(setItemsMap);
+
+      const mergedSets = setsData.map((s) => ({
+        ...s,
+        menu_name: s.set_name,
+        menu_items: setItemsMap[s.id] || [],
+        isSet: true,
+      }));
+      setMenuSets(mergedSets);
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to load menu", "error");
       setMenu([]);
+      setMenuSets([]);
     }
   };
 
@@ -86,77 +116,151 @@ export default function Pyaments({ inventory, setInventory, user }) {
   }, []);
 
   const filteredMenu = useMemo(
-    () =>
-      menu.filter((m) => {
+    () => {
+      const allItems = [...menu, ...menuSets];
+      return allItems.filter((m) => {
         const matchesSearch = (m.menu_name || "").toLowerCase().includes(search.toLowerCase());
         const matchesCategory = selectedCategory === "all" || m.category_id === Number(selectedCategory);
         return matchesSearch && matchesCategory;
-      }),
-    [menu, search, selectedCategory],
+      });
+    },
+    [menu, menuSets, search, selectedCategory],
   );
 
   const addToCart = (item) => {
-    const ingredients = ingredientsMap[item.id] || [];
-    let maxQty = Infinity;
+    if (item.isSet) {
+      // Handle menu set
+      const setItems = menuSetItemsMap[item.id] || [];
+      let maxQty = Infinity;
 
-    for (const ing of ingredients) {
-      const inv = safeInventory.find((i) => i.id === ing.inventory_id);
-      const stock = inv ? Math.floor(inv.qty / ing.qty) : 0;
-      if (stock === 0)
-        return Swal.fire(
-          "Out of Stock",
-          `${item.menu_name} cannot be added`,
-          "error",
-        );
-      if (stock < maxQty) maxQty = stock;
-    }
+      // Check stock for all menu items in the set
+      for (const setItem of setItems) {
+        const menuItem = menu.find(m => m.id === setItem.menu_id);
+        if (!menuItem) continue;
 
-    setCart((prev) => {
-      const exist = prev.find((c) => c.id === item.id);
-      if (exist) {
-        if (exist.qty >= maxQty) {
-          Swal.fire(
-            "Stock Limit",
-            `Cannot add more ${item.menu_name}`,
-            "warning",
-          );
-          return prev;
+        const ingredients = ingredientsMap[menuItem.id] || [];
+        for (const ing of ingredients) {
+          const inv = safeInventory.find((i) => i.id === ing.inventory_id);
+          const stock = inv ? Math.floor(inv.qty / ing.qty) : 0;
+          if (stock === 0)
+            return Swal.fire(
+              "Out of Stock",
+              `${item.menu_name} cannot be added (${menuItem.menu_name} is out of stock)`,
+              "error",
+            );
+          if (stock < maxQty) maxQty = stock;
         }
-        return prev.map((c) =>
-          c.id === item.id ? { ...c, qty: c.qty + 1 } : c,
-        );
       }
-      return [...prev, { ...item, qty: 1 }];
-    });
+
+      setCart((prev) => {
+        const exist = prev.find((c) => c.id === item.id && c.isSet === item.isSet);
+        if (exist) {
+          if (exist.qty >= maxQty) {
+            Swal.fire(
+              "Stock Limit",
+              `Cannot add more ${item.menu_name}`,
+              "warning",
+            );
+            return prev;
+          }
+          return prev.map((c) =>
+            c.id === item.id && c.isSet === item.isSet ? { ...c, qty: c.qty + 1 } : c,
+          );
+        }
+        return [...prev, { ...item, qty: 1 }];
+      });
+    } else {
+      // Handle regular menu item
+      const ingredients = ingredientsMap[item.id] || [];
+      let maxQty = Infinity;
+
+      for (const ing of ingredients) {
+        const inv = safeInventory.find((i) => i.id === ing.inventory_id);
+        const stock = inv ? Math.floor(inv.qty / ing.qty) : 0;
+        if (stock === 0)
+          return Swal.fire(
+            "Out of Stock",
+            `${item.menu_name} cannot be added`,
+            "error",
+          );
+        if (stock < maxQty) maxQty = stock;
+      }
+
+      setCart((prev) => {
+        const exist = prev.find((c) => c.id === item.id && !c.isSet);
+        if (exist) {
+          if (exist.qty >= maxQty) {
+            Swal.fire(
+              "Stock Limit",
+              `Cannot add more ${item.menu_name}`,
+              "warning",
+            );
+            return prev;
+          }
+          return prev.map((c) =>
+            c.id === item.id && !c.isSet ? { ...c, qty: c.qty + 1 } : c,
+          );
+        }
+        return [...prev, { ...item, qty: 1 }];
+      });
+    }
   };
 
-  const changeQty = (id, diff) => {
+  const changeQty = (id, diff, isSet) => {
     setCart((prev) =>
       prev
         .map((c) => {
-          if (c.id === id) {
+          if (c.id === id && c.isSet === isSet) {
             const newQty = c.qty + diff;
             if (newQty <= 0) return null;
 
-            const ingredients = ingredientsMap[c.id] || [];
-            if (!ingredients.length) return { ...c, qty: newQty };
+            if (c.isSet) {
+              // Check stock for menu set
+              const setItems = menuSetItemsMap[c.id] || [];
+              let maxQty = Infinity;
 
-            const maxQty = Math.min(
-              ...ingredients.map((ing) => {
-                const inv = safeInventory.find(
-                  (i) => i.id === ing.inventory_id,
+              for (const setItem of setItems) {
+                const menuItem = menu.find(m => m.id === setItem.menu_id);
+                if (!menuItem) continue;
+
+                const ingredients = ingredientsMap[menuItem.id] || [];
+                for (const ing of ingredients) {
+                  const inv = safeInventory.find((i) => i.id === ing.inventory_id);
+                  const stock = inv ? Math.floor(inv.qty / ing.qty) : 0;
+                  if (stock < maxQty) maxQty = stock;
+                }
+              }
+
+              if (newQty > maxQty) {
+                Swal.fire(
+                  "Stock Limit",
+                  `Cannot add more ${c.menu_name}`,
+                  "warning",
                 );
-                return inv ? Math.floor(inv.qty / ing.qty) : 0;
-              }),
-            );
+                return c;
+              }
+            } else {
+              // Check stock for regular menu item
+              const ingredients = ingredientsMap[c.id] || [];
+              if (!ingredients.length) return { ...c, qty: newQty };
 
-            if (newQty > maxQty) {
-              Swal.fire(
-                "Stock Limit",
-                `Cannot add more ${c.menu_name}`,
-                "warning",
+              const maxQty = Math.min(
+                ...ingredients.map((ing) => {
+                  const inv = safeInventory.find(
+                    (i) => i.id === ing.inventory_id,
+                  );
+                  return inv ? Math.floor(inv.qty / ing.qty) : 0;
+                }),
               );
-              return c;
+
+              if (newQty > maxQty) {
+                Swal.fire(
+                  "Stock Limit",
+                  `Cannot add more ${c.menu_name}`,
+                  "warning",
+                );
+                return c;
+              }
             }
             return { ...c, qty: newQty };
           }
@@ -191,13 +295,33 @@ export default function Pyaments({ inventory, setInventory, user }) {
 
       // Check inventory before creating order
       for (const item of cart) {
-        const ingredients = ingredientsMap[item.id] || [];
-        for (const ing of ingredients) {
-          const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
-          if (!inv || inv.qty < ing.qty * item.qty) {
-            throw new Error(
-              `Not enough ${inv?.item_name || "Unknown"} for ${item.menu_name}`,
-            );
+        if (item.isSet) {
+          // Check inventory for menu set items
+          const setItems = menuSetItemsMap[item.id] || [];
+          for (const setItem of setItems) {
+            const menuItem = menu.find(m => m.id === setItem.menu_id);
+            if (!menuItem) continue;
+
+            const ingredients = ingredientsMap[menuItem.id] || [];
+            for (const ing of ingredients) {
+              const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+              if (!inv || inv.qty < ing.qty * item.qty) {
+                throw new Error(
+                  `Not enough ${inv?.item_name || "Unknown"} for ${item.menu_name}`,
+                );
+              }
+            }
+          }
+        } else {
+          // Check inventory for regular menu item
+          const ingredients = ingredientsMap[item.id] || [];
+          for (const ing of ingredients) {
+            const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+            if (!inv || inv.qty < ing.qty * item.qty) {
+              throw new Error(
+                `Not enough ${inv?.item_name || "Unknown"} for ${item.menu_name}`,
+              );
+            }
           }
         }
       }
@@ -226,23 +350,54 @@ export default function Pyaments({ inventory, setInventory, user }) {
 
       // Insert order items and deduct inventory
       for (const item of cart) {
-        await supabase.from("order_items").insert({
-          order_id: order.id,
-          menu_id: item.id,
-          qty: item.qty,
-          price: item.price,
-        });
+        if (item.isSet) {
+          // Insert menu set as order item
+          await supabase.from("order_items").insert({
+            order_id: order.id,
+            menu_id: null,
+            menu_set_id: item.id,
+            qty: item.qty,
+            price: item.price,
+          });
 
-        // Deduct inventory
-        const ingredients = ingredientsMap[item.id] || [];
-        for (const ing of ingredients) {
-          const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
-          const newQty = inv.qty - ing.qty * item.qty;
-          await supabase
-            .from("inventory")
-            .update({ qty: newQty })
-            .eq("id", ing.inventory_id);
-          inv.qty = newQty;
+          // Deduct inventory for all items in the set
+          const setItems = menuSetItemsMap[item.id] || [];
+          for (const setItem of setItems) {
+            const menuItem = menu.find(m => m.id === setItem.menu_id);
+            if (!menuItem) continue;
+
+            const ingredients = ingredientsMap[menuItem.id] || [];
+            for (const ing of ingredients) {
+              const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+              const newQty = inv.qty - ing.qty * item.qty;
+              await supabase
+                .from("inventory")
+                .update({ qty: newQty })
+                .eq("id", ing.inventory_id);
+              inv.qty = newQty;
+            }
+          }
+        } else {
+          // Insert regular menu item
+          await supabase.from("order_items").insert({
+            order_id: order.id,
+            menu_id: item.id,
+            menu_set_id: null,
+            qty: item.qty,
+            price: item.price,
+          });
+
+          // Deduct inventory
+          const ingredients = ingredientsMap[item.id] || [];
+          for (const ing of ingredients) {
+            const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
+            const newQty = inv.qty - ing.qty * item.qty;
+            await supabase
+              .from("inventory")
+              .update({ qty: newQty })
+              .eq("id", ing.inventory_id);
+            inv.qty = newQty;
+          }
         }
       }
 
@@ -266,7 +421,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
                 ${cart
                   .map(
                     (i) => `<tr>
-                  <td>${i.menu_name}</td>
+                  <td>${i.menu_name}${i.isSet ? ' (Set)' : ''}</td>
                   <td>${i.qty}</td>
                   <td>${mmkFormatter.format(i.price)}</td>
                   <td>${mmkFormatter.format(i.price * i.qty)}</td>
@@ -354,11 +509,14 @@ export default function Pyaments({ inventory, setInventory, user }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filteredMenu.map((item) => (
             <button
-              key={item.id}
+              key={`${item.id}-${item.isSet ? 'set' : 'menu'}`}
               onClick={() => addToCart(item)}
               className="border rounded-2xl p-4 text-left hover:shadow"
             >
-              <p className="font-semibold">{item.menu_name}</p>
+              <p className="font-semibold">
+                {item.menu_name}
+                {item.isSet && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">SET</span>}
+              </p>
               <p className="text-sm text-gray-500">
                 {mmkFormatter.format(item.price)}
               </p>
@@ -375,18 +533,21 @@ export default function Pyaments({ inventory, setInventory, user }) {
         ) : (
           cart.map((item) => (
             <div
-              key={item.id}
+              key={`${item.id}-${item.isSet ? 'set' : 'menu'}`}
               className="flex justify-between items-center border rounded-xl p-4 mb-3"
             >
               <div>
-                <p className="font-semibold">{item.menu_name}</p>
+                <p className="font-semibold">
+                  {item.menu_name}
+                  {item.isSet && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">SET</span>}
+                </p>
                 <p className="text-sm">
                   {mmkFormatter.format(item.price)} × {item.qty}
                 </p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => changeQty(item.id, -1)}>−</button>
-                <button onClick={() => changeQty(item.id, 1)}>+</button>
+                <button onClick={() => changeQty(item.id, -1, item.isSet)}>−</button>
+                <button onClick={() => changeQty(item.id, 1, item.isSet)}>+</button>
               </div>
             </div>
           ))

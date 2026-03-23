@@ -3,7 +3,9 @@ import Swal from "sweetalert2";
 import supabase from "../createClients";
 
 export default function Menu({ inventory }) {
+  const [activeTab, setActiveTab] = useState("menu");
   const [menu, setMenu] = useState([]);
+  const [menuSets, setMenuSets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -16,6 +18,13 @@ export default function Menu({ inventory }) {
     price: "",
     category_id: "",
     ingredients: [{ inventory_id: "", qty: 1 }],
+  });
+
+  const [menuSetFormData, setMenuSetFormData] = useState({
+    set_name: "",
+    price: "",
+    category_id: "",
+    menu_items: [],
   });
 
   const safeInventory = Array.isArray(inventory) ? inventory : [];
@@ -43,6 +52,27 @@ export default function Menu({ inventory }) {
     }
   };
 
+  // Load menu sets
+  const fetchMenuSets = async () => {
+    try {
+      const { data: setsData, error: setsErr } = await supabase.from("menu_sets").select("*");
+      if (setsErr) throw setsErr;
+
+      const { data: itemsData, error: itemsErr } = await supabase.from("menu_set_items").select("*");
+      if (itemsErr) throw itemsErr;
+
+      const merged = setsData.map((s) => ({
+        ...s,
+        menu_items: itemsData.filter((i) => i.set_id === s.id),
+      }));
+
+      setMenuSets(merged);
+    } catch (err) {
+      Swal.fire("Error", err.message || "Failed to load menu sets", "error");
+      setMenuSets([]);
+    }
+  };
+
   // Load categories
   const fetchCategories = async () => {
     try {
@@ -55,28 +85,52 @@ export default function Menu({ inventory }) {
     }
   };
 
-  useEffect(() => { fetchMenu(); fetchCategories(); }, []);
+  useEffect(() => { fetchMenu(); fetchMenuSets(); fetchCategories(); }, []);
 
   const openAddModal = () => {
-    setFormData({ menu_name: "", price: "", category_id: "", ingredients: [{ inventory_id: "", qty: 1 }] });
+    if (activeTab === "menu") {
+      setFormData({ menu_name: "", price: "", category_id: "", ingredients: [{ inventory_id: "", qty: 1 }] });
+    } else {
+      setMenuSetFormData({ set_name: "", price: "", category_id: "", menu_items: [] });
+    }
     setIsEditing(false);
     setEditItem(null);
     setShowModal(true);
   };
 
   const openEditModal = (item) => {
-    setFormData({
-      menu_name: item.menu_name || "",
-      price: item.price || "",
-      category_id: item.category_id || "",
-      ingredients: item.ingredients.length ? item.ingredients : [{ inventory_id: "", qty: 1 }],
-    });
+    if (activeTab === "menu") {
+      setFormData({
+        menu_name: item.menu_name || "",
+        price: item.price || "",
+        category_id: item.category_id || "",
+        ingredients: item.ingredients.length ? item.ingredients : [{ inventory_id: "", qty: 1 }],
+      });
+    } else {
+      setMenuSetFormData({
+        set_name: item.set_name || "",
+        price: item.price || "",
+        category_id: item.category_id || "",
+        menu_items: item.menu_items.length ? item.menu_items.map(mi => mi.menu_id) : [],
+      });
+    }
     setEditItem(item);
     setIsEditing(true);
     setShowModal(true);
   };
 
   const handleFormChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleSetFormChange = (e) => setMenuSetFormData({ ...menuSetFormData, [e.target.name]: e.target.value });
+
+  const handleMenuItemToggle = (menuId) => {
+    const currentItems = menuSetFormData.menu_items;
+    if (currentItems.includes(menuId)) {
+      setMenuSetFormData({ ...menuSetFormData, menu_items: currentItems.filter(id => id !== menuId) });
+    } else {
+      setMenuSetFormData({ ...menuSetFormData, menu_items: [...currentItems, menuId] });
+    }
+  };
 
   const handleIngredientChange = (i, e) => {
     const newIngredients = [...formData.ingredients];
@@ -104,79 +158,141 @@ export default function Menu({ inventory }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.ingredients.every((ing) => ing.inventory_id && ing.qty > 0)) {
-      return Swal.fire("Error", "Please select all ingredients and quantities.", "error");
-    }
 
-    try {
-      if (isEditing && editItem) {
-        const { error: updateErr } = await supabase
-          .from("menu")
-          .update({
-            menu_name: formData.menu_name,
-            price: Number(formData.price),
-            category_id: formData.category_id ? Number(formData.category_id) : null
-          })
-          .eq("id", editItem.id);
-        if (updateErr) throw updateErr;
-
-        await supabase.from("menu_ingredients").delete().eq("menu_id", editItem.id);
-
-        const ingredientsToInsert = formData.ingredients.map((ing) => ({
-          menu_id: editItem.id,
-          inventory_id: Number(ing.inventory_id),
-          qty: Number(ing.qty),
-        }));
-        await supabase.from("menu_ingredients").insert(ingredientsToInsert);
-      } else {
-        const { data: newMenu, error: insertErr } = await supabase
-          .from("menu")
-          .insert([{
-            menu_name: formData.menu_name,
-            price: Number(formData.price),
-            category_id: formData.category_id ? Number(formData.category_id) : null
-          }])
-          .select()
-          .single();
-        if (insertErr) throw insertErr;
-
-        const ingredientsToInsert = formData.ingredients.map((ing) => ({
-          menu_id: newMenu.id,
-          inventory_id: Number(ing.inventory_id),
-          qty: Number(ing.qty),
-        }));
-        await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+    if (activeTab === "menu") {
+      if (!formData.ingredients.every((ing) => ing.inventory_id && ing.qty > 0)) {
+        return Swal.fire("Error", "Please select all ingredients and quantities.", "error");
       }
 
-      Swal.fire("Success", "Menu saved!", "success");
-      setShowModal(false);
-      fetchMenu();
-    } catch (err) {
-      Swal.fire("Error", err.message || "Failed to save menu", "error");
+      try {
+        if (isEditing && editItem) {
+          const { error: updateErr } = await supabase
+            .from("menu")
+            .update({
+              menu_name: formData.menu_name,
+              price: Number(formData.price),
+              category_id: formData.category_id ? Number(formData.category_id) : null
+            })
+            .eq("id", editItem.id);
+          if (updateErr) throw updateErr;
+
+          await supabase.from("menu_ingredients").delete().eq("menu_id", editItem.id);
+
+          const ingredientsToInsert = formData.ingredients.map((ing) => ({
+            menu_id: editItem.id,
+            inventory_id: Number(ing.inventory_id),
+            qty: Number(ing.qty),
+          }));
+          await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+        } else {
+          const { data: newMenu, error: insertErr } = await supabase
+            .from("menu")
+            .insert([{
+              menu_name: formData.menu_name,
+              price: Number(formData.price),
+              category_id: formData.category_id ? Number(formData.category_id) : null
+            }])
+            .select()
+            .single();
+          if (insertErr) throw insertErr;
+
+          const ingredientsToInsert = formData.ingredients.map((ing) => ({
+            menu_id: newMenu.id,
+            inventory_id: Number(ing.inventory_id),
+            qty: Number(ing.qty),
+          }));
+          await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+        }
+
+        Swal.fire("Success", "Menu saved!", "success");
+        setShowModal(false);
+        fetchMenu();
+      } catch (err) {
+        Swal.fire("Error", err.message || "Failed to save menu", "error");
+      }
+    } else {
+      // Menu Set
+      if (menuSetFormData.menu_items.length === 0) {
+        return Swal.fire("Error", "Please select at least one menu item.", "error");
+      }
+
+      try {
+        if (isEditing && editItem) {
+          const { error: updateErr } = await supabase
+            .from("menu_sets")
+            .update({
+              set_name: menuSetFormData.set_name,
+              price: Number(menuSetFormData.price),
+              category_id: menuSetFormData.category_id ? Number(menuSetFormData.category_id) : null
+            })
+            .eq("id", editItem.id);
+          if (updateErr) throw updateErr;
+
+          await supabase.from("menu_set_items").delete().eq("set_id", editItem.id);
+
+          const itemsToInsert = menuSetFormData.menu_items.map((menuId) => ({
+            set_id: editItem.id,
+            menu_id: Number(menuId),
+          }));
+          await supabase.from("menu_set_items").insert(itemsToInsert);
+        } else {
+          const { data: newSet, error: insertErr } = await supabase
+            .from("menu_sets")
+            .insert([{
+              set_name: menuSetFormData.set_name,
+              price: Number(menuSetFormData.price),
+              category_id: menuSetFormData.category_id ? Number(menuSetFormData.category_id) : null
+            }])
+            .select()
+            .single();
+          if (insertErr) throw insertErr;
+
+          const itemsToInsert = menuSetFormData.menu_items.map((menuId) => ({
+            set_id: newSet.id,
+            menu_id: Number(menuId),
+          }));
+          await supabase.from("menu_set_items").insert(itemsToInsert);
+        }
+
+        Swal.fire("Success", "Menu set saved!", "success");
+        setShowModal(false);
+        fetchMenuSets();
+      } catch (err) {
+        Swal.fire("Error", err.message || "Failed to save menu set", "error");
+      }
     }
   };
 
   const handleDelete = async (id) => {
     const res = await Swal.fire({
-      title: "Delete this menu?",
+      title: activeTab === "menu" ? "Delete this menu?" : "Delete this menu set?",
       icon: "warning",
       showCancelButton: true,
     });
     if (res.isConfirmed) {
       try {
-        await supabase.from("menu_ingredients").delete().eq("menu_id", id);
-        await supabase.from("menu").delete().eq("id", id);
-        Swal.fire("Deleted!", "", "success");
-        fetchMenu();
+        if (activeTab === "menu") {
+          await supabase.from("menu_ingredients").delete().eq("menu_id", id);
+          await supabase.from("menu").delete().eq("id", id);
+          Swal.fire("Deleted!", "", "success");
+          fetchMenu();
+        } else {
+          await supabase.from("menu_set_items").delete().eq("set_id", id);
+          await supabase.from("menu_sets").delete().eq("id", id);
+          Swal.fire("Deleted!", "", "success");
+          fetchMenuSets();
+        }
       } catch (err) {
         Swal.fire("Error", err.message || "Failed to delete", "error");
       }
     }
   };
 
-  const filteredMenu = menu.filter((m) => {
-    const matchesSearch = (m.menu_name || "").toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || m.category_id === Number(selectedCategory);
+  const currentData = activeTab === "menu" ? menu : menuSets;
+  const filteredData = currentData.filter((item) => {
+    const name = activeTab === "menu" ? (item.menu_name || "") : (item.set_name || "");
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === "all" || item.category_id === Number(selectedCategory);
     return matchesSearch && matchesCategory;
   });
 
@@ -185,20 +301,44 @@ export default function Menu({ inventory }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Menu Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage menu items</p>
+          <p className="text-sm text-slate-500 mt-1">Manage menu items and sets</p>
         </div>
         <button
           onClick={openAddModal}
           className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          + Add Menu
+          {activeTab === "menu" ? "+ Add Menu" : "+ Add Menu Set"}
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => { setActiveTab("menu"); setSearchTerm(""); setSelectedCategory("all"); }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            activeTab === "menu"
+              ? "bg-indigo-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          Menu Items
+        </button>
+        <button
+          onClick={() => { setActiveTab("set"); setSearchTerm(""); setSelectedCategory("all"); }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            activeTab === "set"
+              ? "bg-indigo-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          Menu Sets
         </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <input
           type="text"
-          placeholder="Search menu..."
+          placeholder={activeTab === "menu" ? "Search menu..." : "Search menu sets..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -233,9 +373,11 @@ export default function Menu({ inventory }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredMenu.map((item) => (
+        {filteredData.map((item) => (
           <div key={item.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
-            <h3 className="font-bold text-lg text-slate-800">{item.menu_name}</h3>
+            <h3 className="font-bold text-lg text-slate-800">
+              {activeTab === "menu" ? item.menu_name : item.set_name}
+            </h3>
             <p className="text-slate-500 mb-1">{mmkFormatter.format(item.price)}</p>
             {item.category_id && (
               <p className="text-xs text-indigo-600 mb-3 font-medium">
@@ -243,14 +385,25 @@ export default function Menu({ inventory }) {
               </p>
             )}
             <div className="text-sm text-slate-600 mb-3">
-              {item.ingredients.map((ing, idx) => {
-                const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
-                return (
-                  <div key={idx}>
-                    {inv?.item_name || "Unknown"} × {ing.qty}
-                  </div>
-                );
-              })}
+              {activeTab === "menu" ? (
+                item.ingredients.map((ing, idx) => {
+                  const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
+                  return (
+                    <div key={idx}>
+                      {inv?.item_name || "Unknown"} × {ing.qty}
+                    </div>
+                  );
+                })
+              ) : (
+                item.menu_items.map((mi, idx) => {
+                  const menuItem = menu.find((m) => m.id === Number(mi.menu_id));
+                  return (
+                    <div key={idx}>
+                      • {menuItem?.menu_name || "Unknown"}
+                    </div>
+                  );
+                })
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -274,74 +427,134 @@ export default function Menu({ inventory }) {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg">
-            <h3 className="text-2xl font-bold mb-4">{isEditing ? "Edit Menu" : "Add Menu"}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <input
-                name="menu_name"
-                placeholder="Menu Name"
-                value={formData.menu_name}
-                onChange={handleFormChange}
-                className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                required
-              />
-              <input
-                name="price"
-                type="number"
-                placeholder="Price"
-                value={formData.price}
-                onChange={handleFormChange}
-                className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                required
-              />
-              <select
-                name="category_id"
-                value={formData.category_id}
-                onChange={handleFormChange}
-                className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">Select Category (Optional)</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+            <h3 className="text-2xl font-bold mb-4">
+              {activeTab === "menu"
+                ? (isEditing ? "Edit Menu" : "Add Menu")
+                : (isEditing ? "Edit Menu Set" : "Add Menu Set")
+              }
+            </h3>
+
+            {activeTab === "menu" ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <input
+                  name="menu_name"
+                  placeholder="Menu Name"
+                  value={formData.menu_name}
+                  onChange={handleFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  name="price"
+                  type="number"
+                  placeholder="Price"
+                  value={formData.price}
+                  onChange={handleFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <select
+                  name="category_id"
+                  value={formData.category_id}
+                  onChange={handleFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">Select Category (Optional)</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <p className="font-semibold">Ingredients</p>
+                {formData.ingredients.map((ing, i) => (
+                  <div key={i} className="flex gap-2 mb-2">
+                    <select
+                      name="inventory_id"
+                      value={ing.inventory_id}
+                      onChange={(e) => handleIngredientChange(i, e)}
+                      className="flex-1 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      required
+                    >
+                      <option value="">Select item</option>
+                      {safeInventory.map((inv) => (
+                        <option key={inv.id} value={inv.id}>{inv.item_name}</option>
+                      ))}
+                    </select>
+                    <input
+                      name="qty"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={ing.qty}
+                      onChange={(e) => handleIngredientChange(i, e)}
+                      className="w-20 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      required
+                    />
+
+                    {formData.ingredients.length > 1 && (
+                      <button type="button" onClick={() => removeIngredientRow(i)} className="text-red-500 font-bold">✕</button>
+                    )}
+                  </div>
                 ))}
-              </select>
-              <p className="font-semibold">Ingredients</p>
-              {formData.ingredients.map((ing, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <select
-                    name="inventory_id"
-                    value={ing.inventory_id}
-                    onChange={(e) => handleIngredientChange(i, e)}
-                    className="flex-1 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    required
-                  >
-                    <option value="">Select item</option>
-                    {safeInventory.map((inv) => (
-                      <option key={inv.id} value={inv.id}>{inv.item_name}</option>
-                    ))}
-                  </select>
-                  <input
-                    name="qty"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={ing.qty}
-                    onChange={(e) => handleIngredientChange(i, e)}
-                    className="w-20 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    required
-                  />
+                <button type="button" onClick={addIngredientRow} className="text-blue-600 text-sm hover:underline">+ Add Ingredient</button>
 
-                  {formData.ingredients.length > 1 && (
-                    <button type="button" onClick={() => removeIngredientRow(i)} className="text-red-500 font-bold">✕</button>
-                  )}
+                <div className="flex justify-end gap-2 pt-3">
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition">{isEditing ? "Update" : "Save"}</button>
                 </div>
-              ))}
-              <button type="button" onClick={addIngredientRow} className="text-blue-600 text-sm hover:underline">+ Add Ingredient</button>
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <input
+                  name="set_name"
+                  placeholder="Menu Set Name"
+                  value={menuSetFormData.set_name}
+                  onChange={handleSetFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  name="price"
+                  type="number"
+                  placeholder="Price"
+                  value={menuSetFormData.price}
+                  onChange={handleSetFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <select
+                  name="category_id"
+                  value={menuSetFormData.category_id}
+                  onChange={handleSetFormChange}
+                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">Select Category (Optional)</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <div>
+                  <p className="font-semibold mb-2">Select Menu Items</p>
+                  <div className="max-h-60 overflow-y-auto border rounded-lg p-3 space-y-2">
+                    {menu.map((menuItem) => (
+                      <label key={menuItem.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={menuSetFormData.menu_items.includes(menuItem.id)}
+                          onChange={() => handleMenuItemToggle(menuItem.id)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{menuItem.menu_name} - {mmkFormatter.format(menuItem.price)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="flex justify-end gap-2 pt-3">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition">{isEditing ? "Update" : "Save"}</button>
-              </div>
-            </form>
+                <div className="flex justify-end gap-2 pt-3">
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition">{isEditing ? "Update" : "Save"}</button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
