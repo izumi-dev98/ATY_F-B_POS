@@ -82,7 +82,7 @@ export default function SupplierOutstanding() {
         }
       }
 
-      return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && p.paid !== true;
+      return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && !p.paid;
     });
 
     const supplierData = {};
@@ -274,7 +274,7 @@ export default function SupplierOutstanding() {
                     <td className="px-4 py-3 text-center text-slate-600">{sup.purchase_count}</td>
                     <td className="px-4 py-3 text-right font-bold text-amber-600">{formatMMK(sup.total_payable)}</td>
                   </tr>
-                  {expandedSuppliers[sup.supplier_id] && sup.purchases.map((p) => (
+                  {expandedSuppliers[sup.supplier_id] && sup.purchases.filter(p => !p.paid).map((p) => (
                     <tr key={p.id} className="bg-slate-50 border-t border-slate-200">
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 pl-10 text-slate-600">
@@ -284,14 +284,12 @@ export default function SupplierOutstanding() {
                       <td className="px-4 py-2 text-center text-slate-600">{p.credit_option || "-"}</td>
                       <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
                       <td className="px-4 py-2 text-right">
-                        {!p.paid && (
-                          <button
-                            onClick={() => handlePay(p)}
-                            className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                          >
-                            Pay
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handlePay(p)}
+                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                        >
+                          Pay
+                        </button>
                       </td>
                     </tr>
                   ))}
