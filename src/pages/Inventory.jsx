@@ -26,6 +26,11 @@ export default function Inventory({
   const isAdmin = user?.role === "superadmin" || user?.role === "admin";
   const canManageInventory = isSuperAdmin || isAdmin;
 
+  const formatMMK = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
+  };
+
   const [formData, setFormData] = useState({
     item_name: "",
     qty: "",
@@ -309,7 +314,7 @@ export default function Inventory({
                     <td className="px-4 py-3 text-center text-slate-600">{item.qty}</td>
                     <td className="px-4 py-3 text-slate-600">{item.type}</td>
                     <td className="px-4 py-3 text-center text-slate-600">
-                      {item.price ? `$${Number(item.price).toFixed(2)}` : "-"}
+                      {item.price ? formatMMK(item.price) : "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
