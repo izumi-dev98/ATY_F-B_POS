@@ -160,9 +160,12 @@ export default function Menu({ inventory }) {
     e.preventDefault();
 
     if (activeTab === "menu") {
-      if (!formData.ingredients.every((ing) => ing.inventory_id && ing.qty > 0)) {
-        return Swal.fire("Error", "Please select all ingredients and quantities.", "error");
-      }
+      const validIngredients = formData.ingredients
+        .map((ing) => ({
+          inventory_id: Number(ing.inventory_id),
+          qty: Number(ing.qty),
+        }))
+        .filter((ing) => Number.isFinite(ing.inventory_id) && ing.inventory_id > 0 && Number.isFinite(ing.qty) && ing.qty > 0);
 
       try {
         if (isEditing && editItem) {
@@ -178,12 +181,14 @@ export default function Menu({ inventory }) {
 
           await supabase.from("menu_ingredients").delete().eq("menu_id", editItem.id);
 
-          const ingredientsToInsert = formData.ingredients.map((ing) => ({
+          const ingredientsToInsert = validIngredients.map((ing) => ({
             menu_id: editItem.id,
-            inventory_id: Number(ing.inventory_id),
-            qty: Number(ing.qty),
+            inventory_id: ing.inventory_id,
+            qty: ing.qty,
           }));
-          await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+          if (ingredientsToInsert.length) {
+            await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+          }
         } else {
           const { data: newMenu, error: insertErr } = await supabase
             .from("menu")
@@ -196,12 +201,14 @@ export default function Menu({ inventory }) {
             .single();
           if (insertErr) throw insertErr;
 
-          const ingredientsToInsert = formData.ingredients.map((ing) => ({
+          const ingredientsToInsert = validIngredients.map((ing) => ({
             menu_id: newMenu.id,
-            inventory_id: Number(ing.inventory_id),
-            qty: Number(ing.qty),
+            inventory_id: ing.inventory_id,
+            qty: ing.qty,
           }));
-          await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+          if (ingredientsToInsert.length) {
+            await supabase.from("menu_ingredients").insert(ingredientsToInsert);
+          }
         }
 
         Swal.fire("Success", "Menu saved!", "success");
@@ -212,9 +219,9 @@ export default function Menu({ inventory }) {
       }
     } else {
       // Menu Set
-      if (menuSetFormData.menu_items.length === 0) {
-        return Swal.fire("Error", "Please select at least one menu item.", "error");
-      }
+      const validMenuItemIds = menuSetFormData.menu_items
+        .map((menuId) => Number(menuId))
+        .filter((menuId) => Number.isFinite(menuId) && menuId > 0);
 
       try {
         if (isEditing && editItem) {
@@ -230,11 +237,13 @@ export default function Menu({ inventory }) {
 
           await supabase.from("menu_set_items").delete().eq("set_id", editItem.id);
 
-          const itemsToInsert = menuSetFormData.menu_items.map((menuId) => ({
+          const itemsToInsert = validMenuItemIds.map((menuId) => ({
             set_id: editItem.id,
-            menu_id: Number(menuId),
+            menu_id: menuId,
           }));
-          await supabase.from("menu_set_items").insert(itemsToInsert);
+          if (itemsToInsert.length) {
+            await supabase.from("menu_set_items").insert(itemsToInsert);
+          }
         } else {
           const { data: newSet, error: insertErr } = await supabase
             .from("menu_sets")
@@ -247,11 +256,13 @@ export default function Menu({ inventory }) {
             .single();
           if (insertErr) throw insertErr;
 
-          const itemsToInsert = menuSetFormData.menu_items.map((menuId) => ({
+          const itemsToInsert = validMenuItemIds.map((menuId) => ({
             set_id: newSet.id,
-            menu_id: Number(menuId),
+            menu_id: menuId,
           }));
-          await supabase.from("menu_set_items").insert(itemsToInsert);
+          if (itemsToInsert.length) {
+            await supabase.from("menu_set_items").insert(itemsToInsert);
+          }
         }
 
         Swal.fire("Success", "Menu set saved!", "success");
@@ -493,7 +504,6 @@ export default function Menu({ inventory }) {
                       value={ing.inventory_id}
                       onChange={(e) => handleIngredientChange(i, e)}
                       className="flex-1 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
-                      required
                     >
                       <option value="">Select item</option>
                       {safeInventory.map((inv) => (
