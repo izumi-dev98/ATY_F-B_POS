@@ -256,9 +256,6 @@ export default function InventoryReport() {
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
 
-    // Show latest on top in details table
-    history.reverse();
-
     setPurchaseHistory(history);
     setShowDetailModal(true);
   };
