@@ -415,10 +415,10 @@ export default function InventoryReport() {
                   className="border-b border-slate-100 hover:bg-indigo-50/50 transition"
                 >
                   {/* Item Name */}
-                  <td className="px-4 py-3 font-medium text-gray-700">
+                  <td className="px-4 py-3 font-medium text-gray-700 dark:text-slate-100">
                     <button
                       onClick={() => viewPurchaseHistory(item)}
-                      className="text-indigo-600 hover:text-indigo-800 underline"
+                      className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200 underline"
                     >
                       {item.item_name}
                     </button>

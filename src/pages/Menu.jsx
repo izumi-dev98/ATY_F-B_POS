@@ -297,11 +297,11 @@ export default function Menu({ inventory }) {
   });
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Menu Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage menu items and sets</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Menu Management</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">Manage menu items and sets</p>
         </div>
         <button
           onClick={openAddModal}
@@ -318,7 +318,7 @@ export default function Menu({ inventory }) {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             activeTab === "menu"
               ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
           }`}
         >
           Menu Items
@@ -328,20 +328,20 @@ export default function Menu({ inventory }) {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             activeTab === "set"
               ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
           }`}
         >
           Menu Sets
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 p-4 mb-6">
         <input
           type="text"
           placeholder={activeTab === "menu" ? "Search menu..." : "Search menu sets..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-600"
         />
       </div>
 
@@ -350,10 +350,10 @@ export default function Menu({ inventory }) {
         <button
           onClick={() => setSelectedCategory("all")}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            selectedCategory === "all"
-              ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-          }`}
+              selectedCategory === "all"
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+            }`}
         >
           All
         </button>
@@ -364,7 +364,7 @@ export default function Menu({ inventory }) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               selectedCategory === cat.id.toString()
                 ? "bg-indigo-600 text-white"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
             }`}
           >
             {cat.name}
@@ -376,7 +376,7 @@ export default function Menu({ inventory }) {
         {filteredData.map((item) => (
           <div
             key={item.id}
-            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
           >
             <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-md">
               {mmkFormatter.format(item.price)}
@@ -386,28 +386,28 @@ export default function Menu({ inventory }) {
 
             <div className="p-5">
               <div className="mb-3 pr-24">
-                <h3 className="text-lg font-bold leading-tight text-slate-900">
+                <h3 className="text-lg font-bold leading-tight text-slate-900 dark:text-slate-100">
                   {activeTab === "menu" ? item.menu_name : item.set_name}
                 </h3>
-                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   {activeTab === "menu" ? "Menu" : "Menu Set"}
                 </p>
               </div>
 
               <div className="mb-4 flex min-h-7 items-center">
-                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
                   {categories.find(c => c.id === item.category_id)?.name || "Uncategorized"}
                 </span>
               </div>
 
-              <div className="mb-4 space-y-2 text-sm text-slate-700">
+              <div className="mb-4 space-y-2 text-sm text-slate-700 dark:text-slate-200">
                 {activeTab === "menu" ? (
                   item.ingredients.map((ing, idx) => {
                     const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
                     return (
-                      <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                      <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-700 px-3 py-2">
                         <span className="truncate">{inv?.item_name || "Unknown"}</span>
-                        <span className="ml-3 rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                        <span className="ml-3 rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-600 dark:text-slate-100">
                           x {ing.qty}
                         </span>
                       </div>
@@ -417,7 +417,7 @@ export default function Menu({ inventory }) {
                   item.menu_items.map((mi, idx) => {
                     const menuItem = menu.find((m) => m.id === Number(mi.menu_id));
                     return (
-                      <div key={idx} className="rounded-lg bg-slate-50 px-3 py-2">
+                      <div key={idx} className="rounded-lg bg-slate-50 dark:bg-slate-700 px-3 py-2">
                         {menuItem?.menu_name || "Unknown"}
                       </div>
                     );
@@ -447,8 +447,8 @@ export default function Menu({ inventory }) {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg">
-            <h3 className="text-2xl font-bold mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg text-slate-800 dark:text-slate-100">
+            <h3 className="text-2xl font-bold mb-4 text-slate-800 dark:text-slate-100">
               {activeTab === "menu"
                 ? (isEditing ? "Edit Menu" : "Add Menu")
                 : (isEditing ? "Edit Menu Set" : "Add Menu Set")
@@ -462,7 +462,7 @@ export default function Menu({ inventory }) {
                   placeholder="Menu Name"
                   value={formData.menu_name}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                   required
                 />
                 <input
@@ -471,28 +471,28 @@ export default function Menu({ inventory }) {
                   placeholder="Price"
                   value={formData.price}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                   required
                 />
                 <select
                   name="category_id"
                   value={formData.category_id}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                 >
                   <option value="">Select Category (Optional)</option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </select>
-                <p className="font-semibold">Ingredients</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-100">Ingredients</p>
                 {formData.ingredients.map((ing, i) => (
                   <div key={i} className="flex gap-2 mb-2">
                     <select
                       name="inventory_id"
                       value={ing.inventory_id}
                       onChange={(e) => handleIngredientChange(i, e)}
-                      className="flex-1 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      className="flex-1 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                       required
                     >
                       <option value="">Select item</option>
@@ -507,7 +507,7 @@ export default function Menu({ inventory }) {
                       min="0"
                       value={ing.qty}
                       onChange={(e) => handleIngredientChange(i, e)}
-                      className="w-20 px-2 py-1 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      className="w-20 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                       required
                     />
 
@@ -516,10 +516,10 @@ export default function Menu({ inventory }) {
                     )}
                   </div>
                 ))}
-                <button type="button" onClick={addIngredientRow} className="text-blue-600 text-sm hover:underline">+ Add Ingredient</button>
+                <button type="button" onClick={addIngredientRow} className="text-blue-600 dark:text-blue-300 text-sm hover:underline">+ Add Ingredient</button>
 
                 <div className="flex justify-end gap-2 pt-3">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition">Cancel</button>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 dark:bg-slate-600 dark:text-slate-100 rounded-2xl hover:bg-gray-400 dark:hover:bg-slate-500 transition">Cancel</button>
                   <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition">{isEditing ? "Update" : "Save"}</button>
                 </div>
               </form>
@@ -530,7 +530,7 @@ export default function Menu({ inventory }) {
                   placeholder="Menu Set Name"
                   value={menuSetFormData.set_name}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                   required
                 />
                 <input
@@ -539,14 +539,14 @@ export default function Menu({ inventory }) {
                   placeholder="Price"
                   value={menuSetFormData.price}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                   required
                 />
                 <select
                   name="category_id"
                   value={menuSetFormData.category_id}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
                 >
                   <option value="">Select Category (Optional)</option>
                   {categories.map((cat) => (
@@ -554,24 +554,24 @@ export default function Menu({ inventory }) {
                   ))}
                 </select>
                 <div>
-                  <p className="font-semibold mb-2">Select Menu Items</p>
-                  <div className="max-h-60 overflow-y-auto border rounded-lg p-3 space-y-2">
+                  <p className="font-semibold mb-2 text-slate-800 dark:text-slate-100">Select Menu Items</p>
+                  <div className="max-h-60 overflow-y-auto border border-slate-300 dark:border-slate-600 rounded-lg p-3 space-y-2 bg-white dark:bg-slate-800">
                     {menu.map((menuItem) => (
-                      <label key={menuItem.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                      <label key={menuItem.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded">
                         <input
                           type="checkbox"
                           checked={menuSetFormData.menu_items.includes(menuItem.id)}
                           onChange={() => handleMenuItemToggle(menuItem.id)}
                           className="w-4 h-4"
                         />
-                        <span className="text-sm">{menuItem.menu_name} - {mmkFormatter.format(menuItem.price)}</span>
+                        <span className="text-sm text-slate-700 dark:text-slate-200">{menuItem.menu_name} - {mmkFormatter.format(menuItem.price)}</span>
                       </label>
                     ))}
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-3">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded-2xl hover:bg-gray-400 transition">Cancel</button>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 dark:bg-slate-600 dark:text-slate-100 rounded-2xl hover:bg-gray-400 dark:hover:bg-slate-500 transition">Cancel</button>
                   <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-2xl hover:bg-green-700 transition">{isEditing ? "Update" : "Save"}</button>
                 </div>
               </form>

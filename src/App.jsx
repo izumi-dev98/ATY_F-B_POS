@@ -45,6 +45,16 @@ export default function App() {
   const [menu, setMenu] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   // ------------------- RESPONSIVE SIDEBAR -------------------
   useEffect(() => {
@@ -54,6 +64,7 @@ export default function App() {
   }, []);
 
   const toggleSidebar = () => setIsOpen((prev) => !prev);
+  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
 
   // ------------------- AUTH STATE -------------------
   useEffect(() => {
@@ -127,14 +138,14 @@ export default function App() {
   };
 
   // ------------------- LOADING -------------------
-  if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  if (loading) return <div className="flex justify-center items-center h-screen bg-gray-100 dark:bg-slate-900 dark:text-slate-100">Loading...</div>;
 
   // ------------------- RENDER -------------------
   return (
     <div className="flex">
       {user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
-      <div className={`flex-1 min-h-screen bg-gray-100 ${user && isOpen ? "ml-60" : "ml-0"}`}>
-        {user && <Navbar toggleSidebar={toggleSidebar} />}
+      <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${user && isOpen ? "ml-60" : "ml-0"}`}>
+        {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} />}
         <main className="p-6">
           <Routes>
             {/* Login redirects to dashboard if already logged in */}
