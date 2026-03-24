@@ -31,9 +31,8 @@ export default function InventoryReport() {
     maximumFractionDigits: 0,
   });
 
-  // Store latest prices and purchase totals
+  // Store latest prices
   const [latestPrices, setLatestPrices] = useState({});
-  const [purchaseTotals, setPurchaseTotals] = useState({});
 
   useEffect(() => {
     fetchInventory();
@@ -61,10 +60,9 @@ export default function InventoryReport() {
     if (!invData.error) setInventory(invData.data);
     if (!supData.error) setSuppliers(supData.data || []);
 
-    // Get latest price and total purchased amount for each item
+    // Get latest price for each item
     if (purchaseItemsData.data) {
       const prices = {};
-      const totals = {};
       purchaseItemsData.data.forEach(item => {
         const key = item.item_name?.toLowerCase().trim();
         if (key) {
@@ -72,13 +70,9 @@ export default function InventoryReport() {
           if (!prices[key]) {
             prices[key] = item.unit_price;
           }
-          // Accumulate total
-          if (!totals[key]) totals[key] = 0;
-          totals[key] += parseFloat(item.total_price) || 0;
         }
       });
       setLatestPrices(prices);
-      setPurchaseTotals(totals);
     }
 
     setLoading(false);
@@ -116,6 +110,12 @@ export default function InventoryReport() {
           supplier_id: purchase?.supplier_id,
           status: purchase?.status || "-"
         };
+      });
+
+      // Sort by purchase date descending (latest first)
+      history.sort((a, b) => {
+        if (a.purchase_date === "-" || b.purchase_date === "-") return 0;
+        return new Date(b.purchase_date) - new Date(a.purchase_date);
       });
 
       setPurchaseHistory(history);
@@ -186,15 +186,14 @@ export default function InventoryReport() {
     item.item_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Calculate totals - use purchase history totals
+  // Calculate totals - use latest price × current qty
   const totalItems = filteredData.length;
   const totalQty = filteredData.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
   const totalValue = filteredData.reduce((sum, item) => {
     const key = item.item_name?.toLowerCase().trim();
-    if (key && purchaseTotals[key]) {
-      return sum + purchaseTotals[key];
-    }
-    return sum + ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 0));
+    const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
+    const qty = parseFloat(item.qty) || 0;
+    return sum + (latestPrice * qty);
   }, 0);
 
   // Pagination logic
@@ -205,15 +204,20 @@ export default function InventoryReport() {
 
   // Export Excel
   const exportToExcel = () => {
-    // Prepare export data with calculated total value
-    const exportData = filteredData.map((item) => ({
-      Item_Name: item.item_name,
-      Quantity: item.qty,
-      Unit: item.type,
-      Price: item.price,
-      Total_Value: (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 0),
-      Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
-    }));
+    // Prepare export data with latest price × current qty
+    const exportData = filteredData.map((item) => {
+      const key = item.item_name?.toLowerCase().trim();
+      const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
+      const qty = parseFloat(item.qty) || 0;
+      return {
+        Item_Name: item.item_name,
+        Quantity: item.qty,
+        Unit: item.type,
+        Price: latestPrice,
+        Total_Value: latestPrice * qty,
+        Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
+      };
+    });
 
     // Add summary row
     exportData.push({
@@ -444,11 +448,14 @@ export default function InventoryReport() {
                       : (item.price ? mmkFormatter.format(item.price) : "-")}
                   </td>
 
-                  {/* Total Value - from purchase history */}
+                  {/* Total Value - latest price × current qty */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {purchaseTotals[item.item_name?.toLowerCase().trim()]
-                      ? mmkFormatter.format(purchaseTotals[item.item_name?.toLowerCase().trim()])
-                      : mmkFormatter.format((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 0))}
+                    {(() => {
+                      const key = item.item_name?.toLowerCase().trim();
+                      const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
+                      const qty = parseFloat(item.qty) || 0;
+                      return mmkFormatter.format(latestPrice * qty);
+                    })()}
                   </td>
                 </tr>
               ))
@@ -533,7 +540,11 @@ export default function InventoryReport() {
                       </td>
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 text-right font-bold text-indigo-600">
-                        {mmkFormatter.format(purchaseHistory.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0))}
+                        {(() => {
+                          const currentQty = parseFloat(selectedItem?.qty) || 0;
+                          const latestUnitPrice = parseFloat(purchaseHistory[0]?.unit_price) || 0;
+                          return mmkFormatter.format(latestUnitPrice * currentQty);
+                        })()}
                       </td>
                     </tr>
                   </tfoot>

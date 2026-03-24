@@ -457,7 +457,7 @@ export default function Purchase({ setInventory }) {
     // For Credit purchases that are received (staying to pay), show custom text
     const paymentTypeStr = String(paymentType || "").toLowerCase();
     const isCreditUnpaid = paymentTypeStr === "credit" && status === "received";
-    const statusText = isCreditUnpaid ? "Received " : (status || "pending");
+    const statusText = isCreditUnpaid ? "received " : (status || "pending");
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>{statusText}</span>;
   };
 
@@ -525,8 +525,8 @@ export default function Purchase({ setInventory }) {
               <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchases found</td></tr>
             ) : (
               paginatedPurchases.map((purchase) => {
-                const isStayToPay = purchase.status === "received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
-                const isCompleted = purchase.status === "received" && purchase.paid;
+                const isStayToPay = purchase.status === "Received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
+                const isCompleted = purchase.status === "Received" && (purchase.paid || String(purchase.payment_type || "").toLowerCase() === "cash down");
                 return (
                 <tr key={purchase.id} className={`border-t border-slate-100 hover:bg-white ${isStayToPay ? "bg-red-50" : ""} ${isCompleted ? "bg-green-50" : ""}`}>
                   <td className="px-4 py-3 font-semibold text-slate-800">
@@ -547,7 +547,7 @@ export default function Purchase({ setInventory }) {
                           </>
                         )}
                         {purchase.status === "received" && (
-                          purchase.paid ? (
+                          (purchase.paid || String(purchase.payment_type || "").toLowerCase() === "cash down") ? (
                             <span className="text-xs text-emerald-600 font-medium">Completed</span>
                           ) : (
                             <span className="text-xs text-blue-600 font-medium">Stay to Pay</span>

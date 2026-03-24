@@ -16,6 +16,7 @@ export default function Inventory({
   const [editId, setEditId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+  const [latestPrices, setLatestPrices] = useState({});
 
   // Get user role
   const user = JSON.parse(localStorage.getItem("user"));
@@ -57,8 +58,42 @@ export default function Inventory({
     }
   };
 
+  // Fetch latest prices from purchase history
+  const fetchLatestPrices = async () => {
+    try {
+      const { data: purchases } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("status", "received");
+
+      const receivedPurchaseIds = purchases?.map(p => p.id) || [];
+
+      if (receivedPurchaseIds.length > 0) {
+        const { data: purchaseItemsData } = await supabase
+          .from("purchase_items")
+          .select("item_name, unit_price")
+          .in("purchase_id", receivedPurchaseIds)
+          .order("id", { ascending: false });
+
+        if (purchaseItemsData) {
+          const prices = {};
+          purchaseItemsData.forEach(item => {
+            const key = item.item_name?.toLowerCase().trim();
+            if (key && !prices[key]) {
+              prices[key] = item.unit_price;
+            }
+          });
+          setLatestPrices(prices);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching latest prices:", err);
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
+    fetchLatestPrices();
   }, []);
 
   // Filter inventory by search and category
@@ -110,6 +145,9 @@ export default function Inventory({
     isEditing
       ? await updateInventoryItem(editId, payload)
       : await addInventoryItem(payload);
+
+    // Refresh latest prices after adding/updating
+    await fetchLatestPrices();
 
     setShowModal(false);
     setIsEditing(false);
@@ -191,7 +229,7 @@ export default function Inventory({
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Item</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Qty</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
-                <th className="px-4 py-3 text-center font-semibold text-slate-700">Price</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-700">Latest Price</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                 <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
               </tr>
@@ -211,7 +249,11 @@ export default function Inventory({
                     <td className="px-4 py-3 text-center text-slate-600">{item.qty}</td>
                     <td className="px-4 py-3 text-slate-600">{item.type}</td>
                     <td className="px-4 py-3 text-center text-slate-600">
-                      {item.price ? formatMMK(item.price) : "-"}
+                      {(() => {
+                        const key = item.item_name?.toLowerCase().trim();
+                        const latestPrice = latestPrices[key];
+                        return latestPrice !== undefined && latestPrice !== null ? formatMMK(latestPrice) : "-";
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
