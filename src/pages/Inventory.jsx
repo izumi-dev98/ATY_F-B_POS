@@ -4,7 +4,6 @@ import supabase from "../createClients";
 
 export default function Inventory({
   inventory,
-  addInventoryItem,
   updateInventoryItem,
   deleteInventoryItem
 }) {
@@ -21,8 +20,9 @@ export default function Inventory({
   // Get user role
   const user = JSON.parse(localStorage.getItem("user"));
   const isSuperAdmin = user?.role === "superadmin";
-  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
-  const canManageInventory = isSuperAdmin || isAdmin;
+  const isAdmin = user?.role === "admin";
+  const canEditInventory = isSuperAdmin || isAdmin;
+  const canDeleteInventory = isSuperAdmin;
 
   const formatMMK = (amount) => {
     const num = Number(amount) || 0;
@@ -113,12 +113,6 @@ export default function Inventory({
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const openAddModal = () => {
-    setFormData({ item_name: "", qty: "", type: "", category_id: "", price: "" });
-    setIsEditing(false);
-    setShowModal(true);
-  };
-
   const openEditModal = (item) => {
     setFormData({
       item_name: item.item_name,
@@ -134,17 +128,20 @@ export default function Inventory({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const payload = {
+    const fullPayload = {
       item_name: formData.item_name,
       qty: Number(formData.qty),
       type: formData.type,
       category_id: formData.category_id || null,
       price: formData.price ? Number(formData.price) : null
     };
+    const adminCategoryPayload = {
+      category_id: formData.category_id || null
+    };
 
-    isEditing
-      ? await updateInventoryItem(editId, payload)
-      : await addInventoryItem(payload);
+    if (isEditing) {
+      await updateInventoryItem(editId, isSuperAdmin ? fullPayload : adminCategoryPayload);
+    }
 
     // Refresh latest prices after adding/updating
     await fetchLatestPrices();
@@ -181,14 +178,6 @@ export default function Inventory({
               setCurrentPage(1);
             }}
           />
-
-          <button
-            onClick={openAddModal}
-            className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-            disabled={!canManageInventory}
-          >
-            + Add Item
-          </button>
         </div>
       </div>
 
@@ -261,23 +250,25 @@ export default function Inventory({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {canManageInventory && (
+                      {canEditInventory && (
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => openEditModal(item)}
                             className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
                           >
-                            Edit
+                            {isSuperAdmin ? "Edit" : "Edit Category"}
                           </button>
-                          <button
-                            onClick={() => deleteInventoryItem(item.id)}
-                            className="px-3 py-1 text-sm bg-rose-600 text-white rounded-md hover:bg-rose-700"
-                          >
-                            Delete
-                          </button>
+                          {canDeleteInventory && (
+                            <button
+                              onClick={() => deleteInventoryItem(item.id)}
+                              className="px-3 py-1 text-sm bg-rose-600 text-white rounded-md hover:bg-rose-700"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       )}
-                      {!canManageInventory && <span className="text-slate-400 text-sm">View Only</span>}
+                      {!canEditInventory && <span className="text-slate-400 text-sm">View Only</span>}
                     </td>
                   </tr>
                 ))
@@ -320,45 +311,49 @@ export default function Inventory({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-bold text-slate-800 mb-4">
-              {isEditing ? "Edit Item" : "Add Item"}
+              {isSuperAdmin ? "Edit Item" : "Edit Category"}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input
-                name="item_name"
-                placeholder="Item name"
-                value={formData.item_name}
-                onChange={handleChange}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-              <input
-                type="number"
-                name="qty"
-                placeholder="Quantity"
-                value={formData.qty}
-                onChange={handleChange}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-              <input
-                name="type"
-                placeholder="Unit"
-                value={formData.type}
-                onChange={handleChange}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-              <input
-                type="number"
-                name="price"
-                placeholder="Price"
-                value={formData.price}
-                onChange={handleChange}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                step="0.01"
-                min="0"
-              />
+              {isSuperAdmin && (
+                <>
+                  <input
+                    name="item_name"
+                    placeholder="Item name"
+                    value={formData.item_name}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                  <input
+                    type="number"
+                    name="qty"
+                    placeholder="Quantity"
+                    value={formData.qty}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                  <input
+                    name="type"
+                    placeholder="Unit"
+                    value={formData.type}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                  <input
+                    type="number"
+                    name="price"
+                    placeholder="Price"
+                    value={formData.price}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    step="0.01"
+                    min="0"
+                  />
+                </>
+              )}
 
               <select
                 name="category_id"
@@ -386,7 +381,7 @@ export default function Inventory({
                   type="submit"
                   className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
                 >
-                  {isEditing ? "Update" : "Save"}
+                  Update
                 </button>
               </div>
             </form>
