@@ -100,10 +100,10 @@ export default function UsageReport() {
             source_id: order.id,
             created_at: order.created_at,
             user_name: order.user_name || order.created_by || "-",
-            notes: `Auto reduce from completed order #${order.id}`,
+            notes: `Auto reduce from completed Slip ID ${order.id}`,
             status: "completed",
             record_type: "order_auto",
-            display_id: `OD-${order.id}`,
+            display_id: `SLIP-${order.id}`,
           });
         }
       });

@@ -17,6 +17,20 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
         }
 
         try {
+            const isAllowedRow = (row) => {
+                if (row?.is_allowed === undefined || row?.is_allowed === null) return true;
+                if (typeof row.is_allowed === "string") {
+                    const value = row.is_allowed.trim().toLowerCase();
+                    return value === "true" || value === "1" || value === "t" || value === "yes";
+                }
+                return Boolean(row.is_allowed);
+            };
+
+            const normalizeFunctionKey = (value) => {
+                if (typeof value !== "string") return "";
+                return value.trim().toLowerCase().replace(/_/g, "-");
+            };
+
             const { data, error } = await supabase
                 .from("user")
                 .select("*")
@@ -27,16 +41,22 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
             if (data.password !== password) return Swal.fire("Error", "Wrong password", "error");
 
             let permissions = ROLE_ACCESS_RIGHTS[data.role] || [];
-            try {
-                const { data: rightsRows } = await supabase
-                    .from("user_rights")
-                    .select("function_key, is_allowed")
-                    .eq("user_id", data.id);
-                if (Array.isArray(rightsRows) && rightsRows.length > 0) {
-                    permissions = rightsRows.filter(r => r.is_allowed).map(r => r.function_key);
+            if (data.role !== "superadmin") {
+                try {
+                    const { data: rightsRows, error: rightsErr } = await supabase
+                        .from("user_rights")
+                        .select("function_key, is_allowed")
+                        .eq("user_id", data.id);
+                    if (rightsErr) throw rightsErr;
+                    if (Array.isArray(rightsRows)) {
+                        permissions = rightsRows
+                            .filter((r) => isAllowedRow(r))
+                            .map((r) => normalizeFunctionKey(r.function_key))
+                            .filter(Boolean);
+                    }
+                } catch (rightsErr) {
+                    console.warn("user_rights table not available, using role defaults", rightsErr?.message);
                 }
-            } catch (rightsErr) {
-                console.warn("user_rights table not available, using role defaults", rightsErr?.message);
             }
 
             const loginUser = { ...data, permissions };

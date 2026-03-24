@@ -17,6 +17,33 @@ export default function UserRight() {
   );
 
   const getDefaultRightsForUser = (user) => ROLE_ACCESS_RIGHTS[user?.role] || [];
+  const allowedFunctionKeys = useMemo(
+    () => new Set(FUNCTION_OPTIONS.map((opt) => opt.key)),
+    []
+  );
+
+  const isAllowedRow = (row) => {
+    if (row?.is_allowed === undefined || row?.is_allowed === null) return true;
+    if (typeof row.is_allowed === "string") {
+      const value = row.is_allowed.trim().toLowerCase();
+      return value === "true" || value === "1" || value === "t" || value === "yes";
+    }
+    return Boolean(row.is_allowed);
+  };
+
+  const normalizeFunctionKey = (value) => {
+    if (typeof value !== "string") return "";
+    return value.trim().toLowerCase().replace(/_/g, "-");
+  };
+
+  const resolveUserRights = (user, mappedRights) => {
+    if (!user) return [];
+    if (user.role === "superadmin") return ROLE_ACCESS_RIGHTS.superadmin;
+    if (Object.prototype.hasOwnProperty.call(mappedRights, user.id)) {
+      return mappedRights[user.id];
+    }
+    return getDefaultRightsForUser(user);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -36,9 +63,15 @@ export default function UserRight() {
         if (rightsErr) throw rightsErr;
 
         (rightsData || []).forEach((row) => {
-          if (!row.is_allowed) return;
+          if (!isAllowedRow(row)) return;
+          const normalizedKey = normalizeFunctionKey(row.function_key);
+          if (!normalizedKey || !allowedFunctionKeys.has(normalizedKey)) return;
           if (!mapped[row.user_id]) mapped[row.user_id] = [];
-          mapped[row.user_id].push(row.function_key);
+          mapped[row.user_id].push(normalizedKey);
+        });
+
+        Object.keys(mapped).forEach((userId) => {
+          mapped[userId] = Array.from(new Set(mapped[userId]));
         });
       } catch (rightsErr) {
         console.warn("user_rights table unavailable, fallback to role defaults", rightsErr?.message);
@@ -50,7 +83,7 @@ export default function UserRight() {
       const firstUser = (usersData || [])[0];
       if (firstUser) {
         setSelectedUserId(firstUser.id);
-        setSelectedRights(mapped[firstUser.id] || getDefaultRightsForUser(firstUser));
+        setSelectedRights(resolveUserRights(firstUser, mapped));
       }
     } catch (err) {
       console.error(err);
@@ -82,10 +115,11 @@ export default function UserRight() {
 
   const onSelectUser = (user) => {
     setSelectedUserId(user.id);
-    setSelectedRights(rightsByUser[user.id] || getDefaultRightsForUser(user));
+    setSelectedRights(resolveUserRights(user, rightsByUser));
   };
 
   const toggleRight = (functionKey) => {
+    if (selectedUser?.role === "superadmin") return;
     setSelectedRights((prev) =>
       prev.includes(functionKey)
         ? prev.filter((k) => k !== functionKey)
@@ -100,7 +134,7 @@ export default function UserRight() {
 
       await supabase.from("user_rights").delete().eq("user_id", userId);
 
-      if (selectedRights.length > 0) {
+      if (selectedUser.role !== "superadmin" && selectedRights.length > 0) {
         const insertRows = selectedRights.map((functionKey) => ({
           user_id: userId,
           function_key: functionKey,
@@ -110,17 +144,19 @@ export default function UserRight() {
         if (insertErr) throw insertErr;
       }
 
-      setRightsByUser((prev) => ({ ...prev, [userId]: selectedRights }));
+      const rightsForUser =
+        selectedUser.role === "superadmin" ? ROLE_ACCESS_RIGHTS.superadmin : selectedRights;
+      setRightsByUser((prev) => ({ ...prev, [userId]: rightsForUser }));
 
       const localUser = JSON.parse(localStorage.getItem("user") || "null");
       if (localUser?.id === userId) {
         localStorage.setItem(
           "user",
-          JSON.stringify({ ...localUser, permissions: selectedRights })
+          JSON.stringify({ ...localUser, permissions: rightsForUser })
         );
       }
 
-      Swal.fire("Success", "User rights saved", "success");
+      Swal.fire("Success", selectedUser.role === "superadmin" ? "Superadmin keeps full default rights" : "User rights saved", "success");
     } catch (err) {
       console.error(err);
       Swal.fire(
@@ -185,6 +221,11 @@ export default function UserRight() {
                       {selectedUser.full_name} ({selectedUser.username})
                     </h2>
                     <p className="text-sm text-slate-500 capitalize">Role: {selectedUser.role}</p>
+                    {selectedUser.role === "superadmin" && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Superadmin rights are fixed and cannot be edited.
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={handleSave}
@@ -207,6 +248,7 @@ export default function UserRight() {
                             type="checkbox"
                             checked={selectedRights.includes(fn.key)}
                             onChange={() => toggleRight(fn.key)}
+                            disabled={selectedUser.role === "superadmin"}
                             className="w-4 h-4"
                           />
                           <span className="text-sm text-slate-700">{fn.label}</span>
