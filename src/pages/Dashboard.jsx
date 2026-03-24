@@ -18,6 +18,16 @@ export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [mostSelling, setMostSelling] = useState(null);
   const [grandTotal, setGrandTotal] = useState(0);
+  const [profitLossTrend, setProfitLossTrend] = useState([]);
+  const [overallProfitLoss, setOverallProfitLoss] = useState({ revenue: 0, expense: 0, profit: 0, loss: 0 });
+  const [profitLossRange, setProfitLossRange] = useState("12");
+  const [customProfitMonthRange, setCustomProfitMonthRange] = useState(() => {
+    const now = new Date();
+    const end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const start = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}`;
+    return { start, end };
+  });
   const [menuOptions, setMenuOptions] = useState([]);
   const [selectedMenu, setSelectedMenu] = useState("all");
   const [inventoryChartData, setInventoryChartData] = useState([]);
@@ -166,6 +176,94 @@ export default function Dashboard() {
     fetchDashboardData(selectedMonth);
   }, [selectedMonth, selectedMenu]);
 
+  useEffect(() => {
+    fetchAllBaseProfitLoss();
+  }, [profitLossRange, customProfitMonthRange.start, customProfitMonthRange.end]);
+
+  const fetchAllBaseProfitLoss = async () => {
+    try {
+      const months = (
+        profitLossRange === "custom"
+          ? getCustomMonthRange(customProfitMonthRange.start, customProfitMonthRange.end)
+          : getRecentMonths(Number(profitLossRange))
+      ).slice().reverse();
+
+      if (months.length === 0) {
+        setProfitLossTrend([]);
+        setOverallProfitLoss({ revenue: 0, expense: 0, profit: 0, loss: 0 });
+        return;
+      }
+      const firstMonth = months[0];
+      const lastMonth = months[months.length - 1];
+      const [startYear, startMonth] = firstMonth.split("-");
+      const [endYear, endMonth] = lastMonth.split("-");
+
+      const startDate = new Date(startYear, Number(startMonth) - 1, 1).toISOString();
+      const endDate = new Date(endYear, Number(endMonth), 0, 23, 59, 59).toISOString();
+
+      const [
+        { data: allOrders, error: ordersErr },
+        { data: allPurchases, error: purchasesErr },
+      ] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("id, total, created_at, status")
+          .eq("status", "completed")
+          .gte("created_at", startDate)
+          .lte("created_at", endDate),
+        supabase
+          .from("purchases")
+          .select("id, total_amount, created_at, status")
+          .eq("status", "received")
+          .gte("created_at", startDate)
+          .lte("created_at", endDate),
+      ]);
+
+      if (ordersErr) throw ordersErr;
+      if (purchasesErr) throw purchasesErr;
+
+      const revenueByMonth = {};
+      const expenseByMonth = {};
+
+      (allOrders || []).forEach((o) => {
+        if (!o.created_at) return;
+        const key = o.created_at.slice(0, 7);
+        revenueByMonth[key] = (revenueByMonth[key] || 0) + (parseFloat(o.total) || 0);
+      });
+
+      (allPurchases || []).forEach((p) => {
+        if (!p.created_at) return;
+        const key = p.created_at.slice(0, 7);
+        expenseByMonth[key] = (expenseByMonth[key] || 0) + (parseFloat(p.total_amount) || 0);
+      });
+
+      const trend = months.map((m) => {
+        const revenue = revenueByMonth[m] || 0;
+        const expense = expenseByMonth[m] || 0;
+        const profit = Math.max(revenue - expense, 0);
+        const loss = Math.max(expense - revenue, 0);
+        const [y, mo] = m.split("-");
+        const label = new Date(y, Number(mo) - 1, 1).toLocaleString("default", { month: "short", year: "numeric" });
+        return { month: m, label, revenue, expense, profit, loss };
+      });
+
+      const totalRevenue = trend.reduce((sum, t) => sum + t.revenue, 0);
+      const totalExpense = trend.reduce((sum, t) => sum + t.expense, 0);
+
+      setProfitLossTrend(trend);
+      setOverallProfitLoss({
+        revenue: totalRevenue,
+        expense: totalExpense,
+        profit: Math.max(totalRevenue - totalExpense, 0),
+        loss: Math.max(totalExpense - totalRevenue, 0),
+      });
+    } catch (err) {
+      console.error("Failed to load all-base profit/loss:", err);
+      setProfitLossTrend([]);
+      setOverallProfitLoss({ revenue: 0, expense: 0, profit: 0, loss: 0 });
+    }
+  };
+
   const chartData = {
     labels: monthlyData.map((d) => d.name),
     datasets: [
@@ -213,6 +311,24 @@ export default function Dashboard() {
           .filter((d) => (supplierFilter === "all" ? true : d.name === supplierFilter))
           .map((d) => d.total),
         backgroundColor: "rgba(249, 115, 22, 0.8)",
+        borderRadius: 6,
+      },
+    ],
+  };
+
+  const profitLossChartData = {
+    labels: profitLossTrend.map((d) => d.label),
+    datasets: [
+      {
+        label: "Profit",
+        data: profitLossTrend.map((d) => d.profit),
+        backgroundColor: "rgba(34, 197, 94, 0.85)",
+        borderRadius: 6,
+      },
+      {
+        label: "Loss",
+        data: profitLossTrend.map((d) => d.loss),
+        backgroundColor: "rgba(239, 68, 68, 0.85)",
         borderRadius: 6,
       },
     ],
@@ -278,14 +394,39 @@ export default function Dashboard() {
     },
   };
 
-  const getLast12Months = () => {
+  const getRecentMonths = (count = 12) => {
     const months = [];
     const now = new Date();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < count; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
     }
     return months;
+  };
+
+  const getCustomMonthRange = (startMonth, endMonth) => {
+    if (!startMonth || !endMonth) return [];
+    if (startMonth > endMonth) return [];
+
+    const [startYear, startMon] = startMonth.split("-").map(Number);
+    const [endYear, endMon] = endMonth.split("-").map(Number);
+
+    const months = [];
+    let cursor = new Date(startYear, startMon - 1, 1);
+    const end = new Date(endYear, endMon - 1, 1);
+
+    while (cursor <= end) {
+      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    }
+
+    return months;
+  };
+
+  const formatMonthLabel = (monthValue) => {
+    if (!monthValue) return "-";
+    const [year, month] = monthValue.split("-");
+    return new Date(Number(year), Number(month) - 1, 1).toLocaleString("default", { month: "short", year: "numeric" });
   };
 
   return (
@@ -314,7 +455,7 @@ export default function Dashboard() {
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
           >
-            {getLast12Months().map((m) => {
+            {getRecentMonths(12).map((m) => {
               const [year, month] = m.split("-");
               const date = new Date(year, month - 1, 1);
               return (
@@ -412,6 +553,69 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-6 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">
+            {profitLossRange === "custom"
+              ? `All Base Profit & Loss (${formatMonthLabel(customProfitMonthRange.start)} - ${formatMonthLabel(customProfitMonthRange.end)})`
+              : `All Base Profit & Loss (Last ${profitLossRange} Months)`}
+          </h2>
+          <select
+            value={profitLossRange}
+            onChange={(e) => setProfitLossRange(e.target.value)}
+            className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
+          >
+            <option value="3">Last 3 Months</option>
+            <option value="6">Last 6 Months</option>
+            <option value="12">Last 12 Months</option>
+            <option value="custom">Custom Month Range</option>
+          </select>
+        </div>
+        {profitLossRange === "custom" && (
+          <div className="flex flex-wrap items-end gap-3 mb-4">
+            <div>
+              <label className="block text-xs text-slate-500 dark:text-slate-300 mb-1">Start Month</label>
+              <input
+                type="month"
+                value={customProfitMonthRange.start}
+                onChange={(e) => setCustomProfitMonthRange((prev) => ({ ...prev, start: e.target.value }))}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 dark:text-slate-300 mb-1">End Month</label>
+              <input
+                type="month"
+                value={customProfitMonthRange.end}
+                onChange={(e) => setCustomProfitMonthRange((prev) => ({ ...prev, end: e.target.value }))}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
+              />
+            </div>
+            {customProfitMonthRange.start && customProfitMonthRange.end && customProfitMonthRange.start > customProfitMonthRange.end && (
+              <p className="text-xs text-rose-600 dark:text-rose-400">Start month must be earlier than or equal to end month.</p>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Revenue: <span className="font-semibold text-emerald-600">{mmkFormatter.format(overallProfitLoss.revenue)}</span>
+            {"  |  "}
+            Expense: <span className="font-semibold text-rose-600">{mmkFormatter.format(overallProfitLoss.expense)}</span>
+            {"  |  "}
+            Net: <span className={`font-semibold ${overallProfitLoss.profit > 0 ? "text-emerald-600" : overallProfitLoss.loss > 0 ? "text-rose-600" : "text-slate-600 dark:text-slate-300"}`}>
+              {mmkFormatter.format(overallProfitLoss.profit > 0 ? overallProfitLoss.profit : -overallProfitLoss.loss)}
+            </span>
+          </div>
+        </div>
+        {profitLossTrend.length === 0 ? (
+          <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No profit/loss data found.</p>
+        ) : (
+          <div className="h-80">
+            <Bar data={profitLossChartData} options={{ ...currencyChartOptions, plugins: { ...currencyChartOptions.plugins, legend: { display: true, labels: { color: isDark ? "#cbd5e1" : "#334155" } } } }} />
+          </div>
+        )}
       </div>
     </div>
   );

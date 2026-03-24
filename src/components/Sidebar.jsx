@@ -124,6 +124,9 @@ export default function Sidebar({ isOpen }) {
                 <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
                   Purchase Report
                 </NavLink>
+                <NavLink to="/reports/profit-loss" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                  Profit & Loss Report
+                </NavLink>
                 <NavLink to="/reports/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
                   Supplier Outstanding Report
                 </NavLink>

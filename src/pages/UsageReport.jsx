@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import supabase from "../createClients";
 
 export default function UsageReport() {
   const [records, setRecords] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [orderUsageItemsMap, setOrderUsageItemsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("all");
   const [customStart, setCustomStart] = useState("");
@@ -21,11 +22,94 @@ export default function UsageReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [recordsRes, inventoryRes] = await Promise.all([
+      const [
+        recordsRes,
+        inventoryRes,
+        ordersRes,
+        orderItemsRes,
+        menuIngredientsRes,
+        menuSetItemsRes,
+      ] = await Promise.all([
         supabase.from("internal_consumption").select("*").eq("status", "completed").order("created_at", { ascending: false }),
-        supabase.from("inventory").select("*")
+        supabase.from("inventory").select("*"),
+        supabase.from("orders").select("*").eq("status", "completed").order("created_at", { ascending: false }),
+        supabase.from("order_items").select("*"),
+        supabase.from("menu_ingredients").select("*"),
+        supabase.from("menu_set_items").select("*"),
       ]);
-      setRecords(recordsRes.data || []);
+
+      const internalRecords = (recordsRes.data || []).map((r) => ({
+        ...r,
+        record_type: "internal",
+        display_id: `IC-${r.id}`,
+      }));
+
+      const orderRecords = [];
+      const computedOrderItemsMap = {};
+
+      const orderItemsByOrder = {};
+      (orderItemsRes.data || []).forEach((item) => {
+        if (!orderItemsByOrder[item.order_id]) orderItemsByOrder[item.order_id] = [];
+        orderItemsByOrder[item.order_id].push(item);
+      });
+
+      const ingredientsByMenu = {};
+      (menuIngredientsRes.data || []).forEach((ing) => {
+        if (!ingredientsByMenu[ing.menu_id]) ingredientsByMenu[ing.menu_id] = [];
+        ingredientsByMenu[ing.menu_id].push(ing);
+      });
+
+      const setItemsBySet = {};
+      (menuSetItemsRes.data || []).forEach((setItem) => {
+        if (!setItemsBySet[setItem.set_id]) setItemsBySet[setItem.set_id] = [];
+        setItemsBySet[setItem.set_id].push(setItem);
+      });
+
+      (ordersRes.data || []).forEach((order) => {
+        const recordId = `ORDER-${order.id}`;
+        const neededByInventoryId = {};
+
+        (orderItemsByOrder[order.id] || []).forEach((item) => {
+          const orderQty = parseFloat(item.qty) || 0;
+          if (orderQty <= 0) return;
+
+          if (item.menu_set_id) {
+            (setItemsBySet[item.menu_set_id] || []).forEach((setRow) => {
+              (ingredientsByMenu[setRow.menu_id] || []).forEach((ing) => {
+                const need = (parseFloat(ing.qty) || 0) * orderQty;
+                neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+              });
+            });
+          } else if (item.menu_id) {
+            (ingredientsByMenu[item.menu_id] || []).forEach((ing) => {
+              const need = (parseFloat(ing.qty) || 0) * orderQty;
+              neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+            });
+          }
+        });
+
+        const detailItems = Object.entries(neededByInventoryId).map(([inventory_id, qty]) => ({
+          inventory_id: Number(inventory_id),
+          qty: Number(qty),
+        }));
+
+        if (detailItems.length > 0) {
+          computedOrderItemsMap[recordId] = detailItems;
+          orderRecords.push({
+            id: recordId,
+            source_id: order.id,
+            created_at: order.created_at,
+            user_name: order.user_name || order.created_by || "-",
+            notes: `Auto reduce from completed order #${order.id}`,
+            status: "completed",
+            record_type: "order_auto",
+            display_id: `OD-${order.id}`,
+          });
+        }
+      });
+
+      setRecords([...orderRecords, ...internalRecords].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      setOrderUsageItemsMap(computedOrderItemsMap);
       setInventory(inventoryRes.data || []);
     } catch (err) {
       console.error("Error:", err);
@@ -84,11 +168,16 @@ export default function UsageReport() {
   const [recordItems, setRecordItems] = useState({});
 
   const toggleRecord = async (recordId) => {
+    const targetRecord = records.find((r) => r.id === recordId);
     if (expandedRecords[recordId]) {
       setExpandedRecords(prev => ({ ...prev, [recordId]: false }));
     } else {
-      const { data } = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", recordId);
-      setRecordItems(prev => ({ ...prev, [recordId]: data || [] }));
+      if (targetRecord?.record_type === "order_auto") {
+        setRecordItems(prev => ({ ...prev, [recordId]: orderUsageItemsMap[recordId] || [] }));
+      } else {
+        const { data } = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", recordId);
+        setRecordItems(prev => ({ ...prev, [recordId]: data || [] }));
+      }
       setExpandedRecords(prev => ({ ...prev, [recordId]: true }));
     }
   };
@@ -103,14 +192,22 @@ export default function UsageReport() {
   const exportToExcel = async () => {
     const reportData = [];
     for (const record of filteredRecords) {
-      const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
-      for (const item of items.data || []) {
+      let itemsData = [];
+      if (record.record_type === "order_auto") {
+        itemsData = orderUsageItemsMap[record.id] || [];
+      } else {
+        const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
+        itemsData = items.data || [];
+      }
+
+      for (const item of itemsData) {
         const inv = inventory.find((i) => i.id === item.inventory_id);
         const beforeQty = inv ? inv.qty + item.qty : item.qty;
         const afterQty = inv ? inv.qty : 0;
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
-          "Record ID": record.id,
+          "Record ID": record.display_id || record.id,
+          "Type": record.record_type === "order_auto" ? "Order Auto" : "Internal Usage",
           "Item Name": inv?.item_name || "Unknown",
           "Before Qty": beforeQty,
           "Used Qty": item.qty,
@@ -126,12 +223,13 @@ export default function UsageReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Type</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
   <td>${row.Date}</td>
   <td>${row["Record ID"]}</td>
+  <td>${row.Type}</td>
   <td>${row["Item Name"]}</td>
   <td>${row["Before Qty"]}</td>
   <td>${row["Used Qty"]}</td>
@@ -155,7 +253,7 @@ ${reportData.map(row =>
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Usage Report</h1>
-          <p className="text-sm text-slate-500 mt-1">View all internal usage</p>
+          <p className="text-sm text-slate-500 mt-1">View internal usage + auto order reduction</p>
         </div>
         <button
           onClick={exportToExcel}
@@ -232,6 +330,7 @@ ${reportData.map(row =>
                 <tr>
                   <th className="px-4 py-3 w-10"></th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Type</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
@@ -239,8 +338,8 @@ ${reportData.map(row =>
               </thead>
               <tbody>
                 {paginatedRecords.map((record) => (
-                  <>
-                    <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <Fragment key={record.id}>
+                    <tr className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <button
                           onClick={() => toggleRecord(record.id)}
@@ -249,14 +348,19 @@ ${reportData.map(row =>
                           {expandedRecords[record.id] ? "−" : "+"}
                         </button>
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">#{record.id}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{record.display_id || `#${record.id}`}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${record.record_type === "order_auto" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700"}`}>
+                          {record.record_type === "order_auto" ? "Order Auto" : "Internal"}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
                       <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
                       <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
                     </tr>
                     {expandedRecords[record.id] && (
                       <tr className="bg-slate-50">
-                        <td colSpan={5} className="px-4 py-3">
+                        <td colSpan={6} className="px-4 py-3">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left border-b">
@@ -287,7 +391,7 @@ ${reportData.map(row =>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

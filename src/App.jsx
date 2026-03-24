@@ -16,6 +16,7 @@ import InventoryReport from "./pages/InventoryReport";
 import TotalSalesReport from "./pages/TotalSalesReport";
 import UsageReport from "./pages/UsageReport";
 import AddStockReport from "./pages/AddStockReport";
+import ProfitLossReport from "./pages/ProfitLossReport";
 
 import UserCreate from "./pages/UserCreate";
 import InternalConsumption from "./pages/InternalConsumption";
@@ -174,6 +175,7 @@ export default function App() {
             <Route path="/reports/total-sales" element={<PrivateRoute user={user}><TotalSalesReport /></PrivateRoute>} />
             <Route path="/reports/usage" element={<PrivateRoute user={user}><UsageReport /></PrivateRoute>} />
             <Route path="/reports/add-stock" element={<PrivateRoute user={user}><AddStockReport /></PrivateRoute>} />
+            <Route path="/reports/profit-loss" element={<PrivateRoute user={user}><ProfitLossReport /></PrivateRoute>} />
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
