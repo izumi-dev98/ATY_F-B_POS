@@ -23,8 +23,27 @@ body {
     background-color: #0f172a !important;
 }
 
+.dark .bg-gray-50 {
+    background-color: #111827 !important;
+}
+
+.dark .bg-gray-200,
+.dark .bg-gray-300 {
+    background-color: #334155 !important;
+}
+
 .dark .bg-slate-100 {
     background-color: #273449 !important;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-blue-50,
+.dark .bg-emerald-50,
+.dark .bg-green-50,
+.dark .bg-rose-50,
+.dark .bg-amber-50,
+.dark .bg-yellow-50 {
+    background-color: #1e293b !important;
 }
 
 .dark .text-slate-900,
@@ -64,9 +83,20 @@ body {
     color: #e2e8f0 !important;
 }
 
+.dark .text-gray-300,
+.dark .text-slate-300 {
+    color: #dbeafe !important;
+}
+
 .dark .border-slate-300,
 .dark .border-slate-200,
 .dark .border-slate-100 {
+    border-color: #334155 !important;
+}
+
+.dark .border-gray-300,
+.dark .border-gray-200,
+.dark .border-gray-100 {
     border-color: #334155 !important;
 }
 
@@ -78,9 +108,38 @@ body {
     border-color: #475569 !important;
 }
 
+.dark select option {
+    background-color: #1e293b;
+    color: #e2e8f0;
+}
+
 .dark input::placeholder,
 .dark textarea::placeholder {
     color: #94a3b8 !important;
+}
+
+.dark table {
+    color: #e2e8f0;
+}
+
+.dark thead {
+    background-color: #273449 !important;
+}
+
+.dark th,
+.dark td {
+    border-color: #334155 !important;
+}
+
+.dark [class*="hover:bg-slate-50"]:hover,
+.dark [class*="hover:bg-slate-100"]:hover,
+.dark [class*="hover:bg-gray-100"]:hover,
+.dark [class*="hover:bg-gray-200"]:hover {
+    background-color: #334155 !important;
+}
+
+.dark [class*="bg-gray-300"] {
+    color: #e2e8f0 !important;
 }
 
 .dark .shadow,

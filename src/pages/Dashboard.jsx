@@ -34,6 +34,7 @@ export default function Dashboard() {
     currency: "MMK",
     maximumFractionDigits: 0,
   });
+  const isDark = document.documentElement.classList.contains("dark");
 
   // Fetch menu and menu set list for filter
   useEffect(() => {
@@ -230,9 +231,21 @@ export default function Dashboard() {
       },
     },
     scales: {
+      x: {
+        ticks: {
+          color: isDark ? "#cbd5e1" : "#334155",
+        },
+        grid: {
+          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+        },
+      },
       y: {
         ticks: {
+          color: isDark ? "#cbd5e1" : "#334155",
           callback: (value) => mmkFormatter.format(value),
+        },
+        grid: {
+          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
         },
       },
     },
@@ -245,9 +258,21 @@ export default function Dashboard() {
       legend: { display: false },
     },
     scales: {
+      x: {
+        ticks: {
+          color: isDark ? "#cbd5e1" : "#334155",
+        },
+        grid: {
+          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+        },
+      },
       y: {
         ticks: {
+          color: isDark ? "#cbd5e1" : "#334155",
           callback: (value) => value,
+        },
+        grid: {
+          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
         },
       },
     },
@@ -264,20 +289,20 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-1">View sales analytics</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Dashboard</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">View sales analytics</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
 
         {/* Month selector */}
         <div className="flex justify-end mb-4 gap-2">
           <select
             value={selectedMenu}
             onChange={(e) => setSelectedMenu(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
           >
             <option value="all">All Menu & Set</option>
             {menuOptions.map((m) => (
@@ -287,7 +312,7 @@ export default function Dashboard() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
           >
             {getLast12Months().map((m) => {
               const [year, month] = m.split("-");
@@ -301,13 +326,13 @@ export default function Dashboard() {
           </select>
         </div>
 
-        <h2 className="text-lg md:text-xl font-semibold mb-3">Monthly Sales (Menu + Menu Set)</h2>
+        <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 mb-3">Monthly Sales (Menu + Menu Set)</h2>
 
         {/* Scrollable content */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 min-h-0">
             {monthlyData.length === 0 ? (
-              <p className="text-gray-500 text-center mt-10">
+              <p className="text-gray-500 dark:text-slate-300 text-center mt-10">
                 No sales data for this month.
               </p>
             ) : (
@@ -318,17 +343,17 @@ export default function Dashboard() {
           </div>
 
           {mostSelling && (
-            <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg">
-              <h3 className="font-semibold">Most Selling (Menu + Set)</h3>
-              <p>
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-600 rounded-lg">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100">Most Selling (Menu + Set)</h3>
+              <p className="text-slate-700 dark:text-slate-200">
                 {mostSelling[0]} — {mmkFormatter.format(mostSelling[1])}
               </p>
             </div>
           )}
 
           {grandTotal > 0 && (
-            <div className="mt-4 p-4 bg-green-50 border-l-4 border-green-600 rounded-lg">
-              <h3 className="font-semibold">Grand Total</h3>
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/30 border-l-4 border-green-600 rounded-lg">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100">Grand Total</h3>
               <p className="text-xl font-bold text-green-700">
                 {mmkFormatter.format(grandTotal)}
               </p>
@@ -339,13 +364,13 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold">Inventory Stock Chart</h2>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">Inventory Stock Chart</h2>
             <select
               value={inventoryFilter}
               onChange={(e) => setInventoryFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
             >
               <option value="all">All Stock</option>
               <option value="low">Low Stock (&lt; 10)</option>
@@ -353,9 +378,9 @@ export default function Dashboard() {
             </select>
           </div>
           {inventoryChartData.length === 0 ? (
-            <p className="text-gray-500 text-center mt-10">No inventory data.</p>
+            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No inventory data.</p>
           ) : inventoryDataForChart.labels.length === 0 ? (
-            <p className="text-gray-500 text-center mt-10">No data for selected inventory filter.</p>
+            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No data for selected inventory filter.</p>
           ) : (
             <div className="h-80">
               <Bar data={inventoryDataForChart} options={qtyChartOptions} />
@@ -363,13 +388,13 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold">Supplier Purchase Chart</h2>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">Supplier Purchase Chart</h2>
             <select
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
             >
               <option value="all">All Suppliers</option>
               {supplierChartData.map((s) => (
@@ -378,9 +403,9 @@ export default function Dashboard() {
             </select>
           </div>
           {supplierChartData.length === 0 ? (
-            <p className="text-gray-500 text-center mt-10">No supplier purchase data for this month.</p>
+            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No supplier purchase data for this month.</p>
           ) : supplierDataForChart.labels.length === 0 ? (
-            <p className="text-gray-500 text-center mt-10">No data for selected supplier.</p>
+            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No data for selected supplier.</p>
           ) : (
             <div className="h-80">
               <Bar data={supplierDataForChart} options={currencyChartOptions} />
