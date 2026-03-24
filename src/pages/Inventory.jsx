@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { hasFeature } from "../utils/accessControl";
 
 export default function Inventory({
   inventory,
@@ -20,9 +21,10 @@ export default function Inventory({
   // Get user role
   const user = JSON.parse(localStorage.getItem("user"));
   const isSuperAdmin = user?.role === "superadmin";
-  const isAdmin = user?.role === "admin";
-  const canEditInventory = isSuperAdmin || isAdmin;
-  const canDeleteInventory = isSuperAdmin;
+  const isAdminRole = user?.role === "admin";
+  const canEditInventory = isSuperAdmin ? true : !isAdminRole && hasFeature(user, "btn-inventory-edit");
+  const canDeleteInventory = isSuperAdmin ? true : !isAdminRole && hasFeature(user, "btn-inventory-delete");
+  const canEditInventoryCategory = isSuperAdmin || isAdminRole || hasFeature(user, "btn-inventory-edit-category");
 
   const formatMMK = (amount) => {
     const num = Number(amount) || 0;
@@ -140,7 +142,8 @@ export default function Inventory({
     };
 
     if (isEditing) {
-      await updateInventoryItem(editId, isSuperAdmin ? fullPayload : adminCategoryPayload);
+      const payload = canEditInventory ? fullPayload : adminCategoryPayload;
+      await updateInventoryItem(editId, payload);
     }
 
     // Refresh latest prices after adding/updating
@@ -250,14 +253,16 @@ export default function Inventory({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {canEditInventory && (
+                      {(canEditInventory || canEditInventoryCategory) && (
                         <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => openEditModal(item)}
-                            className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                          >
-                            {isSuperAdmin ? "Edit" : "Edit Category"}
-                          </button>
+                          {(canEditInventory || canEditInventoryCategory) && (
+                            <button
+                              onClick={() => openEditModal(item)}
+                              className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                            >
+                              {canEditInventory ? "Edit" : "Edit Category"}
+                            </button>
+                          )}
                           {canDeleteInventory && (
                             <button
                               onClick={() => deleteInventoryItem(item.id)}
@@ -268,7 +273,7 @@ export default function Inventory({
                           )}
                         </div>
                       )}
-                      {!canEditInventory && <span className="text-slate-400 text-sm">View Only</span>}
+                      {!canEditInventory && !canEditInventoryCategory && <span className="text-slate-400 text-sm">View Only</span>}
                     </td>
                   </tr>
                 ))
@@ -311,11 +316,11 @@ export default function Inventory({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-bold text-slate-800 mb-4">
-              {isSuperAdmin ? "Edit Item" : "Edit Category"}
+              {canEditInventory ? "Edit Item" : "Edit Category"}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isSuperAdmin && (
+              {canEditInventory && (
                 <>
                   <input
                     name="item_name"

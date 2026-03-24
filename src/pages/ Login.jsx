@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
 
 export default function Login({ setUser }) { // <-- receive setUser from App.js
     const [username, setUsername] = useState("");
@@ -25,11 +26,26 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
             if (error || !data) return Swal.fire("Error", "User not found", "error");
             if (data.password !== password) return Swal.fire("Error", "Wrong password", "error");
 
+            let permissions = ROLE_ACCESS_RIGHTS[data.role] || [];
+            try {
+                const { data: rightsRows } = await supabase
+                    .from("user_rights")
+                    .select("function_key, is_allowed")
+                    .eq("user_id", data.id);
+                if (Array.isArray(rightsRows) && rightsRows.length > 0) {
+                    permissions = rightsRows.filter(r => r.is_allowed).map(r => r.function_key);
+                }
+            } catch (rightsErr) {
+                console.warn("user_rights table not available, using role defaults", rightsErr?.message);
+            }
+
+            const loginUser = { ...data, permissions };
+
             // Save user to localStorage
-            localStorage.setItem("user", JSON.stringify(data));
+            localStorage.setItem("user", JSON.stringify(loginUser));
 
             // Update App.js state
-            if (setUser) setUser(data);
+            if (setUser) setUser(loginUser);
 
             Swal.fire("Success", "Logged in!", "success").then(() => {
                 navigate("/dashboard"); // redirect to dashboard

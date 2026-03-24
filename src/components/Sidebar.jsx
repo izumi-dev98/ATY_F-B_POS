@@ -1,18 +1,23 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-
-const accessRights = {
-  superadmin: ["dashboard", "payments", "history", "menu", "category", "inventory", "report", "user-create", "internal-consumption", "discount-type", "purchase"],
-  admin: ["dashboard", "history", "inventory", "report" , "payments",  "menu", "category", "internal-consumption", "discount-type", "purchase"],
-  chef: ["dashboard",  "history", "report", "menu", "category", "internal-consumption"],
-  user: ["dashboard", "payments", "history", "report", "internal-consumption"],
-};
+import { hasFeature } from "../utils/accessControl";
 
 export default function Sidebar({ isOpen }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const user = JSON.parse(localStorage.getItem("user"));
-  const roleAccess = user ? accessRights[user.role] : [];
+  const canAccess = (feature) => hasFeature(user, feature);
+  const canOpenPurchase = ["purchase", "purchase-order", "supplier", "purchase-return", "supplier-outstanding"].some(canAccess);
+  const canOpenReports = [
+    "report",
+    "report-inventory",
+    "report-total-sales",
+    "report-usage",
+    "report-add-stock",
+    "report-purchase",
+    "report-profit-loss",
+    "report-supplier-outstanding",
+  ].some(canAccess);
 
   const baseLink = "block px-4 py-2.5 rounded-lg text-sm font-medium transition-all";
   const normal = "text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-indigo-400";
@@ -22,55 +27,55 @@ export default function Sidebar({ isOpen }) {
     <aside className={`fixed top-12 left-0 z-40 h-[calc(100vh-3rem)] w-60 bg-white border-r border-slate-200 dark:bg-slate-800 dark:border-slate-700 transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <nav className="p-3 space-y-1 overflow-y-auto h-full">
 
-        {roleAccess.includes("dashboard") && (
+        {canAccess("dashboard") && (
           <NavLink to="/dashboard" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Dashboard
           </NavLink>
         )}
 
-        {roleAccess.includes("payments") && (
+        {canAccess("payments") && (
           <NavLink to="/payments" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Payments
           </NavLink>
         )}
 
-        {roleAccess.includes("history") && (
+        {canAccess("history") && (
           <NavLink to="/history" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             History
           </NavLink>
         )}
 
-        {roleAccess.includes("menu") && (
+        {canAccess("menu") && (
           <NavLink to="/menu" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Menu
           </NavLink>
         )}
 
-        {roleAccess.includes("category") && (
+        {canAccess("category") && (
           <NavLink to="/category" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Category
           </NavLink>
         )}
 
-        {roleAccess.includes("inventory") && (
+        {canAccess("inventory") && (
           <NavLink to="/inventory" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Inventory
           </NavLink>
         )}
 
-        {roleAccess.includes("internal-consumption") && (
+        {canAccess("internal-consumption") && (
           <NavLink to="/internal-consumption" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Internal Consumption
           </NavLink>
         )}
 
-        {roleAccess.includes("discount-type") && (
+        {canAccess("discount-type") && (
           <NavLink to="/discount-type" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Discount Type
           </NavLink>
         )}
 
-        {roleAccess.includes("purchase") && (
+        {canOpenPurchase && (
           <div>
             <button onClick={() => setPurchaseOpen(!purchaseOpen)} className={`${baseLink} ${normal} w-full text-left flex justify-between items-center`}>
               <span>Purchase</span>
@@ -80,26 +85,33 @@ export default function Sidebar({ isOpen }) {
             </button>
             {purchaseOpen && (
               <div className="mt-1 ml-3 space-y-1 border-l-2 border-indigo-200 pl-3 dark:border-indigo-800">
-                <NavLink to="/purchase" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Purchase Order
-                </NavLink>
-                <NavLink to="/supplier" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Supplier
-                </NavLink>
-                <NavLink to="/purchase-return" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Purchase Return
-                </NavLink>
-                
-                <NavLink to="/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Supplier Outstanding
-                </NavLink>
+                {canAccess("purchase-order") && (
+                  <NavLink to="/purchase" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Purchase Order
+                  </NavLink>
+                )}
+                {canAccess("supplier") && (
+                  <NavLink to="/supplier" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Supplier
+                  </NavLink>
+                )}
+                {canAccess("purchase-return") && (
+                  <NavLink to="/purchase-return" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Purchase Return
+                  </NavLink>
+                )}
+                {canAccess("supplier-outstanding") && (
+                  <NavLink to="/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Supplier Outstanding
+                  </NavLink>
+                )}
 
               </div>
             )}
           </div>
         )}
 
-        {roleAccess.includes("report") && (
+        {canOpenReports && (
           <div>
             <button onClick={() => setReportOpen(!reportOpen)} className={`${baseLink} ${normal} w-full text-left flex justify-between items-center`}>
               <span>Reports</span>
@@ -109,35 +121,55 @@ export default function Sidebar({ isOpen }) {
             </button>
             {reportOpen && (
               <div className="mt-1 ml-3 space-y-1 border-l-2 border-indigo-200 pl-3 dark:border-indigo-800">
-                <NavLink to="/reports/inventory" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Inventory Report
-                </NavLink>
-                <NavLink to="/reports/total-sales" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Total Sales Report
-                </NavLink>
-                <NavLink to="/reports/usage" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Usage Report
-                </NavLink>
-                <NavLink to="/reports/add-stock" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Add Stock Report
-                </NavLink>
-                <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Purchase Report
-                </NavLink>
-                <NavLink to="/reports/profit-loss" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Profit & Loss Report
-                </NavLink>
-                <NavLink to="/reports/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
-                  Supplier Outstanding Report
-                </NavLink>
+                {canAccess("report-inventory") && (
+                  <NavLink to="/reports/inventory" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Inventory Report
+                  </NavLink>
+                )}
+                {canAccess("report-total-sales") && (
+                  <NavLink to="/reports/total-sales" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Total Sales Report
+                  </NavLink>
+                )}
+                {canAccess("report-usage") && (
+                  <NavLink to="/reports/usage" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Usage Report
+                  </NavLink>
+                )}
+                {canAccess("report-add-stock") && (
+                  <NavLink to="/reports/add-stock" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Add Stock Report
+                  </NavLink>
+                )}
+                {canAccess("report-purchase") && (
+                  <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Purchase Report
+                  </NavLink>
+                )}
+                {canAccess("report-profit-loss") && (
+                  <NavLink to="/reports/profit-loss" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Profit & Loss Report
+                  </NavLink>
+                )}
+                {canAccess("report-supplier-outstanding") && (
+                  <NavLink to="/reports/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"}`}>
+                    Supplier Outstanding Report
+                  </NavLink>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {roleAccess.includes("user-create") && (
+        {canAccess("user-create") && (
           <NavLink to="/user-create" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
             Create User
+          </NavLink>
+        )}
+
+        {canAccess("user-right") && (
+          <NavLink to="/user-right" className={({ isActive }) => `${baseLink} ${isActive ? active : normal}`}>
+            User Right
           </NavLink>
         )}
 

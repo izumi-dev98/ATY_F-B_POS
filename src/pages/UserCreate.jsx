@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { hasFeature } from "../utils/accessControl";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -14,6 +15,10 @@ export default function UserManagement() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("user");
+  const currentUser = JSON.parse(localStorage.getItem("user"));
+  const canAddUser = hasFeature(currentUser, "btn-user-add");
+  const canEditUser = hasFeature(currentUser, "btn-user-edit");
+  const canDeleteUser = hasFeature(currentUser, "btn-user-delete");
 
   // ------------------- FETCH USERS -------------------
   const fetchUsers = async () => {
@@ -133,12 +138,14 @@ export default function UserManagement() {
           <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
           <p className="text-sm text-slate-500 mt-1">Create and manage users</p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          + Add User
-        </button>
+        {canAddUser && (
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            + Add User
+          </button>
+        )}
       </div>
 
       {/* SEARCH */}
@@ -175,18 +182,25 @@ export default function UserManagement() {
               <td className="px-4 py-3 text-slate-600">{user.username}</td>
               <td className="px-4 py-3 text-slate-600 capitalize">{user.role}</td>
               <td className="px-4 py-3">
-              <button
-                  onClick={() => openEditModal(user)}
-                  className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteUser(user.id)}
-                  className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                >
-                  Delete
-                </button>
+                {canEditUser && (
+                  <button
+                    onClick={() => openEditModal(user)}
+                    className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                  >
+                    Edit
+                  </button>
+                )}
+                {canDeleteUser && (
+                  <button
+                    onClick={() => deleteUser(user.id)}
+                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                )}
+                {!canEditUser && !canDeleteUser && (
+                  <span className="text-xs text-slate-400">No Action</span>
+                )}
               </td>
             </tr>
           ))}
