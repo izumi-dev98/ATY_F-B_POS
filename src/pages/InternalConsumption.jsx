@@ -13,9 +13,9 @@ export default function InternalConsumption({ inventory, setInventory }) {
   });
   const [addFormData, setAddFormData] = useState({
     notes: "",
+    date: new Date().toISOString().split('T')[0],
   });
   const [latestPrices, setLatestPrices] = useState({});
-  const [selectedAddItemsWithPrice, setSelectedAddItemsWithPrice] = useState({});
   const [loading, setLoading] = useState(false);
 
   // Filter states
@@ -183,11 +183,6 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (exists) {
         return prev.filter((i) => i.id !== item.id);
       }
-      const latestPrice = latestPrices[item.item_name?.toLowerCase().trim()] ?? item.price ?? 0;
-      setSelectedAddItemsWithPrice((prevPrice) => ({
-        ...prevPrice,
-        [item.id]: latestPrice
-      }));
       return [...prev, { ...item, add_qty: "" }];
     });
   };
@@ -198,13 +193,6 @@ export default function InternalConsumption({ inventory, setInventory }) {
         i.id === itemId ? { ...i, add_qty: qty } : i,
       ),
     );
-  };
-
-  const updateItemAddPrice = (itemId, price) => {
-    setSelectedAddItemsWithPrice((prev) => ({
-      ...prev,
-      [itemId]: price
-    }));
   };
 
   const handleAddStockSubmit = async (e) => {
@@ -248,17 +236,18 @@ export default function InternalConsumption({ inventory, setInventory }) {
         const addQty = parseFloat(item.add_qty);
         const currentInv = inventory.find(inv => inv.id === item.id);
         const currentQty = currentInv ? currentInv.qty : 0;
-        const manualPrice = selectedAddItemsWithPrice[item.id];
+        const itemKey = item.item_name?.toLowerCase().trim();
+        const autoLatestPrice = latestPrices[itemKey] ?? item.price ?? 0;
 
         try {
-          // Insert consumption item with price
+          // Insert consumption item using auto latest price
           const result = await supabase
             .from("internal_consumption_items")
             .insert({
               consumption_id: record.id,
               inventory_id: item.id,
               qty: addQty,
-              unit_price: manualPrice !== undefined ? manualPrice : item.price,
+              unit_price: autoLatestPrice,
             });
 
           if (result.error) {
@@ -269,12 +258,9 @@ export default function InternalConsumption({ inventory, setInventory }) {
           console.error("Insert exception:", err);
         }
 
-        // Add inventory with new price
+        // Add inventory and keep latest price in inventory
         const newQty = currentQty + addQty;
-        const updateData = { qty: newQty };
-        if (manualPrice !== undefined && manualPrice !== null) {
-          updateData.price = manualPrice;
-        }
+        const updateData = { qty: newQty, price: autoLatestPrice };
         await supabase
           .from("inventory")
           .update(updateData)
@@ -297,7 +283,10 @@ export default function InternalConsumption({ inventory, setInventory }) {
       Swal.fire("Success", "Stock added successfully!", "success");
       setShowAddModal(false);
       setSelectedAddItems([]);
-      setAddFormData({ notes: "" });
+      setAddFormData({
+        notes: "",
+        date: new Date().toISOString().split('T')[0],
+      });
       fetchRecords();
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -354,6 +343,11 @@ export default function InternalConsumption({ inventory, setInventory }) {
       const deductFromStockHistory = async (itemId, itemName, usageQty) => {
         const normalizedName = itemName?.trim();
         if (!normalizedName || usageQty <= 0) return { remaining: 0, success: true };
+        const getFifoTimestamp = (value) => {
+          if (!value) return Number.POSITIVE_INFINITY;
+          const ts = new Date(value).getTime();
+          return Number.isNaN(ts) ? Number.POSITIVE_INFINITY : ts;
+        };
 
         // Fetch received purchases ordered by date (FIFO)
         const { data: purchases, error: purchasesErr } = await supabase
@@ -395,6 +389,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
                 qty: parseFloat(pi.qty) || 0,
                 unit_price: parseFloat(pi.unit_price) || 0,
                 date: purchase?.date || null,
+                fifoTimestamp: getFifoTimestamp(purchase?.date),
                 source: "purchase"
               });
             });
@@ -418,7 +413,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
                   id: ai.id,
                   qty: parseFloat(ai.qty) || 0,
                   unit_price: parseFloat(ai.unit_price) || 0,
-                  date: addStock?.created_at ? new Date(addStock.created_at).toISOString().split('T')[0] : null,
+                  date: addStock?.created_at || null,
+                  fifoTimestamp: getFifoTimestamp(addStock?.created_at),
                   source: "add_stock"
                 });
               }
@@ -426,13 +422,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
           }
         }
 
-        // Sort by date (FIFO - oldest first), then by id
+        // True FIFO across sources:
+        // 1) oldest date/time first
+        // 2) purchase before add_stock when timestamp ties
+        // 3) stable numeric id as final tie-breaker
         fifoList.sort((a, b) => {
-          if (a.date && b.date) {
-            const dateDiff = new Date(a.date) - new Date(b.date);
-            if (dateDiff !== 0) return dateDiff;
-          } else if (a.date) return -1;
-          else if (b.date) return 1;
+          if (a.fifoTimestamp !== b.fifoTimestamp) return a.fifoTimestamp - b.fifoTimestamp;
+          if (a.source !== b.source) return a.source === "purchase" ? -1 : 1;
           return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
@@ -476,8 +472,6 @@ export default function InternalConsumption({ inventory, setInventory }) {
         return { remaining, success: remaining <= 0 };
       };
 
-      const insufficientHistoryItems = [];
-
       // Create consumption items and deduct inventory
       for (const item of selectedItems) {
         const usageQty = parseFloat(item.usage_qty);
@@ -497,12 +491,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
           .update({ qty: newQty })
           .eq("id", item.id);
 
-        const result = await deductFromStockHistory(item.id, item.item_name, usageQty);
-        if (!result.success) {
-          insufficientHistoryItems.push(
-            `${item.item_name} (remaining ${result.remaining})`,
-          );
-        }
+        // Deduct from stock history (FIFO - date/time order)
+        await deductFromStockHistory(item.id, item.item_name, usageQty);
       }
 
       // Update local inventory state
@@ -515,15 +505,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
       });
       setInventory(updatedInventory);
 
-      if (insufficientHistoryItems.length > 0) {
-        Swal.fire(
-          "Saved with warning",
-          `Usage saved. Stock history was not enough for: ${insufficientHistoryItems.join(", ")}`,
-          "warning",
-        );
-      } else {
-        Swal.fire("Success", "Usage recorded successfully!", "success");
-      }
+      Swal.fire("Success", "Usage recorded successfully!", "success");
       setShowModal(false);
       setSelectedItems([]);
       setFormData({ notes: "" });
@@ -902,8 +884,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
                         onClick={() => toggleItemSelection(item)}
                         className={`p-3 rounded-xl border cursor-pointer transition ${
                           isSelected
-                            ? "bg-blue-50 border-blue-500"
-                            : "hover:bg-gray-50"
+                            ? "bg-blue-50 border-blue-500 dark:bg-blue-900/30 dark:border-blue-400"
+                            : "hover:bg-gray-50 dark:hover:bg-slate-700/60"
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -1082,8 +1064,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
                         onClick={() => toggleAddItemSelection(item)}
                         className={`p-3 rounded-xl border cursor-pointer transition ${
                           isSelected
-                            ? "bg-green-50 border-green-500"
-                            : "hover:bg-gray-50"
+                            ? "bg-green-50 border-green-500 dark:bg-emerald-900/30 dark:border-emerald-400"
+                            : "hover:bg-gray-50 dark:hover:bg-slate-700/60"
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -1136,20 +1118,18 @@ export default function InternalConsumption({ inventory, setInventory }) {
               {selectedAddItems.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Quantity & Price *
+                    Add Quantity *
                   </label>
                   <div className="space-y-2">
                     {selectedAddItems.map((item) => {
                       const latestPrice = latestPrices[item.item_name?.toLowerCase().trim()];
-                      const displayPrice = selectedAddItemsWithPrice[item.id] !== undefined
-                        ? selectedAddItemsWithPrice[item.id]
-                        : (latestPrice ?? item.price ?? 0);
+                      const displayPrice = latestPrice ?? item.price ?? 0;
                       return (
                         <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-800 rounded-lg">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.item_name}</p>
                             <p className="text-xs text-gray-500">
-                              Latest Price: {latestPrice ? mmkFormatter.format(latestPrice) : item.price ? mmkFormatter.format(item.price) : "-"}
+                              Auto Price: {displayPrice ? mmkFormatter.format(displayPrice) : "-"}
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
@@ -1169,26 +1149,25 @@ export default function InternalConsumption({ inventory, setInventory }) {
                             />
                             <span className="text-xs text-gray-500 w-8">{item.type}</span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-gray-500">Price:</span>
-                            <input
-                              type="number"
-                              step="any"
-                              min="0"
-                              value={displayPrice}
-                              onChange={(e) =>
-                                updateItemAddPrice(item.id, parseFloat(e.target.value) || 0)
-                              }
-                              className="w-24 px-2 py-1 border rounded-lg text-sm"
-                              placeholder="Price"
-                            />
-                          </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
               )}
+
+              {/* Date (Disabled - Current Date) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={addFormData.date}
+                  disabled
+                  className="w-full px-3 py-2 border rounded-xl bg-gray-100 text-gray-500"
+                />
+              </div>
 
               {/* Notes */}
               <div>
@@ -1212,7 +1191,10 @@ export default function InternalConsumption({ inventory, setInventory }) {
                   onClick={() => {
                     setShowAddModal(false);
                     setSelectedAddItems([]);
-                    setAddFormData({ notes: "" });
+                    setAddFormData({
+                      notes: "",
+                      date: new Date().toISOString().split('T')[0],
+                    });
                     setItemSearch("");
                     setAddItemPage(1);
                   }}

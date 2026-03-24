@@ -158,6 +158,11 @@ export default function InventoryReport() {
   // View stock history for an item (Purchase + Add Stock mixed, sorted by date oldest first)
   const viewPurchaseHistory = async (item) => {
     setSelectedItem(item);
+    const getFifoTimestamp = (value) => {
+      if (!value) return Number.POSITIVE_INFINITY;
+      const ts = new Date(value).getTime();
+      return Number.isNaN(ts) ? Number.POSITIVE_INFINITY : ts;
+    };
 
     // Fetch purchase items for this item name (case insensitive)
     const { data: purchaseItems } = await supabase
@@ -205,6 +210,7 @@ export default function InventoryReport() {
           history.push({
             ...pi,
             purchase_date: purchase.date || "-",
+            fifo_date: purchase.date || null,
             invoice_number: purchase.invoice_number || "-",
             supplier_id: purchase.supplier_id,
             source_type: "Purchase",
@@ -232,6 +238,7 @@ export default function InventoryReport() {
           unit_price: parseFloat(ai.unit_price) || 0,
           total_price: (parseFloat(ai.qty) || 0) * (parseFloat(ai.unit_price) || 0),
           purchase_date: createdAt ? new Date(createdAt).toISOString().split('T')[0] : "-",
+          fifo_date: createdAt || null,
           invoice_number: "-",
           supplier_id: null,
           source_type: "Add Stock",
@@ -240,14 +247,16 @@ export default function InventoryReport() {
       });
     }
 
-    // Sort by Date (oldest first) for FIFO reduction
+    // Keep list in FIFO order for consistent usage-reduction tracing
     history.sort((a, b) => {
-      const dateDiff = new Date(a.purchase_date) - new Date(b.purchase_date);
-      if (dateDiff !== 0) return dateDiff;
+      const tsA = getFifoTimestamp(a.fifo_date);
+      const tsB = getFifoTimestamp(b.fifo_date);
+      if (tsA !== tsB) return tsA - tsB;
+      if (a.source_type !== b.source_type) return a.source_type === "Purchase" ? -1 : 1;
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
 
-    // Reverse for display (Latest First in table) - no usage reduction in display
+    // Show latest on top in details table
     history.reverse();
 
     setPurchaseHistory(history);

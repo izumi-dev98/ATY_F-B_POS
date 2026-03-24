@@ -261,38 +261,127 @@ export default function History({ setInventory }) {
         }
       }
 
-      // FIFO deduction from purchase_items for same item name
-      const deductFromPurchaseHistory = async (itemName, qtyToDeduct) => {
+      // FIFO deduction from stock history (Purchase + Add Stock) by date
+      const deductFromStockHistory = async (inventoryId, itemName, qtyToDeduct) => {
         const normalizedName = itemName?.trim();
         if (!normalizedName || qtyToDeduct <= 0) return qtyToDeduct;
-        if (receivedPurchaseIds.length === 0) return qtyToDeduct;
 
-        const { data: purchaseItems, error: purchaseItemsErr } = await supabase
-          .from("purchase_items")
-          .select("id, qty, unit_price")
-          .eq("item_name", normalizedName)
-          .in("purchase_id", receivedPurchaseIds)
-          .order("id", { ascending: true });
-        if (purchaseItemsErr) throw purchaseItemsErr;
+        // Fetch received purchases ordered by date (FIFO)
+        const { data: purchases, error: purchasesErr } = await supabase
+          .from("purchases")
+          .select("id, date")
+          .eq("status", "received")
+          .order("date", { ascending: true });
 
+        if (purchasesErr) throw purchasesErr;
+        const purchaseIds = (purchases || []).map((p) => p.id);
+
+        // Fetch add_stock records ordered by date (FIFO)
+        const { data: addStockRecords, error: addStockErr } = await supabase
+          .from("internal_consumption")
+          .select("id, created_at")
+          .eq("status", "add_stock")
+          .order("created_at", { ascending: true });
+
+        if (addStockErr) throw addStockErr;
+        const addStockIds = (addStockRecords || []).map((r) => r.id);
+
+        // Build combined FIFO list with dates
+        const fifoList = [];
+
+        // Add purchase items with date
+        if (purchaseIds.length > 0) {
+          const { data: purchaseItems, error: itemsErr } = await supabase
+            .from("purchase_items")
+            .select("id, qty, unit_price, purchase_id")
+            .ilike("item_name", normalizedName)
+            .in("purchase_id", purchaseIds);
+
+          if (itemsErr) throw itemsErr;
+          if (purchaseItems) {
+            purchaseItems.forEach(pi => {
+              const purchase = purchases?.find(p => p.id === pi.purchase_id);
+              fifoList.push({
+                id: pi.id,
+                qty: parseFloat(pi.qty) || 0,
+                unit_price: parseFloat(pi.unit_price) || 0,
+                date: purchase?.date || null,
+                source: "purchase"
+              });
+            });
+          }
+        }
+
+        // Add add_stock items with date - use inventory_id directly
+        if (addStockIds.length > 0) {
+          const { data: addStockItems, error: itemsErr } = await supabase
+            .from("internal_consumption_items")
+            .select("id, qty, unit_price, consumption_id, inventory_id")
+            .in("consumption_id", addStockIds);
+
+          if (itemsErr) throw itemsErr;
+          if (addStockItems) {
+            addStockItems.forEach(ai => {
+              // Match by inventory_id directly
+              if (ai.inventory_id === inventoryId) {
+                const addStock = addStockRecords?.find(r => r.id === ai.consumption_id);
+                fifoList.push({
+                  id: ai.id,
+                  qty: parseFloat(ai.qty) || 0,
+                  unit_price: parseFloat(ai.unit_price) || 0,
+                  date: addStock?.created_at ? new Date(addStock.created_at).toISOString().split('T')[0] : null,
+                  source: "add_stock"
+                });
+              }
+            });
+          }
+        }
+
+        // Sort by date (FIFO - oldest first), then by id
+        fifoList.sort((a, b) => {
+          if (a.date && b.date) {
+            const dateDiff = new Date(a.date) - new Date(b.date);
+            if (dateDiff !== 0) return dateDiff;
+          } else if (a.date) return -1;
+          else if (b.date) return 1;
+          return (Number(a.id) || 0) - (Number(b.id) || 0);
+        });
+
+        // Deduct using FIFO
         let remaining = qtyToDeduct;
-        for (const row of purchaseItems || []) {
+        for (const row of fifoList) {
           if (remaining <= 0) break;
 
-          const currentQty = parseFloat(row.qty) || 0;
-          const unitPrice = parseFloat(row.unit_price) || 0;
+          const currentQty = row.qty;
+          const unitPrice = row.unit_price;
           if (currentQty <= 0) continue;
 
-          const usedQty = Math.min(currentQty, remaining);
-          const newQty = currentQty - usedQty;
+          const consumeQty = Math.min(currentQty, remaining);
+          const newQty = currentQty - consumeQty;
 
-          const { error: updateErr } = await supabase
-            .from("purchase_items")
-            .update({ qty: newQty, total_price: newQty * unitPrice })
-            .eq("id", row.id);
-          if (updateErr) throw updateErr;
+          // Update the appropriate table
+          if (row.source === "purchase") {
+            const { error: updateErr } = await supabase
+              .from("purchase_items")
+              .update({
+                qty: newQty,
+                total_price: newQty * unitPrice,
+              })
+              .eq("id", row.id);
 
-          remaining -= usedQty;
+            if (updateErr) throw updateErr;
+          } else if (row.source === "add_stock") {
+            const { error: updateErr } = await supabase
+              .from("internal_consumption_items")
+              .update({
+                qty: newQty,
+              })
+              .eq("id", row.id);
+
+            if (updateErr) throw updateErr;
+          }
+
+          remaining -= consumeQty;
         }
 
         return remaining;
@@ -314,7 +403,7 @@ export default function History({ setInventory }) {
 
         if (inv) inv.qty = newQty;
 
-        const remaining = await deductFromPurchaseHistory(inv?.item_name, neededQty);
+        const remaining = await deductFromStockHistory(Number(inventoryId), inv?.item_name, neededQty);
         if (remaining > 0) {
           purchaseHistoryWarnings.push(`${inv?.item_name || inventoryId} (remaining ${remaining})`);
         }
