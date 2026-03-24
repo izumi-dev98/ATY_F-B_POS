@@ -155,7 +155,7 @@ export default function InventoryReport() {
     setLoading(false);
   };
 
-  // View purchase history for an item
+  // View stock history for an item (Purchase + Add Stock mixed, sorted by date oldest first)
   const viewPurchaseHistory = async (item) => {
     setSelectedItem(item);
 
@@ -165,44 +165,92 @@ export default function InventoryReport() {
       .select("*")
       .ilike("item_name", item.item_name.trim());
 
+    // Fetch add_stock records for this item
+    const { data: addStockRecords } = await supabase
+      .from("internal_consumption")
+      .select("id, created_at")
+      .eq("status", "add_stock")
+      .order("created_at", { ascending: true });
+
+    const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+    let addStockItemsData = [];
+    if (addStockIds.length > 0) {
+      const { data: items } = await supabase
+        .from("internal_consumption_items")
+        .select("*")
+        .in("consumption_id", addStockIds);
+
+      if (items) {
+        addStockItemsData = items.filter(i => i.inventory_id === item.id);
+      }
+    }
+
+    const history = [];
+
+    // Add purchase items
     if (purchaseItems && purchaseItems.length > 0) {
-      // Get unique purchase IDs
       const purchaseIds = [...new Set(purchaseItems.map(pi => pi.purchase_id))];
 
-      // Fetch those purchases
       const { data: purchases } = await supabase
         .from("purchases")
         .select("*")
         .in("id", purchaseIds)
         .eq("status", "received")
-        .order("date", { ascending: false });
+        .order("date", { ascending: true });
 
-      // Merge purchase data with purchase items (received purchases only)
-      const history = purchaseItems
-        .map(pi => {
-          const purchase = purchases?.find(p => p.id === pi.purchase_id);
-          return {
+      purchaseItems.forEach(pi => {
+        const purchase = purchases?.find(p => p.id === pi.purchase_id);
+        if (purchase && purchase.status === "received") {
+          history.push({
             ...pi,
-            purchase_date: purchase?.date || "-",
-            invoice_number: purchase?.invoice_number || "-",
-            supplier_id: purchase?.supplier_id,
-            status: purchase?.status || "-"
-          };
-        })
-        .filter((row) => row.status === "received" && row.purchase_date !== "-");
-
-      // Sort by latest first in modal (newest date on top, then newest row id)
-      history.sort((a, b) => {
-        const dateDiff = new Date(b.purchase_date) - new Date(a.purchase_date);
-        if (dateDiff !== 0) return dateDiff;
-        return (Number(b.id) || 0) - (Number(a.id) || 0);
+            purchase_date: purchase.date || "-",
+            invoice_number: purchase.invoice_number || "-",
+            supplier_id: purchase.supplier_id,
+            source_type: "Purchase",
+            status: "received",
+            qty: parseFloat(pi.qty) || 0,
+            unit_price: parseFloat(pi.unit_price) || 0
+          });
+        }
       });
-
-      setPurchaseHistory(history);
-    } else {
-      setPurchaseHistory([]);
     }
 
+    // Add add_stock items
+    if (addStockItemsData.length > 0) {
+      const addStockMap = {};
+      addStockRecords?.forEach(r => {
+        addStockMap[r.id] = r.created_at;
+      });
+
+      addStockItemsData.forEach(ai => {
+        const createdAt = addStockMap[ai.consumption_id];
+        history.push({
+          id: ai.id,
+          item_name: item.item_name,
+          qty: parseFloat(ai.qty) || 0,
+          unit_price: parseFloat(ai.unit_price) || 0,
+          total_price: (parseFloat(ai.qty) || 0) * (parseFloat(ai.unit_price) || 0),
+          purchase_date: createdAt ? new Date(createdAt).toISOString().split('T')[0] : "-",
+          invoice_number: "-",
+          supplier_id: null,
+          source_type: "Add Stock",
+          status: "add_stock"
+        });
+      });
+    }
+
+    // Sort by Date (oldest first) for FIFO reduction
+    history.sort((a, b) => {
+      const dateDiff = new Date(a.purchase_date) - new Date(b.purchase_date);
+      if (dateDiff !== 0) return dateDiff;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+
+    // Reverse for display (Latest First in table) - no usage reduction in display
+    history.reverse();
+
+    setPurchaseHistory(history);
     setShowDetailModal(true);
   };
 
@@ -551,50 +599,61 @@ export default function InventoryReport() {
               <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
             </div>
 
-            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden flex-1 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-100 sticky top-0">
+                <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
                   <tr>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Invoice #</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Date</th>
-                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Supplier</th>
-                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Qty</th>
-                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
-                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Type</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Invoice #</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Date</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Supplier</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">Qty</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Unit Price</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {purchaseHistory.length > 0 ? (
-                    purchaseHistory.map((item, idx) => (
-                      <tr
-                        key={idx}
-                        className={`border-t border-slate-100 ${
-                          (parseFloat(item.qty) || 0) === 0 ? "bg-rose-50" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-2 text-slate-800 font-medium">{item.invoice_number}</td>
-                        <td className="px-4 py-2 text-slate-600">{item.purchase_date}</td>
-                        <td className="px-4 py-2 text-slate-600">{getSupplierName(item.supplier_id)}</td>
-                        <td className="px-4 py-2 text-center text-slate-600">{item.qty}</td>
-                        <td className="px-4 py-2 text-right text-slate-600">{mmkFormatter.format(item.unit_price)}</td>
-                        <td className="px-4 py-2 text-right font-medium text-slate-800">{mmkFormatter.format(item.total_price)}</td>
-                      </tr>
-                    ))
+                    purchaseHistory.map((item, idx) => {
+                      const qty = parseFloat(item.qty) || 0;
+                      const isZero = qty === 0;
+                      return (
+                        <tr
+                          key={idx}
+                          className={`border-t border-slate-100 dark:border-slate-700 ${
+                            isZero ? "bg-red-50 dark:bg-red-900/40" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              item.source_type === "Add Stock"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400"
+                            }`}>
+                              {item.source_type || "Purchase"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-slate-800 dark:text-slate-200 font-medium">{item.invoice_number}</td>
+                          <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.purchase_date}</td>
+                          <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{getSupplierName(item.supplier_id)}</td>
+                          <td className="px-4 py-2 text-center text-slate-600 dark:text-slate-400">{item.qty}</td>
+                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{mmkFormatter.format(item.unit_price)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-slate-800 dark:text-slate-200">{mmkFormatter.format(item.total_price)}</td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchase history found</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">No stock history found</td>
                     </tr>
                   )}
                 </tbody>
                 {purchaseHistory.length > 0 && (
-                  <tfoot className="bg-slate-50">
+                  <tfoot className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
                     <tr>
-                      <td colSpan={3} className="px-4 py-2 text-right font-bold text-slate-800">Total</td>
-                      <td className="px-4 py-2 text-center font-bold text-slate-800">
-                        {purchaseHistory.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0)}
-                      </td>
+                      <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total</td>
                       <td className="px-4 py-2"></td>
-                      <td className="px-4 py-2 text-right font-bold text-indigo-600">
+                      <td className="px-4 py-2 text-right font-bold text-indigo-600 dark:text-indigo-400">
                         {mmkFormatter.format(
                           purchaseHistory.reduce(
                             (sum, item) =>

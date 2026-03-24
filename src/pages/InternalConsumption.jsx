@@ -350,54 +350,130 @@ export default function InternalConsumption({ inventory, setInventory }) {
         .single();
       if (recordErr) throw recordErr;
 
-      // Deduct from purchase history details (FIFO: first purchase item first)
-      const deductFromPurchaseHistory = async (itemName, usageQty) => {
+      // Deduct from stock history (FIFO by date: Purchase first, then Add Stock)
+      const deductFromStockHistory = async (itemId, itemName, usageQty) => {
         const normalizedName = itemName?.trim();
-        if (!normalizedName || usageQty <= 0) return 0;
+        if (!normalizedName || usageQty <= 0) return { remaining: 0, success: true };
 
+        // Fetch received purchases ordered by date (FIFO)
         const { data: purchases, error: purchasesErr } = await supabase
           .from("purchases")
-          .select("id")
+          .select("id, date")
           .eq("status", "received")
-          .order("id", { ascending: true });
+          .order("date", { ascending: true });
 
         if (purchasesErr) throw purchasesErr;
         const purchaseIds = (purchases || []).map((p) => p.id);
-        if (purchaseIds.length === 0) return usageQty;
 
-        const { data: purchaseItems, error: itemsErr } = await supabase
-          .from("purchase_items")
-          .select("id, qty, unit_price")
-          .eq("item_name", normalizedName)
-          .in("purchase_id", purchaseIds)
-          .order("id", { ascending: true });
+        // Fetch add_stock records ordered by date (FIFO)
+        const { data: addStockRecords, error: addStockErr } = await supabase
+          .from("internal_consumption")
+          .select("id, created_at")
+          .eq("status", "add_stock")
+          .order("created_at", { ascending: true });
 
-        if (itemsErr) throw itemsErr;
+        if (addStockErr) throw addStockErr;
+        const addStockIds = (addStockRecords || []).map((r) => r.id);
 
+        // Build combined FIFO list with dates
+        const fifoList = [];
+
+        // Add purchase items with date
+        if (purchaseIds.length > 0) {
+          const { data: purchaseItems, error: itemsErr } = await supabase
+            .from("purchase_items")
+            .select("id, qty, unit_price, purchase_id")
+            .ilike("item_name", normalizedName)
+            .in("purchase_id", purchaseIds);
+
+          if (itemsErr) throw itemsErr;
+          if (purchaseItems) {
+            purchaseItems.forEach(pi => {
+              const purchase = purchases?.find(p => p.id === pi.purchase_id);
+              fifoList.push({
+                id: pi.id,
+                qty: parseFloat(pi.qty) || 0,
+                unit_price: parseFloat(pi.unit_price) || 0,
+                date: purchase?.date || null,
+                source: "purchase"
+              });
+            });
+          }
+        }
+
+        // Add add_stock items with date - use inventory_id directly
+        if (addStockIds.length > 0) {
+          const { data: addStockItems, error: itemsErr } = await supabase
+            .from("internal_consumption_items")
+            .select("id, qty, unit_price, consumption_id, inventory_id")
+            .in("consumption_id", addStockIds);
+
+          if (itemsErr) throw itemsErr;
+          if (addStockItems) {
+            addStockItems.forEach(ai => {
+              // Match by inventory_id directly
+              if (ai.inventory_id === itemId) {
+                const addStock = addStockRecords?.find(r => r.id === ai.consumption_id);
+                fifoList.push({
+                  id: ai.id,
+                  qty: parseFloat(ai.qty) || 0,
+                  unit_price: parseFloat(ai.unit_price) || 0,
+                  date: addStock?.created_at ? new Date(addStock.created_at).toISOString().split('T')[0] : null,
+                  source: "add_stock"
+                });
+              }
+            });
+          }
+        }
+
+        // Sort by date (FIFO - oldest first), then by id
+        fifoList.sort((a, b) => {
+          if (a.date && b.date) {
+            const dateDiff = new Date(a.date) - new Date(b.date);
+            if (dateDiff !== 0) return dateDiff;
+          } else if (a.date) return -1;
+          else if (b.date) return 1;
+          return (Number(a.id) || 0) - (Number(b.id) || 0);
+        });
+
+        // Deduct using FIFO
         let remaining = usageQty;
-        for (const row of purchaseItems || []) {
+        for (const row of fifoList) {
           if (remaining <= 0) break;
 
-          const currentQty = parseFloat(row.qty) || 0;
-          const unitPrice = parseFloat(row.unit_price) || 0;
+          const currentQty = row.qty;
+          const unitPrice = row.unit_price;
           if (currentQty <= 0) continue;
 
           const consumeQty = Math.min(currentQty, remaining);
           const newQty = currentQty - consumeQty;
 
-          const { error: updateErr } = await supabase
-            .from("purchase_items")
-            .update({
-              qty: newQty,
-              total_price: newQty * unitPrice,
-            })
-            .eq("id", row.id);
+          // Update the appropriate table
+          if (row.source === "purchase") {
+            const { error: updateErr } = await supabase
+              .from("purchase_items")
+              .update({
+                qty: newQty,
+                total_price: newQty * unitPrice,
+              })
+              .eq("id", row.id);
 
-          if (updateErr) throw updateErr;
+            if (updateErr) throw updateErr;
+          } else if (row.source === "add_stock") {
+            const { error: updateErr } = await supabase
+              .from("internal_consumption_items")
+              .update({
+                qty: newQty,
+              })
+              .eq("id", row.id);
+
+            if (updateErr) throw updateErr;
+          }
+
           remaining -= consumeQty;
         }
 
-        return remaining;
+        return { remaining, success: remaining <= 0 };
       };
 
       const insufficientHistoryItems = [];
@@ -421,10 +497,10 @@ export default function InternalConsumption({ inventory, setInventory }) {
           .update({ qty: newQty })
           .eq("id", item.id);
 
-        const remainingNotDeducted = await deductFromPurchaseHistory(item.item_name, usageQty);
-        if (remainingNotDeducted > 0) {
+        const result = await deductFromStockHistory(item.id, item.item_name, usageQty);
+        if (!result.success) {
           insufficientHistoryItems.push(
-            `${item.item_name} (remaining ${remainingNotDeducted})`,
+            `${item.item_name} (remaining ${result.remaining})`,
           );
         }
       }
@@ -442,7 +518,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (insufficientHistoryItems.length > 0) {
         Swal.fire(
           "Saved with warning",
-          `Usage saved. Purchase history was not enough for: ${insufficientHistoryItems.join(", ")}`,
+          `Usage saved. Stock history was not enough for: ${insufficientHistoryItems.join(", ")}`,
           "warning",
         );
       } else {
