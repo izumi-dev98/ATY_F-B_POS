@@ -18,8 +18,12 @@ export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [mostSelling, setMostSelling] = useState(null);
   const [grandTotal, setGrandTotal] = useState(0);
-  const [menuList, setMenuList] = useState([]);
+  const [menuOptions, setMenuOptions] = useState([]);
   const [selectedMenu, setSelectedMenu] = useState("all");
+  const [inventoryChartData, setInventoryChartData] = useState([]);
+  const [supplierChartData, setSupplierChartData] = useState([]);
+  const [inventoryFilter, setInventoryFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -31,13 +35,21 @@ export default function Dashboard() {
     maximumFractionDigits: 0,
   });
 
-  // Fetch menu list
+  // Fetch menu and menu set list for filter
   useEffect(() => {
-    const fetchMenus = async () => {
-      const { data } = await supabase.from("menu").select("id, menu_name");
-      setMenuList(data || []);
+    const fetchMenuOptions = async () => {
+      const [{ data: menus }, { data: sets }] = await Promise.all([
+        supabase.from("menu").select("id, menu_name"),
+        supabase.from("menu_sets").select("id, set_name"),
+      ]);
+
+      const options = [
+        ...((menus || []).map((m) => ({ key: `menu:${m.id}`, label: m.menu_name, type: "menu", id: m.id }))),
+        ...((sets || []).map((s) => ({ key: `set:${s.id}`, label: s.set_name, type: "set", id: s.id }))),
+      ];
+      setMenuOptions(options);
     };
-    fetchMenus();
+    fetchMenuOptions();
   }, []);
 
   const fetchDashboardData = async (monthYear) => {
@@ -46,62 +58,104 @@ export default function Dashboard() {
       const startOfMonth = new Date(year, month - 1, 1).toISOString();
       const endOfMonth = new Date(year, month, 0, 23, 59, 59).toISOString();
 
-      const { data: orders, error: ordersErr } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("status", "completed")
-        .gte("created_at", startOfMonth)
-        .lte("created_at", endOfMonth);
+      const [
+        { data: orders, error: ordersErr },
+        { data: orderItems, error: itemsErr },
+        { data: menuData, error: menuErr },
+        { data: menuSetsData, error: menuSetsErr },
+        { data: inventoryData, error: inventoryErr },
+        { data: suppliersData, error: suppliersErr },
+        { data: purchasesData, error: purchasesErr },
+      ] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("*")
+          .eq("status", "completed")
+          .gte("created_at", startOfMonth)
+          .lte("created_at", endOfMonth),
+        supabase.from("order_items").select("*"),
+        supabase.from("menu").select("id, menu_name"),
+        supabase.from("menu_sets").select("id, set_name"),
+        supabase.from("inventory").select("id, item_name, qty").order("qty", { ascending: false }),
+        supabase.from("suppliers").select("id, name"),
+        supabase
+          .from("purchases")
+          .select("id, supplier_id, status, total_amount, created_at")
+          .eq("status", "received")
+          .gte("created_at", startOfMonth)
+          .lte("created_at", endOfMonth),
+      ]);
 
       if (ordersErr) throw ordersErr;
-
-      const { data: orderItems, error: itemsErr } = await supabase
-        .from("order_items")
-        .select("*");
       if (itemsErr) throw itemsErr;
-
-      const { data: menuData, error: menuErr } = await supabase.from("menu").select("*");
       if (menuErr) throw menuErr;
+      if (menuSetsErr) throw menuSetsErr;
+      if (inventoryErr) throw inventoryErr;
+      if (suppliersErr) throw suppliersErr;
+      if (purchasesErr) throw purchasesErr;
 
-      const itemsWithMenu = orderItems.map((item) => {
-        const menu = menuData.find((m) => m.id === item.menu_id);
-        return {
-          ...item,
-          menu_name: menu?.menu_name || "Unknown",
-          total_price: item.price * item.qty,
-        };
-      });
+      const menuNameById = new Map((menuData || []).map((m) => [m.id, m.menu_name]));
+      const setNameById = new Map((menuSetsData || []).map((s) => [s.id, s.set_name]));
+      const completedOrderIds = new Set((orders || []).map((o) => o.id));
 
-      const monthItems = itemsWithMenu.filter((i) =>
-        orders.some((o) => o.id === i.order_id)
-      );
+      const monthItems = (orderItems || [])
+        .filter((i) => completedOrderIds.has(i.order_id))
+        .map((i) => {
+          if (i.menu_set_id) {
+            return {
+              ...i,
+              item_key: `set:${i.menu_set_id}`,
+              item_name: setNameById.get(i.menu_set_id) || "Unknown Set",
+              total_price: (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 0),
+            };
+          }
+          return {
+            ...i,
+            item_key: `menu:${i.menu_id}`,
+            item_name: menuNameById.get(i.menu_id) || "Unknown Menu",
+            total_price: (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 0),
+          };
+        });
 
-      // Filter by selected menu
-      const filteredItems = selectedMenu === "all"
-        ? monthItems
-        : monthItems.filter(i => i.menu_name === selectedMenu);
+      // Filter by selected item (menu or set)
+      const filteredItems =
+        selectedMenu === "all"
+          ? monthItems
+          : monthItems.filter((i) => i.item_key === selectedMenu);
 
-      // Calculate grand total from filtered orders
-      const filteredOrderIds = [...new Set(filteredItems.map(i => i.order_id))];
-      const filteredOrders = orders.filter(o => filteredOrderIds.includes(o.id));
-      const grandTotal = filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-      setGrandTotal(grandTotal);
+      const filteredOrderIds = [...new Set(filteredItems.map((i) => i.order_id))];
+      const filteredOrders = (orders || []).filter((o) => filteredOrderIds.includes(o.id));
+      setGrandTotal(filteredOrders.reduce((sum, order) => sum + (parseFloat(order.total) || 0), 0));
 
       const salesMap = {};
       filteredItems.forEach((i) => {
-        if (!salesMap[i.menu_name]) salesMap[i.menu_name] = 0;
-        salesMap[i.menu_name] += i.total_price;
+        if (!salesMap[i.item_name]) salesMap[i.item_name] = 0;
+        salesMap[i.item_name] += i.total_price;
       });
 
-      const sortedMenus = Object.entries(salesMap).sort((a, b) => b[1] - a[1]);
-      setMostSelling(sortedMenus[0] || null);
+      const sortedSales = Object.entries(salesMap).sort((a, b) => b[1] - a[1]);
+      setMostSelling(sortedSales[0] || null);
+      setMonthlyData(sortedSales.map(([name, total]) => ({ name, total })));
 
-      setMonthlyData(
-        sortedMenus.map(([name, total]) => ({
-          name,
-          total,
-        }))
-      );
+      // Inventory chart: current top 10 stock qty
+      const invTop10 = (inventoryData || []).slice(0, 10).map((inv) => ({
+        name: inv.item_name,
+        qty: parseFloat(inv.qty) || 0,
+      }));
+      setInventoryChartData(invTop10);
+
+      // Supplier chart: received purchase total by supplier in selected month
+      const supplierTotals = {};
+      (purchasesData || []).forEach((p) => {
+        const supplierName =
+          (suppliersData || []).find((s) => s.id === p.supplier_id)?.name || "Unknown Supplier";
+        if (!supplierTotals[supplierName]) supplierTotals[supplierName] = 0;
+        supplierTotals[supplierName] += parseFloat(p.total_amount) || 0;
+      });
+      const supplierSorted = Object.entries(supplierTotals)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, total]) => ({ name, total }));
+      setSupplierChartData(supplierSorted);
     } catch (err) {
       console.error(err);
     }
@@ -123,14 +177,55 @@ export default function Dashboard() {
     ],
   };
 
-  const chartOptions = {
+  const inventoryDataForChart = {
+    labels: inventoryChartData
+      .filter((d) => {
+        if (inventoryFilter === "low") return d.qty > 0 && d.qty < 10;
+        if (inventoryFilter === "out") return d.qty === 0;
+        return true;
+      })
+      .map((d) => d.name),
+    datasets: [
+      {
+        label: "Stock Qty",
+        data: inventoryChartData
+          .filter((d) => {
+            if (inventoryFilter === "low") return d.qty > 0 && d.qty < 10;
+            if (inventoryFilter === "out") return d.qty === 0;
+            return true;
+          })
+          .map((d) => d.qty),
+        backgroundColor: "rgba(16, 185, 129, 0.8)",
+        borderRadius: 6,
+      },
+    ],
+  };
+
+  const supplierDataForChart = {
+    labels: supplierChartData
+      .filter((d) => (supplierFilter === "all" ? true : d.name === supplierFilter))
+      .map((d) => d.name),
+    datasets: [
+      {
+        label: "Purchase Total (MMK)",
+        data: supplierChartData
+          .filter((d) => (supplierFilter === "all" ? true : d.name === supplierFilter))
+          .map((d) => d.total),
+        backgroundColor: "rgba(249, 115, 22, 0.8)",
+        borderRadius: 6,
+      },
+    ],
+  };
+
+  const currencyChartOptions = {
     responsive: true,
-    maintainAspectRatio: false, // Makes chart height customizable
+    maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => mmkFormatter.format(context.raw),
+          label: (context) =>
+            typeof context.raw === "number" ? mmkFormatter.format(context.raw) : context.raw,
         },
       },
     },
@@ -138,6 +233,21 @@ export default function Dashboard() {
       y: {
         ticks: {
           callback: (value) => mmkFormatter.format(value),
+        },
+      },
+    },
+  };
+
+  const qtyChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      y: {
+        ticks: {
+          callback: (value) => value,
         },
       },
     },
@@ -169,9 +279,9 @@ export default function Dashboard() {
             onChange={(e) => setSelectedMenu(e.target.value)}
             className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="all">All Menu</option>
-            {menuList.map((m) => (
-              <option key={m.id} value={m.menu_name}>{m.menu_name}</option>
+            <option value="all">All Menu & Set</option>
+            {menuOptions.map((m) => (
+              <option key={m.key} value={m.key}>{m.label}</option>
             ))}
           </select>
           <select
@@ -191,7 +301,7 @@ export default function Dashboard() {
           </select>
         </div>
 
-        <h2 className="text-lg md:text-xl font-semibold mb-3">Monthly Sales</h2>
+        <h2 className="text-lg md:text-xl font-semibold mb-3">Monthly Sales (Menu + Menu Set)</h2>
 
         {/* Scrollable content */}
         <div className="flex-1 flex flex-col min-h-0">
@@ -201,13 +311,15 @@ export default function Dashboard() {
                 No sales data for this month.
               </p>
             ) : (
-              <Bar data={chartData} options={chartOptions} className="h-full" />
+              <div className="h-80">
+                <Bar data={chartData} options={currencyChartOptions} className="h-full" />
+              </div>
             )}
           </div>
 
           {mostSelling && (
             <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg">
-              <h3 className="font-semibold">Most Selling Menu</h3>
+              <h3 className="font-semibold">Most Selling (Menu + Set)</h3>
               <p>
                 {mostSelling[0]} — {mmkFormatter.format(mostSelling[1])}
               </p>
@@ -224,6 +336,57 @@ export default function Dashboard() {
           )}
         </div>
 
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-lg md:text-xl font-semibold">Inventory Stock Chart</h2>
+            <select
+              value={inventoryFilter}
+              onChange={(e) => setInventoryFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Stock</option>
+              <option value="low">Low Stock (&lt; 10)</option>
+              <option value="out">Out of Stock (= 0)</option>
+            </select>
+          </div>
+          {inventoryChartData.length === 0 ? (
+            <p className="text-gray-500 text-center mt-10">No inventory data.</p>
+          ) : inventoryDataForChart.labels.length === 0 ? (
+            <p className="text-gray-500 text-center mt-10">No data for selected inventory filter.</p>
+          ) : (
+            <div className="h-80">
+              <Bar data={inventoryDataForChart} options={qtyChartOptions} />
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-lg md:text-xl font-semibold">Supplier Purchase Chart</h2>
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Suppliers</option>
+              {supplierChartData.map((s) => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          {supplierChartData.length === 0 ? (
+            <p className="text-gray-500 text-center mt-10">No supplier purchase data for this month.</p>
+          ) : supplierDataForChart.labels.length === 0 ? (
+            <p className="text-gray-500 text-center mt-10">No data for selected supplier.</p>
+          ) : (
+            <div className="h-80">
+              <Bar data={supplierDataForChart} options={currencyChartOptions} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

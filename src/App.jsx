@@ -171,6 +171,7 @@ export default function App() {
             <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><PurchaseReport /></PrivateRoute>} />
             <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><SupplierOutstanding /></PrivateRoute>} />
+            <Route path="/reports/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><SupplierOutstanding /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />

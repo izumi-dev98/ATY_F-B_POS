@@ -147,22 +147,25 @@ export default function InventoryReport() {
         .eq("status", "received")
         .order("date", { ascending: false });
 
-      // Merge purchase data with purchase items
-      const history = purchaseItems.map(pi => {
-        const purchase = purchases?.find(p => p.id === pi.purchase_id);
-        return {
-          ...pi,
-          purchase_date: purchase?.date || "-",
-          invoice_number: purchase?.invoice_number || "-",
-          supplier_id: purchase?.supplier_id,
-          status: purchase?.status || "-"
-        };
-      });
+      // Merge purchase data with purchase items (received purchases only)
+      const history = purchaseItems
+        .map(pi => {
+          const purchase = purchases?.find(p => p.id === pi.purchase_id);
+          return {
+            ...pi,
+            purchase_date: purchase?.date || "-",
+            invoice_number: purchase?.invoice_number || "-",
+            supplier_id: purchase?.supplier_id,
+            status: purchase?.status || "-"
+          };
+        })
+        .filter((row) => row.status === "received" && row.purchase_date !== "-");
 
-      // Sort by purchase date descending (latest first)
+      // Sort by latest first in modal (newest date on top, then newest row id)
       history.sort((a, b) => {
-        if (a.purchase_date === "-" || b.purchase_date === "-") return 0;
-        return new Date(b.purchase_date) - new Date(a.purchase_date);
+        const dateDiff = new Date(b.purchase_date) - new Date(a.purchase_date);
+        if (dateDiff !== 0) return dateDiff;
+        return (Number(b.id) || 0) - (Number(a.id) || 0);
       });
 
       setPurchaseHistory(history);
@@ -367,34 +370,16 @@ export default function InventoryReport() {
 
       {/* Summary Cards */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-sm text-slate-500">Total Items</p>
             <p className="text-xl font-bold text-slate-800">{totalItems}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Total Quantity</p>
-            <p className="text-xl font-bold text-indigo-600">{totalQty}</p>
           </div>
           <div>
             <p className="text-sm text-slate-500">Total Value</p>
             <p className="text-xl font-bold text-emerald-600">{mmkFormatter.format(totalValue)}</p>
           </div>
         </div>
-      </div>
-
-      {/* Search */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search item..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="w-full md:w-1/3 border border-slate-300 px-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-        />
       </div>
 
       {/* Table */}
@@ -551,7 +536,12 @@ export default function InventoryReport() {
                 <tbody>
                   {purchaseHistory.length > 0 ? (
                     purchaseHistory.map((item, idx) => (
-                      <tr key={idx} className="border-t border-slate-100">
+                      <tr
+                        key={idx}
+                        className={`border-t border-slate-100 ${
+                          (parseFloat(item.qty) || 0) === 0 ? "bg-rose-50" : ""
+                        }`}
+                      >
                         <td className="px-4 py-2 text-slate-800 font-medium">{item.invoice_number}</td>
                         <td className="px-4 py-2 text-slate-600">{item.purchase_date}</td>
                         <td className="px-4 py-2 text-slate-600">{getSupplierName(item.supplier_id)}</td>

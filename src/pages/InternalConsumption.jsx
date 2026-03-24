@@ -27,6 +27,9 @@ export default function InternalConsumption({ inventory, setInventory }) {
   // Search states
   const [itemSearch, setItemSearch] = useState("");
   const [recordSearch, setRecordSearch] = useState("");
+  const [usageItemPage, setUsageItemPage] = useState(1);
+  const [addItemPage, setAddItemPage] = useState(1);
+  const modalItemsPerPage = 10;
 
   const user = JSON.parse(localStorage.getItem("user"));
   const isSuperAdmin = user?.role === "superadmin";
@@ -287,6 +290,58 @@ export default function InternalConsumption({ inventory, setInventory }) {
         .single();
       if (recordErr) throw recordErr;
 
+      // Deduct from purchase history details (FIFO: first purchase item first)
+      const deductFromPurchaseHistory = async (itemName, usageQty) => {
+        const normalizedName = itemName?.trim();
+        if (!normalizedName || usageQty <= 0) return 0;
+
+        const { data: purchases, error: purchasesErr } = await supabase
+          .from("purchases")
+          .select("id")
+          .eq("status", "received")
+          .order("id", { ascending: true });
+
+        if (purchasesErr) throw purchasesErr;
+        const purchaseIds = (purchases || []).map((p) => p.id);
+        if (purchaseIds.length === 0) return usageQty;
+
+        const { data: purchaseItems, error: itemsErr } = await supabase
+          .from("purchase_items")
+          .select("id, qty, unit_price")
+          .eq("item_name", normalizedName)
+          .in("purchase_id", purchaseIds)
+          .order("id", { ascending: true });
+
+        if (itemsErr) throw itemsErr;
+
+        let remaining = usageQty;
+        for (const row of purchaseItems || []) {
+          if (remaining <= 0) break;
+
+          const currentQty = parseFloat(row.qty) || 0;
+          const unitPrice = parseFloat(row.unit_price) || 0;
+          if (currentQty <= 0) continue;
+
+          const consumeQty = Math.min(currentQty, remaining);
+          const newQty = currentQty - consumeQty;
+
+          const { error: updateErr } = await supabase
+            .from("purchase_items")
+            .update({
+              qty: newQty,
+              total_price: newQty * unitPrice,
+            })
+            .eq("id", row.id);
+
+          if (updateErr) throw updateErr;
+          remaining -= consumeQty;
+        }
+
+        return remaining;
+      };
+
+      const insufficientHistoryItems = [];
+
       // Create consumption items and deduct inventory
       for (const item of selectedItems) {
         const usageQty = parseFloat(item.usage_qty);
@@ -305,6 +360,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
           .from("inventory")
           .update({ qty: newQty })
           .eq("id", item.id);
+
+        const remainingNotDeducted = await deductFromPurchaseHistory(item.item_name, usageQty);
+        if (remainingNotDeducted > 0) {
+          insufficientHistoryItems.push(
+            `${item.item_name} (remaining ${remainingNotDeducted})`,
+          );
+        }
       }
 
       // Update local inventory state
@@ -317,7 +379,15 @@ export default function InternalConsumption({ inventory, setInventory }) {
       });
       setInventory(updatedInventory);
 
-      Swal.fire("Success", "Usage recorded successfully!", "success");
+      if (insufficientHistoryItems.length > 0) {
+        Swal.fire(
+          "Saved with warning",
+          `Usage saved. Purchase history was not enough for: ${insufficientHistoryItems.join(", ")}`,
+          "warning",
+        );
+      } else {
+        Swal.fire("Success", "Usage recorded successfully!", "success");
+      }
       setShowModal(false);
       setSelectedItems([]);
       setFormData({ notes: "" });
@@ -410,13 +480,19 @@ export default function InternalConsumption({ inventory, setInventory }) {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setShowAddModal(true);
+              setAddItemPage(1);
+            }}
             className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           >
             + Add Stock
           </button>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setShowModal(true);
+              setUsageItemPage(1);
+            }}
             className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           >
             + Record Usage
@@ -660,15 +736,27 @@ export default function InternalConsumption({ inventory, setInventory }) {
                   type="text"
                   placeholder="Search items..."
                   value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
+                  onChange={(e) => {
+                    setItemSearch(e.target.value);
+                    setUsageItemPage(1);
+                  }}
                   className="w-full px-3 py-2 border rounded-xl mb-2"
                 />
+                {(() => {
+                  const filteredItems = inventory.filter(item =>
+                    item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
+                  );
+                  const totalUsageItemPages = Math.max(1, Math.ceil(filteredItems.length / modalItemsPerPage));
+                  const usageStart = (usageItemPage - 1) * modalItemsPerPage;
+                  const usageItemsPageData = filteredItems.slice(
+                    usageStart,
+                    usageStart + modalItemsPerPage,
+                  );
+
+                  return (
+                    <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
-                  {inventory
-                    .filter(item =>
-                      item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
-                    )
-                    .map((item) => {
+                  {usageItemsPageData.map((item) => {
                     const isSelected = selectedItems.some(
                       (s) => s.id === item.id,
                     );
@@ -700,6 +788,32 @@ export default function InternalConsumption({ inventory, setInventory }) {
                     );
                   })}
                 </div>
+                {filteredItems.length > modalItemsPerPage && (
+                  <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
+                    <span>Page {usageItemPage} of {totalUsageItemPages}</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUsageItemPage((p) => Math.max(1, p - 1))}
+                        disabled={usageItemPage === 1}
+                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUsageItemPage((p) => Math.min(totalUsageItemPages, p + 1))}
+                        disabled={usageItemPage === totalUsageItemPages}
+                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Usage Quantities */}
@@ -761,6 +875,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
                     setSelectedItems([]);
                     setFormData({ notes: "" });
                     setItemSearch("");
+                    setUsageItemPage(1);
                   }}
                   className="px-4 py-2 bg-gray-300 rounded-xl hover:bg-gray-400"
                 >
@@ -801,15 +916,27 @@ export default function InternalConsumption({ inventory, setInventory }) {
                   type="text"
                   placeholder="Search items..."
                   value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
+                  onChange={(e) => {
+                    setItemSearch(e.target.value);
+                    setAddItemPage(1);
+                  }}
                   className="w-full px-3 py-2 border rounded-xl mb-2"
                 />
+                {(() => {
+                  const filteredItems = inventory.filter(item =>
+                    item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
+                  );
+                  const totalAddItemPages = Math.max(1, Math.ceil(filteredItems.length / modalItemsPerPage));
+                  const addStart = (addItemPage - 1) * modalItemsPerPage;
+                  const addItemsPageData = filteredItems.slice(
+                    addStart,
+                    addStart + modalItemsPerPage,
+                  );
+
+                  return (
+                    <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto border rounded-xl p-2">
-                  {inventory
-                    .filter(item =>
-                      item.item_name.toLowerCase().includes(itemSearch.toLowerCase())
-                    )
-                    .map((item) => {
+                  {addItemsPageData.map((item) => {
                     const isSelected = selectedAddItems.some(
                       (s) => s.id === item.id,
                     );
@@ -841,6 +968,32 @@ export default function InternalConsumption({ inventory, setInventory }) {
                     );
                   })}
                 </div>
+                {filteredItems.length > modalItemsPerPage && (
+                  <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
+                    <span>Page {addItemPage} of {totalAddItemPages}</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAddItemPage((p) => Math.max(1, p - 1))}
+                        disabled={addItemPage === 1}
+                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAddItemPage((p) => Math.min(totalAddItemPages, p + 1))}
+                        disabled={addItemPage === totalAddItemPages}
+                        className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Add Quantities */}
@@ -901,6 +1054,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
                     setSelectedAddItems([]);
                     setAddFormData({ notes: "" });
                     setItemSearch("");
+                    setAddItemPage(1);
                   }}
                   className="px-4 py-2 bg-gray-300 rounded-xl hover:bg-gray-400"
                 >

@@ -94,7 +94,6 @@ export default function Sidebar({ isOpen }) {
                   Supplier Outstanding
                 </NavLink>
 
-               
               </div>
             )}
           </div>
@@ -124,6 +123,9 @@ export default function Sidebar({ isOpen }) {
                 </NavLink>
                 <NavLink to="/purchase-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
                   Purchase Report
+                </NavLink>
+                <NavLink to="/reports/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600"}`}>
+                  Supplier Outstanding Report
                 </NavLink>
               </div>
             )}

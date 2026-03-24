@@ -1,16 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
+import { useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 
 export default function SupplierOutstanding() {
+  const location = useLocation();
+  const isReportOnlyView = location.pathname === "/reports/supplier-outstanding";
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedSuppliers, setExpandedSuppliers] = useState({});
   const [dateFilter, setDateFilter] = useState("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState(isReportOnlyView ? "all" : "unpaid");
   const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
@@ -47,7 +51,7 @@ export default function SupplierOutstanding() {
     return sup ? sup.name : "-";
   };
 
-  // Calculate supplier outstanding (Credit purchases - pending or received but not paid)
+  // Calculate supplier report by payment status
   const supplierOutstanding = () => {
     const creditPurchases = purchases.filter(p => {
       // Date filter
@@ -82,7 +86,14 @@ export default function SupplierOutstanding() {
         }
       }
 
-      return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && !p.paid;
+      const matchesPaymentStatus =
+        paymentStatusFilter === "all"
+        ? true
+        : paymentStatusFilter === "paid"
+          ? !!p.paid
+          : !p.paid;
+
+      return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && matchesPaymentStatus;
     });
 
     const supplierData = {};
@@ -115,6 +126,11 @@ export default function SupplierOutstanding() {
   );
 
   const totalOutstanding = filteredData.reduce((sum, s) => sum + s.total_payable, 0);
+  const totalLabel = paymentStatusFilter === "paid"
+    ? "Total Paid"
+    : paymentStatusFilter === "all"
+      ? "Total Amount"
+      : "Total Outstanding";
 
   const toggleExpand = (supplierId) => {
     setExpandedSuppliers(prev => ({
@@ -161,6 +177,7 @@ export default function SupplierOutstanding() {
           "Invoice #": p.invoice_number,
           "Date": p.date,
           "Payment Term": p.credit_option || "-",
+          "Paid Status": p.paid ? "Paid" : "Unpaid",
           "Amount": p.total_amount
         });
       });
@@ -169,6 +186,7 @@ export default function SupplierOutstanding() {
         "Invoice #": "-",
         "Date": "-",
         "Payment Term": "-",
+        "Paid Status": "-",
         "Amount": s.total_payable
       });
     });
@@ -188,7 +206,7 @@ export default function SupplierOutstanding() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Supplier Outstanding</h1>
-          <p className="text-sm text-slate-500 mt-1">Credit purchases pending payment</p>
+          <p className="text-sm text-slate-500 mt-1">Credit purchase paid status report</p>
         </div>
         <button
           onClick={exportToExcel}
@@ -198,49 +216,102 @@ export default function SupplierOutstanding() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <input
-            type="text"
-            placeholder="Search by supplier name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Time</option>
-            <option value="day">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-            <option value="custom">Custom Date</option>
-          </select>
-          {dateFilter === "custom" && (
-            <div className="flex gap-2">
-              <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-          )}
+      {!isReportOnlyView && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <input
+              type="text"
+              placeholder="Search by supplier name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="all">All Time</option>
+              <option value="day">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom Date</option>
+            </select>
+            <select
+              value={paymentStatusFilter}
+              onChange={(e) => setPaymentStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+              <option value="all">All Status</option>
+            </select>
+            {dateFilter === "custom" && (
+              <div className="flex gap-2">
+                <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-sm text-slate-500">Total Suppliers</div>
-          <div className="text-2xl font-bold text-slate-800">{filteredData.length}</div>
+      {isReportOnlyView && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <input
+              type="text"
+              placeholder="Search by supplier name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full md:w-64 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="all">All Time</option>
+              <option value="day">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom Date</option>
+            </select>
+            <select
+              value={paymentStatusFilter}
+              onChange={(e) => setPaymentStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Status</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+            </select>
+            {dateFilter === "custom" && (
+              <div className="flex gap-2">
+                <input type="date" value={customDateRange.start} onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="date" value={customDateRange.end} onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            )}
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-sm text-slate-500">Total Pending Payments</div>
-          <div className="text-2xl font-bold text-amber-600">{filteredData.reduce((sum, s) => sum + s.purchase_count, 0)}</div>
+      )}
+
+      {!isReportOnlyView && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div className="text-sm text-slate-500">Total Suppliers</div>
+            <div className="text-2xl font-bold text-slate-800">{filteredData.length}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div className="text-sm text-slate-500">Total Invoices</div>
+            <div className="text-2xl font-bold text-amber-600">{filteredData.reduce((sum, s) => sum + s.purchase_count, 0)}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div className="text-sm text-slate-500">{totalLabel}</div>
+            <div className="text-2xl font-bold text-indigo-600">{formatMMK(totalOutstanding)}</div>
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-sm text-slate-500">Total Outstanding</div>
-          <div className="text-2xl font-bold text-indigo-600">{formatMMK(totalOutstanding)}</div>
-        </div>
-      </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
@@ -248,20 +319,20 @@ export default function SupplierOutstanding() {
             <tr>
               <th className="px-4 py-3 w-10"></th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier Name</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-700">Pending Orders</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Payable</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Actions</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Orders</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
+              {!isReportOnlyView && <th className="px-4 py-3 text-right font-semibold text-slate-700">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+              <tr><td colSpan={isReportOnlyView ? 4 : 5} className="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
             ) : filteredData.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No outstanding credit purchases</td></tr>
+              <tr><td colSpan={isReportOnlyView ? 4 : 5} className="px-4 py-8 text-center text-slate-500">No credit purchases for selected filters</td></tr>
             ) : (
               filteredData.map((sup) => (
-                <>
-                  <tr key={sup.supplier_id} className="border-t border-slate-100 hover:bg-indigo-50/50">
+                <Fragment key={sup.supplier_id}>
+                  <tr className="border-t border-slate-100 hover:bg-indigo-50/50">
                     <td className="px-4 py-3">
                       <button
                         onClick={() => toggleExpand(sup.supplier_id)}
@@ -274,33 +345,44 @@ export default function SupplierOutstanding() {
                     <td className="px-4 py-3 text-center text-slate-600">{sup.purchase_count}</td>
                     <td className="px-4 py-3 text-right font-bold text-amber-600">{formatMMK(sup.total_payable)}</td>
                   </tr>
-                  {expandedSuppliers[sup.supplier_id] && sup.purchases.filter(p => !p.paid).map((p) => (
+                  {expandedSuppliers[sup.supplier_id] && sup.purchases.map((p) => (
                     <tr key={p.id} className="bg-slate-50 border-t border-slate-200">
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 pl-10 text-slate-600">
                         <button onClick={() => viewDetails(p)} className="font-medium text-indigo-600 hover:text-indigo-800 underline">{p.invoice_number}</button>
                         <span className="ml-2 text-slate-400">| {p.date}</span>
                       </td>
-                      <td className="px-4 py-2 text-center text-slate-600">{p.credit_option || "-"}</td>
-                      <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => handlePay(p)}
-                          className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                        >
-                          Pay
-                        </button>
+                      <td className="px-4 py-2 text-center text-slate-600">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.paid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          {p.paid ? "Paid" : "Unpaid"}
+                        </span>
                       </td>
+                      <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
+                      {!isReportOnlyView && (
+                        <td className="px-4 py-2 text-right">
+                          {!p.paid && (
+                            <button
+                              onClick={() => handlePay(p)}
+                              className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                            >
+                              Pay
+                            </button>
+                          )}
+                          {p.paid && <span className="text-emerald-600 text-xs font-medium">Completed</span>}
+                        </td>
+                      )}
                     </tr>
                   ))}
-                </>
+                </Fragment>
               ))
             )}
           </tbody>
           {filteredData.length > 0 && (
             <tfoot className="bg-slate-50">
               <tr>
-                <td colSpan={4} className="px-4 py-3 text-right font-bold text-slate-800">Total Outstanding</td>
+                <td colSpan={isReportOnlyView ? 3 : 4} className="px-4 py-3 text-right font-bold text-slate-800">
+                  {totalLabel}
+                </td>
                 <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatMMK(totalOutstanding)}</td>
               </tr>
             </tfoot>

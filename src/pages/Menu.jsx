@@ -374,38 +374,58 @@ export default function Menu({ inventory }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredData.map((item) => (
-          <div key={item.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
-            <h3 className="font-bold text-lg text-slate-800">
-              {activeTab === "menu" ? item.menu_name : item.set_name}
-            </h3>
-            <p className="text-slate-500 mb-1">{mmkFormatter.format(item.price)}</p>
-            {item.category_id && (
-              <p className="text-xs text-indigo-600 mb-3 font-medium">
-                {categories.find(c => c.id === item.category_id)?.name || "Uncategorized"}
-              </p>
-            )}
-            <div className="text-sm text-slate-600 mb-3">
-              {activeTab === "menu" ? (
-                item.ingredients.map((ing, idx) => {
-                  const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
-                  return (
-                    <div key={idx}>
-                      {inv?.item_name || "Unknown"} × {ing.qty}
-                    </div>
-                  );
-                })
-              ) : (
-                item.menu_items.map((mi, idx) => {
-                  const menuItem = menu.find((m) => m.id === Number(mi.menu_id));
-                  return (
-                    <div key={idx}>
-                      • {menuItem?.menu_name || "Unknown"}
-                    </div>
-                  );
-                })
-              )}
+          <div
+            key={item.id}
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-md">
+              {mmkFormatter.format(item.price)}
             </div>
-            <div className="flex justify-end gap-2">
+
+            <div className="h-2 w-full bg-gradient-to-r from-indigo-500 via-cyan-500 to-emerald-500" />
+
+            <div className="p-5">
+              <div className="mb-3 pr-24">
+                <h3 className="text-lg font-bold leading-tight text-slate-900">
+                  {activeTab === "menu" ? item.menu_name : item.set_name}
+                </h3>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {activeTab === "menu" ? "Menu" : "Menu Set"}
+                </p>
+              </div>
+
+              <div className="mb-4 flex min-h-7 items-center">
+                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                  {categories.find(c => c.id === item.category_id)?.name || "Uncategorized"}
+                </span>
+              </div>
+
+              <div className="mb-4 space-y-2 text-sm text-slate-700">
+                {activeTab === "menu" ? (
+                  item.ingredients.map((ing, idx) => {
+                    const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
+                    return (
+                      <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                        <span className="truncate">{inv?.item_name || "Unknown"}</span>
+                        <span className="ml-3 rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          x {ing.qty}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  item.menu_items.map((mi, idx) => {
+                    const menuItem = menu.find((m) => m.id === Number(mi.menu_id));
+                    return (
+                      <div key={idx} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {menuItem?.menu_name || "Unknown"}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
               <button
                 onClick={() => openEditModal(item)}
                 className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
@@ -418,6 +438,7 @@ export default function Menu({ inventory }) {
               >
                 Delete
               </button>
+              </div>
             </div>
           </div>
         ))}

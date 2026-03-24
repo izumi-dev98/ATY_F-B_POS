@@ -215,24 +215,139 @@ export default function History({ setInventory }) {
     document.body.removeChild(iframe);
   };
 
-  // Complete order - just update status (inventory already deducted in Payment)
+  // Complete order - deduct inventory + purchase history (FIFO), then set status
   const handleComplete = async (order) => {
     try {
-      // Update order status to completed (inventory already deducted when printed)
-      await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
+      const { data: inventoryData, error: inventoryErr } = await supabase
+        .from("inventory")
+        .select("*");
+      if (inventoryErr) throw inventoryErr;
 
-      Swal.fire("Success", "Order marked as completed!", "success");
+      const { data: purchases, error: purchasesErr } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("status", "received")
+        .order("id", { ascending: true });
+      if (purchasesErr) throw purchasesErr;
+
+      const receivedPurchaseIds = (purchases || []).map((p) => p.id);
+      const updatedInventory = (inventoryData || []).map((i) => ({ ...i }));
+
+      // Build required ingredient qty per inventory item for this order
+      const neededByInventoryId = {};
+      for (const item of order.items) {
+        if (item.isSet) {
+          for (const setItem of item.setItems || []) {
+            const ingredients = ingredientsMap[setItem.menu_id] || [];
+            for (const ing of ingredients) {
+              const need = (parseFloat(ing.qty) || 0) * (parseFloat(item.qty) || 0);
+              neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+            }
+          }
+        } else {
+          const ingredients = ingredientsMap[item.menu_id] || [];
+          for (const ing of ingredients) {
+            const need = (parseFloat(ing.qty) || 0) * (parseFloat(item.qty) || 0);
+            neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+          }
+        }
+      }
+
+      // Validate stock before update
+      for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+        const inv = updatedInventory.find((i) => i.id === Number(inventoryId));
+        if (!inv || (parseFloat(inv.qty) || 0) < neededQty) {
+          throw new Error(`Not enough stock for ${inv?.item_name || `Inventory ID ${inventoryId}`}`);
+        }
+      }
+
+      // FIFO deduction from purchase_items for same item name
+      const deductFromPurchaseHistory = async (itemName, qtyToDeduct) => {
+        const normalizedName = itemName?.trim();
+        if (!normalizedName || qtyToDeduct <= 0) return qtyToDeduct;
+        if (receivedPurchaseIds.length === 0) return qtyToDeduct;
+
+        const { data: purchaseItems, error: purchaseItemsErr } = await supabase
+          .from("purchase_items")
+          .select("id, qty, unit_price")
+          .eq("item_name", normalizedName)
+          .in("purchase_id", receivedPurchaseIds)
+          .order("id", { ascending: true });
+        if (purchaseItemsErr) throw purchaseItemsErr;
+
+        let remaining = qtyToDeduct;
+        for (const row of purchaseItems || []) {
+          if (remaining <= 0) break;
+
+          const currentQty = parseFloat(row.qty) || 0;
+          const unitPrice = parseFloat(row.unit_price) || 0;
+          if (currentQty <= 0) continue;
+
+          const usedQty = Math.min(currentQty, remaining);
+          const newQty = currentQty - usedQty;
+
+          const { error: updateErr } = await supabase
+            .from("purchase_items")
+            .update({ qty: newQty, total_price: newQty * unitPrice })
+            .eq("id", row.id);
+          if (updateErr) throw updateErr;
+
+          remaining -= usedQty;
+        }
+
+        return remaining;
+      };
+
+      const purchaseHistoryWarnings = [];
+
+      // Deduct inventory + purchase history
+      for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+        const inv = updatedInventory.find((i) => i.id === Number(inventoryId));
+        const currentQty = parseFloat(inv?.qty) || 0;
+        const newQty = currentQty - neededQty;
+
+        const { error: invUpdateErr } = await supabase
+          .from("inventory")
+          .update({ qty: newQty })
+          .eq("id", Number(inventoryId));
+        if (invUpdateErr) throw invUpdateErr;
+
+        if (inv) inv.qty = newQty;
+
+        const remaining = await deductFromPurchaseHistory(inv?.item_name, neededQty);
+        if (remaining > 0) {
+          purchaseHistoryWarnings.push(`${inv?.item_name || inventoryId} (remaining ${remaining})`);
+        }
+      }
+
+      const { error: statusErr } = await supabase
+        .from("orders")
+        .update({ status: "completed" })
+        .eq("id", order.id);
+      if (statusErr) throw statusErr;
+
+      if (setInventory) setInventory(updatedInventory);
+
+      if (purchaseHistoryWarnings.length > 0) {
+        Swal.fire(
+          "Completed with warning",
+          `Order completed. Purchase history was not enough for: ${purchaseHistoryWarnings.join(", ")}`,
+          "warning",
+        );
+      } else {
+        Swal.fire("Success", "Order marked as completed and inventory deducted!", "success");
+      }
       fetchHistory();
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to complete order", "error");
     }
   };
 
-  // Cancel order - return inventory
+  // Cancel pending order only (no stock return because deduction happens on complete)
   const handleCancel = async (order) => {
     const result = await Swal.fire({
       title: "Cancel Order?",
-      text: "This will return items to inventory and remove from sales.",
+      text: "This will cancel this pending order.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Yes, Cancel",
@@ -242,54 +357,9 @@ export default function History({ setInventory }) {
     if (!result.isConfirmed) return;
 
     try {
-      // Get inventory data
-      const { data: inventoryData } = await supabase.from("inventory").select("*");
-      const updatedInventory = inventoryData.map((i) => ({ ...i }));
-
-      // Get menu data for set items
-      const { data: menuData } = await supabase.from("menu").select("*");
-
-      // Return inventory
-      for (const item of order.items) {
-        if (item.isSet) {
-          // Handle menu set - return inventory for all items in the set
-          for (const setItem of item.setItems) {
-            const menuItem = menuData.find(m => m.id === setItem.menu_id);
-            if (!menuItem) continue;
-
-            const ingredients = ingredientsMap[menuItem.id] || [];
-            for (const ing of ingredients) {
-              const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
-              if (inv) {
-                const newQty = inv.qty + ing.qty * item.qty;
-                await supabase.from("inventory").update({ qty: newQty }).eq("id", ing.inventory_id);
-                inv.qty = newQty;
-              }
-            }
-          }
-        } else {
-          // Handle regular menu item
-          const ingredients = ingredientsMap[item.menu_id] || [];
-          for (const ing of ingredients) {
-            const inv = updatedInventory.find((i) => i.id === ing.inventory_id);
-            if (inv) {
-              const newQty = inv.qty + ing.qty * item.qty;
-              await supabase.from("inventory").update({ qty: newQty }).eq("id", ing.inventory_id);
-              inv.qty = newQty;
-            }
-          }
-        }
-      }
-
       // Update order status to cancelled
       await supabase.from("orders").update({ status: "cancelled" }).eq("id", order.id);
-
-      // Update inventory state
-      if (setInventory) {
-        setInventory(updatedInventory);
-      }
-
-      Swal.fire("Cancelled", "Order cancelled and inventory returned!", "success");
+      Swal.fire("Cancelled", "Order cancelled successfully!", "success");
       fetchHistory();
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to cancel order", "error");
