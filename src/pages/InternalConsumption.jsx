@@ -14,6 +14,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
   const [addFormData, setAddFormData] = useState({
     notes: "",
   });
+  const [latestPrices, setLatestPrices] = useState({});
+  const [selectedAddItemsWithPrice, setSelectedAddItemsWithPrice] = useState({});
   const [loading, setLoading] = useState(false);
 
   // Filter states
@@ -35,6 +37,12 @@ export default function InternalConsumption({ inventory, setInventory }) {
   const isSuperAdmin = user?.role === "superadmin";
   const currentUsername = user?.username || "Unknown";
 
+  const mmkFormatter = new Intl.NumberFormat("en-MM", {
+    style: "currency",
+    currency: "MMK",
+    maximumFractionDigits: 0,
+  });
+
   // Fetch consumption records
   const fetchRecords = async () => {
     try {
@@ -49,8 +57,42 @@ export default function InternalConsumption({ inventory, setInventory }) {
     }
   };
 
+  // Fetch latest prices from purchase history
+  const fetchLatestPrices = async () => {
+    try {
+      const { data: purchases } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("status", "received");
+
+      const receivedPurchaseIds = purchases?.map(p => p.id) || [];
+
+      if (receivedPurchaseIds.length > 0) {
+        const { data: purchaseItems } = await supabase
+          .from("purchase_items")
+          .select("item_name, unit_price")
+          .in("purchase_id", receivedPurchaseIds)
+          .order("id", { ascending: false });
+
+        if (purchaseItems) {
+          const prices = {};
+          purchaseItems.forEach(item => {
+            const key = item.item_name?.toLowerCase().trim();
+            if (key && !prices[key]) {
+              prices[key] = item.unit_price;
+            }
+          });
+          setLatestPrices(prices);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching latest prices:", err);
+    }
+  };
+
   useEffect(() => {
     fetchRecords();
+    fetchLatestPrices();
   }, []);
 
   // Filter records by date
@@ -141,6 +183,11 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (exists) {
         return prev.filter((i) => i.id !== item.id);
       }
+      const latestPrice = latestPrices[item.item_name?.toLowerCase().trim()] ?? item.price ?? 0;
+      setSelectedAddItemsWithPrice((prevPrice) => ({
+        ...prevPrice,
+        [item.id]: latestPrice
+      }));
       return [...prev, { ...item, add_qty: "" }];
     });
   };
@@ -151,6 +198,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
         i.id === itemId ? { ...i, add_qty: qty } : i,
       ),
     );
+  };
+
+  const updateItemAddPrice = (itemId, price) => {
+    setSelectedAddItemsWithPrice((prev) => ({
+      ...prev,
+      [itemId]: price
+    }));
   };
 
   const handleAddStockSubmit = async (e) => {
@@ -194,15 +248,17 @@ export default function InternalConsumption({ inventory, setInventory }) {
         const addQty = parseFloat(item.add_qty);
         const currentInv = inventory.find(inv => inv.id === item.id);
         const currentQty = currentInv ? currentInv.qty : 0;
+        const manualPrice = selectedAddItemsWithPrice[item.id];
 
         try {
-          // Insert consumption item
+          // Insert consumption item with price
           const result = await supabase
             .from("internal_consumption_items")
             .insert({
               consumption_id: record.id,
               inventory_id: item.id,
               qty: addQty,
+              unit_price: manualPrice !== undefined ? manualPrice : item.price,
             });
 
           if (result.error) {
@@ -213,11 +269,15 @@ export default function InternalConsumption({ inventory, setInventory }) {
           console.error("Insert exception:", err);
         }
 
-        // Add inventory
+        // Add inventory with new price
         const newQty = currentQty + addQty;
+        const updateData = { qty: newQty };
+        if (manualPrice !== undefined && manualPrice !== null) {
+          updateData.price = manualPrice;
+        }
         await supabase
           .from("inventory")
-          .update({ qty: newQty })
+          .update(updateData)
           .eq("id", item.id);
       }
 
@@ -1000,32 +1060,56 @@ export default function InternalConsumption({ inventory, setInventory }) {
               {selectedAddItems.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Quantity *
+                    Add Quantity & Price *
                   </label>
                   <div className="space-y-2">
-                    {selectedAddItems.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <span className="flex-1 text-sm">{item.item_name}</span>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={item.add_qty}
-                          onChange={(e) =>
-                            updateItemAddQty(
-                              item.id,
-                              e.target.value === "" ? "" : parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className="w-24 px-2 py-1 border rounded-xl"
-                          placeholder="Enter qty"
-                        />
-
-                        <span className="text-sm text-gray-500 w-12">
-                          {item.type}
-                        </span>
-                      </div>
-                    ))}
+                    {selectedAddItems.map((item) => {
+                      const latestPrice = latestPrices[item.item_name?.toLowerCase().trim()];
+                      const displayPrice = selectedAddItemsWithPrice[item.id] !== undefined
+                        ? selectedAddItemsWithPrice[item.id]
+                        : (latestPrice ?? item.price ?? 0);
+                      return (
+                        <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.item_name}</p>
+                            <p className="text-xs text-gray-500">
+                              Latest Price: {latestPrice ? mmkFormatter.format(latestPrice) : item.price ? mmkFormatter.format(item.price) : "-"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={item.add_qty}
+                              onChange={(e) =>
+                                updateItemAddQty(
+                                  item.id,
+                                  e.target.value === "" ? "" : parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-20 px-2 py-1 border rounded-lg text-sm"
+                              placeholder="Qty"
+                            />
+                            <span className="text-xs text-gray-500 w-8">{item.type}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500">Price:</span>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={displayPrice}
+                              onChange={(e) =>
+                                updateItemAddPrice(item.id, parseFloat(e.target.value) || 0)
+                              }
+                              className="w-24 px-2 py-1 border rounded-lg text-sm"
+                              placeholder="Price"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

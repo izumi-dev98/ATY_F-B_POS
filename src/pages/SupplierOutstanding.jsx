@@ -332,7 +332,7 @@ export default function SupplierOutstanding() {
             ) : (
               filteredData.map((sup) => (
                 <Fragment key={sup.supplier_id}>
-                  <tr className="border-t border-slate-100 hover:bg-indigo-50/50">
+                  <tr className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
                     <td className="px-4 py-3">
                       <button
                         onClick={() => toggleExpand(sup.supplier_id)}

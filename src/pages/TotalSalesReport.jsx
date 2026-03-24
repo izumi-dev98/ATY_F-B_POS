@@ -387,7 +387,7 @@ export default function TotalSalesReport() {
                 ));
                 const displayRemark = slip.remark || "-";
                 return (
-                <tr key={slip.order_id} className="border-b border-slate-100 hover:bg-indigo-50/50 transition">
+                <tr key={slip.order_id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition">
                   <td className="px-4 py-3">{slip.order_id}</td>
                   <td className="px-4 py-3 font-medium text-gray-700">{menusText}</td>
                   <td className="px-4 py-3">{slip.qty}</td>

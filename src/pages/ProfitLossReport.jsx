@@ -298,7 +298,7 @@ export default function ProfitLossReport() {
               </tr>
             ) : (
               filteredRows.map((row) => (
-                <tr key={row.month} className="border-t border-slate-100 hover:bg-indigo-50/50 transition">
+                <tr key={row.month} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition">
                   <td className="px-4 py-3 font-medium text-slate-800">{formatMonthLabel(row.month)}</td>
                   <td className="px-4 py-3 text-right text-emerald-700 font-medium">{mmkFormatter.format(row.revenue)}</td>
                   <td className="px-4 py-3 text-right text-rose-700 font-medium">{mmkFormatter.format(row.expense)}</td>

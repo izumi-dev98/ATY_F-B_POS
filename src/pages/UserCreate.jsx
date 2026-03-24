@@ -132,11 +132,11 @@ export default function UserManagement() {
 
   // ------------------- RENDER -------------------
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Create and manage users</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">User Management</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Create and manage users</p>
         </div>
         {canAddUser && (
           <button
@@ -149,7 +149,7 @@ export default function UserManagement() {
       </div>
 
       {/* SEARCH */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-6">
         <input
           type="text"
           placeholder="Search by username or name..."
@@ -158,29 +158,29 @@ export default function UserManagement() {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
       {/* USER TABLE */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-100">
+          <thead className="bg-slate-100 dark:bg-slate-700">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">#</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Full Name</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Username</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Role</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Actions</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">#</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Full Name</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Username</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Role</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Actions</th>
             </tr>
           </thead>
           <tbody>
           {paginatedUsers.map((user, idx) => (
-            <tr key={user.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
-              <td className="px-4 py-3 text-slate-500">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-              <td className="px-4 py-3 font-medium text-slate-800">{user.full_name}</td>
-              <td className="px-4 py-3 text-slate-600">{user.username}</td>
-              <td className="px-4 py-3 text-slate-600 capitalize">{user.role}</td>
+            <tr key={user.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
+              <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+              <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{user.full_name}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{user.username}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300 capitalize">{user.role}</td>
               <td className="px-4 py-3">
                 {canEditUser && (
                   <button
@@ -206,7 +206,7 @@ export default function UserManagement() {
           ))}
           {paginatedUsers.length === 0 && (
             <tr>
-              <td colSpan="5" className="text-center py-4">No users found</td>
+              <td colSpan="5" className="text-center py-4 text-slate-500 dark:text-slate-400">No users found</td>
             </tr>
           )}
         </tbody>
@@ -214,62 +214,74 @@ export default function UserManagement() {
 
       {/* PAGINATION */}
       <div className="mt-4 flex justify-center items-center space-x-2">
-        <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">Prev</button>
+        <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 bg-gray-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded hover:bg-gray-400 dark:hover:bg-slate-600">Prev</button>
         {[...Array(totalPages)].map((_, i) => (
           <button
             key={i}
             onClick={() => goToPage(i + 1)}
-            className={`px-3 py-1 rounded ${currentPage === i + 1 ? "bg-blue-500 text-white" : "bg-gray-200 hover:bg-gray-300"}`}
+            className={`px-3 py-1 rounded ${currentPage === i + 1 ? "bg-blue-500 text-white" : "bg-gray-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-gray-300 dark:hover:bg-slate-600"}`}
           >
             {i + 1}
           </button>
         ))}
-        <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">Next</button>
+        <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 bg-gray-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded hover:bg-gray-400 dark:hover:bg-slate-600">Next</button>
       </div>
       </div>
 
       {/* ------------------- MODAL ------------------- */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white rounded p-6 w-96 relative">
-            <h3 className="text-lg font-bold mb-4">{editingUser ? "Edit User" : "Add User"}</h3>
-            <form onSubmit={handleSaveUser} className="space-y-3">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-md shadow-xl relative">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">
+              {editingUser ? "Edit User" : "Add User"}
+            </h3>
+            <form onSubmit={handleSaveUser} className="space-y-4">
               <input
                 type="text"
                 placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
               />
               <input
                 type="text"
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
               />
               <input
                 type="password"
                 placeholder={editingUser ? "Leave blank to keep password" : "Password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required={!editingUser}
               />
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="superadmin">Superadmin</option>
                 <option value="admin">Admin</option>
                 <option value="chef">Chef</option>
                 <option value="user">User</option>
               </select>
-              <div className="flex justify-end space-x-2 mt-3">
-                <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400">
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+                >
                   {editingUser ? "Update" : "Add"}
                 </button>
               </div>

@@ -525,7 +525,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
             {cart.map((item) => (
               <div
                 key={`${item.id}-${item.isSet ? 'set' : 'menu'}`}
-                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800 p-4"
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>

@@ -179,7 +179,7 @@ export default function Supplier() {
               <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No Data Found</td></tr>
             ) : (
               paginatedSuppliers.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100 hover:bg-indigo-50/50 transition-colors">
+                <tr key={item.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
                   <td className="px-4 py-3 text-slate-500">#{item.id}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800">{item.name}</td>
                   <td className="px-4 py-3 text-slate-600">{item.contact_person || "-"}</td>

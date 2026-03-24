@@ -248,7 +248,7 @@ export default function PurchaseReturn({ setInventory }) {
               <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No completed purchases found</td></tr>
             ) : (
               paginatedPurchases.map((purchase) => (
-                <tr key={purchase.id} className="border-t border-slate-100 hover:bg-indigo-50/50">
+                <tr key={purchase.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
                   <td className="px-4 py-3 font-semibold text-slate-800">
                     <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 underline">
                       {purchase.invoice_number}

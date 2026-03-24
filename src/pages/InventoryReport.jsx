@@ -98,11 +98,23 @@ export default function InventoryReport() {
 
     const receivedPurchaseIds = purchases?.map(p => p.id) || [];
 
-    const [invData, supData, purchaseItemsData] = await Promise.all([
+    // Get add_stock records from internal_consumption
+    const { data: addStockRecords } = await supabase
+      .from("internal_consumption")
+      .select("id")
+      .eq("status", "add_stock")
+      .order("created_at", { ascending: false });
+
+    const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+    const [invData, supData, purchaseItemsData, addStockItemsData] = await Promise.all([
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, unit_price, total_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        ? supabase.from("purchase_items").select("item_name, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        : Promise.resolve({ data: [] }),
+      addStockIds.length > 0
+        ? supabase.from("internal_consumption_items").select("inventory_id, qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
         : Promise.resolve({ data: [] })
     ]);
 
@@ -110,18 +122,36 @@ export default function InventoryReport() {
     if (!supData.error) setSuppliers(supData.data || []);
 
     // Build purchase price history per item (latest first)
+    const priceHistory = {};
+
+    // From purchase_items
     if (purchaseItemsData.data) {
-      const prices = {};
       purchaseItemsData.data.forEach(item => {
         const key = item.item_name?.toLowerCase().trim();
         if (key) {
-          if (!prices[key]) prices[key] = [];
-          prices[key].push(item.unit_price);
+          if (!priceHistory[key]) priceHistory[key] = [];
+          priceHistory[key].push(item.unit_price);
         }
       });
-      setPriceHistoryByItem(prices);
     }
 
+    // From add_stock items - merge with inventory name
+    if (addStockItemsData.data && invData.data) {
+      const inventoryMap = {};
+      invData.data.forEach(inv => {
+        inventoryMap[inv.id] = inv.item_name?.toLowerCase().trim();
+      });
+
+      addStockItemsData.data.forEach(item => {
+        const itemName = inventoryMap[item.inventory_id];
+        if (itemName && item.unit_price) {
+          if (!priceHistory[itemName]) priceHistory[itemName] = [];
+          priceHistory[itemName].push(item.unit_price);
+        }
+      });
+    }
+
+    setPriceHistoryByItem(priceHistory);
     setLoading(false);
   };
 
@@ -412,7 +442,7 @@ export default function InventoryReport() {
               currentData.map((item, index) => (
                 <tr
                   key={index}
-                  className="border-b border-slate-100 hover:bg-indigo-50/50 transition"
+                  className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition"
                 >
                   {/* Item Name */}
                   <td className="px-4 py-3 font-medium text-gray-700 dark:text-slate-100">

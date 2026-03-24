@@ -339,7 +339,7 @@ ${reportData.map(row =>
               <tbody>
                 {paginatedRecords.map((record) => (
                   <Fragment key={record.id}>
-                    <tr className="border-t border-slate-100 hover:bg-slate-50">
+                    <tr className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
                       <td className="px-4 py-3">
                         <button
                           onClick={() => toggleRecord(record.id)}

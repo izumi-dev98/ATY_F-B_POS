@@ -528,7 +528,7 @@ export default function Purchase({ setInventory }) {
                 const isStayToPay = purchase.status === "Received" && !purchase.paid && String(purchase.payment_type || "").toLowerCase() === "credit";
                 const isCompleted = purchase.status === "Received" && (purchase.paid || String(purchase.payment_type || "").toLowerCase() === "cash down");
                 return (
-                <tr key={purchase.id} className={`border-t border-slate-100 hover:bg-white ${isStayToPay ? "bg-red-50" : ""} ${isCompleted ? "bg-green-50" : ""}`}>
+                <tr key={purchase.id} className={`border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 ${isStayToPay ? "bg-red-50 dark:bg-red-900/20" : ""} ${isCompleted ? "bg-green-50 dark:bg-green-900/20" : ""}`}>
                   <td className="px-4 py-3 font-semibold text-slate-800">
                     <button onClick={() => viewDetails(purchase)} className="text-indigo-600 hover:text-indigo-800 underline">{purchase.invoice_number}</button>
                   </td>
