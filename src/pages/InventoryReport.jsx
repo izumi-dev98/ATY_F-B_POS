@@ -31,8 +31,57 @@ export default function InventoryReport() {
     maximumFractionDigits: 0,
   });
 
-  // Store latest prices
-  const [latestPrices, setLatestPrices] = useState({});
+  // Store purchase price history per item (latest first)
+  const [priceHistoryByItem, setPriceHistoryByItem] = useState({});
+
+  const getLatestUnitPrice = (itemName) => {
+    const key = itemName?.toLowerCase().trim();
+    const price = key ? priceHistoryByItem[key]?.[0] : null;
+    return price !== undefined && price !== null ? Number(price) : null;
+  };
+
+  const getEffectiveUnitPrice = (itemName, inventoryPrice) => {
+    const latest = getLatestUnitPrice(itemName);
+    if (latest !== null) return latest;
+    return inventoryPrice !== undefined && inventoryPrice !== null
+      ? Number(inventoryPrice) || 0
+      : 0;
+  };
+
+  // Total Value format requested:
+  // Qty 2 => sum of latest 2 purchase prices for the same item.
+  const getTotalValueByQty = (itemName, qty, inventoryPrice) => {
+    const key = itemName?.toLowerCase().trim();
+    const history = key ? (priceHistoryByItem[key] || []) : [];
+    const fallbackPrice = inventoryPrice !== undefined && inventoryPrice !== null
+      ? Number(inventoryPrice) || 0
+      : 0;
+    const numericQty = Number(qty) || 0;
+
+    if (numericQty <= 0) return 0;
+
+    const fullUnits = Math.floor(numericQty);
+    const remainder = numericQty - fullUnits;
+    let total = 0;
+
+    for (let i = 0; i < fullUnits; i += 1) {
+      const unitPrice = history[i] !== undefined && history[i] !== null
+        ? Number(history[i]) || 0
+        : fallbackPrice;
+      total += unitPrice;
+    }
+
+    if (remainder > 0) {
+      const remainderUnitPrice = history[fullUnits] !== undefined && history[fullUnits] !== null
+        ? Number(history[fullUnits]) || 0
+        : (history[0] !== undefined && history[0] !== null
+            ? Number(history[0]) || fallbackPrice
+            : fallbackPrice);
+      total += remainderUnitPrice * remainder;
+    }
+
+    return total;
+  };
 
   useEffect(() => {
     fetchInventory();
@@ -60,19 +109,17 @@ export default function InventoryReport() {
     if (!invData.error) setInventory(invData.data);
     if (!supData.error) setSuppliers(supData.data || []);
 
-    // Get latest price for each item
+    // Build purchase price history per item (latest first)
     if (purchaseItemsData.data) {
       const prices = {};
       purchaseItemsData.data.forEach(item => {
         const key = item.item_name?.toLowerCase().trim();
         if (key) {
-          // Get latest price (first occurrence since ordered by id desc)
-          if (!prices[key]) {
-            prices[key] = item.unit_price;
-          }
+          if (!prices[key]) prices[key] = [];
+          prices[key].push(item.unit_price);
         }
       });
-      setLatestPrices(prices);
+      setPriceHistoryByItem(prices);
     }
 
     setLoading(false);
@@ -190,10 +237,7 @@ export default function InventoryReport() {
   const totalItems = filteredData.length;
   const totalQty = filteredData.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
   const totalValue = filteredData.reduce((sum, item) => {
-    const key = item.item_name?.toLowerCase().trim();
-    const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
-    const qty = parseFloat(item.qty) || 0;
-    return sum + (latestPrice * qty);
+    return sum + getTotalValueByQty(item.item_name, item.qty, item.price);
   }, 0);
 
   // Pagination logic
@@ -206,15 +250,13 @@ export default function InventoryReport() {
   const exportToExcel = () => {
     // Prepare export data with latest price × current qty
     const exportData = filteredData.map((item) => {
-      const key = item.item_name?.toLowerCase().trim();
-      const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
-      const qty = parseFloat(item.qty) || 0;
+      const latestPrice = getEffectiveUnitPrice(item.item_name, item.price);
       return {
         Item_Name: item.item_name,
         Quantity: item.qty,
         Unit: item.type,
         Price: latestPrice,
-        Total_Value: latestPrice * qty,
+        Total_Value: getTotalValueByQty(item.item_name, item.qty, item.price),
         Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
       };
     });
@@ -443,19 +485,12 @@ export default function InventoryReport() {
 
                   {/* Latest Price */}
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {latestPrices[item.item_name?.toLowerCase().trim()]
-                      ? mmkFormatter.format(latestPrices[item.item_name?.toLowerCase().trim()])
-                      : (item.price ? mmkFormatter.format(item.price) : "-")}
+                    {mmkFormatter.format(getEffectiveUnitPrice(item.item_name, item.price))}
                   </td>
 
                   {/* Total Value - latest price × current qty */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {(() => {
-                      const key = item.item_name?.toLowerCase().trim();
-                      const latestPrice = latestPrices[key] || parseFloat(item.price) || 0;
-                      const qty = parseFloat(item.qty) || 0;
-                      return mmkFormatter.format(latestPrice * qty);
-                    })()}
+                    {mmkFormatter.format(getTotalValueByQty(item.item_name, item.qty, item.price))}
                   </td>
                 </tr>
               ))
@@ -540,11 +575,15 @@ export default function InventoryReport() {
                       </td>
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 text-right font-bold text-indigo-600">
-                        {(() => {
-                          const currentQty = parseFloat(selectedItem?.qty) || 0;
-                          const latestUnitPrice = parseFloat(purchaseHistory[0]?.unit_price) || 0;
-                          return mmkFormatter.format(latestUnitPrice * currentQty);
-                        })()}
+                        {mmkFormatter.format(
+                          purchaseHistory.reduce(
+                            (sum, item) =>
+                              sum +
+                              (parseFloat(item.total_price) ||
+                                ((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0))),
+                            0
+                          )
+                        )}
                       </td>
                     </tr>
                   </tfoot>
