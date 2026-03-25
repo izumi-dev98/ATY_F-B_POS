@@ -197,10 +197,6 @@ export default function AIAnalytics() {
     const paymentsWs = xlsxUtils.json_to_sheet(analyticsData.allData.payments || []);
     xlsxUtils.book_append_sheet(wb, paymentsWs, 'Payments');
 
-    // Users
-    const usersWs = xlsxUtils.json_to_sheet(analyticsData.allData.user || []);
-    xlsxUtils.book_append_sheet(wb, usersWs, 'Users');
-
     // Summary
     const summaryData = [
       { Category: 'Purchase', Metric: 'Total Purchases', Value: metrics?.purchase?.total_purchases || 0 },
@@ -214,8 +210,7 @@ export default function AIAnalytics() {
       { Category: 'Inventory', Metric: 'Inventory Value', Value: metrics?.inventory?.total_value || 0 },
       { Category: 'Inventory', Metric: 'Low Stock Items', Value: metrics?.inventory?.low_stock || 0 },
       { Category: 'Menu', Metric: 'Menu Items', Value: metrics?.menu?.total_items || 0 },
-      { Category: 'Menu', Metric: 'Categories', Value: metrics?.menu?.total_categories || 0 },
-      { Category: 'Users', Metric: 'Total Users', Value: metrics?.users?.total_users || 0 }
+      { Category: 'Menu', Metric: 'Categories', Value: metrics?.menu?.total_categories || 0 }
     ];
     const summaryWs = xlsxUtils.json_to_sheet(summaryData);
     xlsxUtils.book_append_sheet(wb, summaryWs, 'Summary');
@@ -359,10 +354,10 @@ export default function AIAnalytics() {
           </div>
         </div>
 
-        {/* Metrics Cards - Discount & Users */}
+        {/* Metrics Cards - Discount */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">Discount & Users</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">Discount</h2>
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Discount Types</p>
               <p className="text-2xl font-bold text-purple-600">{metrics?.discount?.total_types || 0}</p>
@@ -370,14 +365,6 @@ export default function AIAnalytics() {
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">Active Discounts</p>
               <p className="text-2xl font-bold text-purple-600">{metrics?.discount?.active_discounts || 0}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Users</p>
-              <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.users?.total_users || 0}</p>
-            </div>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Categories</p>
-              <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.menu?.total_categories || 0}</p>
             </div>
           </div>
         </div>

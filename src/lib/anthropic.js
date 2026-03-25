@@ -52,10 +52,6 @@ YOU HAVE DIRECT ACCESS TO ALL TABLES AND CAN ANSWER QUESTIONS ABOUT:
 - Revenue metrics
 - Order statistics
 
-### USER MANAGEMENT ###
-- user: User accounts (id, username, role, permissions)
-- user_rights: User permission settings
-
 =============================================================================
 ALWAYS USE THE ACTUAL DATABASE DATA TO PROVIDE ACCURATE, SPECIFIC ANSWERS
 =============================================================================
@@ -137,11 +133,7 @@ export async function fetchAllSystemData() {
     inventory_categories: { limit: 200, orderBy: 'name' },
 
     // ==================== PAYMENTS & REPORTS ====================
-    payments: { limit: 1000, orderBy: 'created_at', orderOptions: { ascending: false } },
-
-    // ==================== USER MANAGEMENT ====================
-    user: { limit: 200 },
-    user_rights: { limit: 1000 }
+    payments: { limit: 1000, orderBy: 'created_at', orderOptions: { ascending: false } }
   };
 
   const results = {};
@@ -221,11 +213,6 @@ function calculateMetrics(data) {
     internal_consumption: {
       total_records: data.internal_consumption?.length || 0,
       total_value: data.internal_consumption?.reduce((sum, c) => sum + (parseFloat(c.total_amount) || 0), 0) || 0
-    },
-
-    // User Metrics
-    users: {
-      total_users: data.user?.length || 0
     }
   };
 }
@@ -328,16 +315,6 @@ ${JSON.stringify(data.inventory_categories)}
 
 PAYMENTS (${data.payments.length} records):
 ${JSON.stringify(data.payments)}
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ USER MANAGEMENT DATA                                                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-USERS (${data.user.length} records):
-${JSON.stringify(data.user)}
-
-USER RIGHTS (${data.user_rights.length} records):
-${JSON.stringify(data.user_rights)}
 `;
 }
 
