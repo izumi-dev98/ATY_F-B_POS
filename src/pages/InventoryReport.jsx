@@ -30,18 +30,38 @@ export default function InventoryReport() {
     currency: "MMK",
     maximumFractionDigits: 0,
   });
+  const toFiniteNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+  const formatMMK = (value) => mmkFormatter.format(toFiniteNumber(value));
+  const normalizeName = (value) => value?.toString().trim().toLowerCase() || "";
+  const normalizeType = (value) => {
+    const normalized = value?.toString().trim().toLowerCase();
+    return normalized || "-";
+  };
+  const buildItemKey = (itemName, itemType) => `${normalizeName(itemName)}::${normalizeType(itemType)}`;
+  const buildNameOnlyKey = (itemName) => `${normalizeName(itemName)}::*`;
 
   // Store purchase price history per item (latest first)
   const [priceHistoryByItem, setPriceHistoryByItem] = useState({});
 
-  const getLatestUnitPrice = (itemName) => {
-    const key = itemName?.toLowerCase().trim();
-    const price = key ? priceHistoryByItem[key]?.[0] : null;
+  const getPriceHistory = (itemName, itemType) => {
+    const exactKey = buildItemKey(itemName, itemType);
+    const fallbackKey = buildNameOnlyKey(itemName);
+    return priceHistoryByItem[exactKey]?.length
+      ? priceHistoryByItem[exactKey]
+      : (priceHistoryByItem[fallbackKey] || []);
+  };
+
+  const getLatestUnitPrice = (itemName, itemType) => {
+    const history = getPriceHistory(itemName, itemType);
+    const price = history[0];
     return price !== undefined && price !== null ? Number(price) : null;
   };
 
-  const getEffectiveUnitPrice = (itemName, inventoryPrice) => {
-    const latest = getLatestUnitPrice(itemName);
+  const getEffectiveUnitPrice = (itemName, itemType, inventoryPrice) => {
+    const latest = getLatestUnitPrice(itemName, itemType);
     if (latest !== null) return latest;
     return inventoryPrice !== undefined && inventoryPrice !== null
       ? Number(inventoryPrice) || 0
@@ -50,9 +70,8 @@ export default function InventoryReport() {
 
   // Total Value format requested:
   // Qty 2 => sum of latest 2 purchase prices for the same item.
-  const getTotalValueByQty = (itemName, qty, inventoryPrice) => {
-    const key = itemName?.toLowerCase().trim();
-    const history = key ? (priceHistoryByItem[key] || []) : [];
+  const getTotalValueByQty = (itemName, itemType, qty, inventoryPrice) => {
+    const history = getPriceHistory(itemName, itemType);
     const fallbackPrice = inventoryPrice !== undefined && inventoryPrice !== null
       ? Number(inventoryPrice) || 0
       : 0;
@@ -111,7 +130,7 @@ export default function InventoryReport() {
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        ? supabase.from("purchase_items").select("item_name, type, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
         : Promise.resolve({ data: [] }),
       addStockIds.length > 0
         ? supabase.from("internal_consumption_items").select("inventory_id, qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
@@ -127,10 +146,14 @@ export default function InventoryReport() {
     // From purchase_items
     if (purchaseItemsData.data) {
       purchaseItemsData.data.forEach(item => {
-        const key = item.item_name?.toLowerCase().trim();
-        if (key) {
-          if (!priceHistory[key]) priceHistory[key] = [];
-          priceHistory[key].push(item.unit_price);
+        const nameKey = normalizeName(item.item_name);
+        if (nameKey) {
+          const exactKey = buildItemKey(item.item_name, item.type);
+          const fallbackKey = buildNameOnlyKey(item.item_name);
+          if (!priceHistory[exactKey]) priceHistory[exactKey] = [];
+          if (!priceHistory[fallbackKey]) priceHistory[fallbackKey] = [];
+          priceHistory[exactKey].push(item.unit_price);
+          priceHistory[fallbackKey].push(item.unit_price);
         }
       });
     }
@@ -139,14 +162,19 @@ export default function InventoryReport() {
     if (addStockItemsData.data && invData.data) {
       const inventoryMap = {};
       invData.data.forEach(inv => {
-        inventoryMap[inv.id] = inv.item_name?.toLowerCase().trim();
+        inventoryMap[inv.id] = {
+          exactKey: buildItemKey(inv.item_name, inv.type),
+          fallbackKey: buildNameOnlyKey(inv.item_name),
+        };
       });
 
       addStockItemsData.data.forEach(item => {
-        const itemName = inventoryMap[item.inventory_id];
-        if (itemName && item.unit_price) {
-          if (!priceHistory[itemName]) priceHistory[itemName] = [];
-          priceHistory[itemName].push(item.unit_price);
+        const keyPair = inventoryMap[item.inventory_id];
+        if (keyPair && item.unit_price) {
+          if (!priceHistory[keyPair.exactKey]) priceHistory[keyPair.exactKey] = [];
+          if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
+          priceHistory[keyPair.exactKey].push(item.unit_price);
+          priceHistory[keyPair.fallbackKey].push(item.unit_price);
         }
       });
     }
@@ -158,101 +186,132 @@ export default function InventoryReport() {
   // View stock history for an item (Purchase + Add Stock mixed, sorted by date oldest first)
   const viewPurchaseHistory = async (item) => {
     setSelectedItem(item);
+
     const getFifoTimestamp = (value) => {
       if (!value) return Number.POSITIVE_INFINITY;
       const ts = new Date(value).getTime();
       return Number.isNaN(ts) ? Number.POSITIVE_INFINITY : ts;
     };
 
-    // Fetch purchase items for this item name (case insensitive)
-    const { data: purchaseItems } = await supabase
-      .from("purchase_items")
-      .select("*")
-      .ilike("item_name", item.item_name.trim());
+    // Use the item directly since it comes from inventory table
+    const targetInv = item;
+    const targetName = normalizeName(targetInv.item_name);
+    const targetType = normalizeType(targetInv.type);
+    const targetId = item.id;
 
-    // Fetch add_stock records for this item
-    const { data: addStockRecords } = await supabase
+    // Fetch received purchases with created_at for accurate FIFO
+    const { data: purchases, error: purchasesErr } = await supabase
+      .from("purchases")
+      .select("id, date, created_at, invoice_number, supplier_id, status")
+      .eq("status", "received");
+
+    if (purchasesErr) {
+      console.error("Error fetching purchases:", purchasesErr);
+    }
+
+    const purchaseIds = purchases?.map(p => p.id) || [];
+
+    // Fetch add_stock records ordered by date (FIFO)
+    const { data: addStockRecords, error: addStockErr } = await supabase
       .from("internal_consumption")
       .select("id, created_at")
       .eq("status", "add_stock")
       .order("created_at", { ascending: true });
 
-    const addStockIds = addStockRecords?.map(r => r.id) || [];
-
-    let addStockItemsData = [];
-    if (addStockIds.length > 0) {
-      const { data: items } = await supabase
-        .from("internal_consumption_items")
-        .select("*")
-        .in("consumption_id", addStockIds);
-
-      if (items) {
-        addStockItemsData = items.filter(i => i.inventory_id === item.id);
-      }
+    if (addStockErr) {
+      console.error("Error fetching add_stock records:", addStockErr);
     }
+
+    const addStockIds = addStockRecords?.map(r => r.id) || [];
 
     const history = [];
 
-    // Add purchase items
-    if (purchaseItems && purchaseItems.length > 0) {
-      const purchaseIds = [...new Set(purchaseItems.map(pi => pi.purchase_id))];
+    // Add purchase items - match by name and type from inventory
+    if (purchaseIds.length > 0) {
+      const { data: purchaseItems, error: purchaseItemsErr } = await supabase
+        .from("purchase_items")
+        .select("id, qty, unit_price, purchase_id, item_name, type")
+        .in("purchase_id", purchaseIds);
 
-      const { data: purchases } = await supabase
-        .from("purchases")
-        .select("*")
-        .in("id", purchaseIds)
-        .eq("status", "received")
-        .order("date", { ascending: true });
+      if (purchaseItemsErr) {
+        console.error("Error fetching purchase_items:", purchaseItemsErr);
+      }
 
-      purchaseItems.forEach(pi => {
-        const purchase = purchases?.find(p => p.id === pi.purchase_id);
-        if (purchase && purchase.status === "received") {
-          history.push({
-            ...pi,
-            purchase_date: purchase.date || "-",
-            fifo_date: purchase.date || null,
-            invoice_number: purchase.invoice_number || "-",
-            supplier_id: purchase.supplier_id,
-            source_type: "Purchase",
-            status: "received",
-            qty: parseFloat(pi.qty) || 0,
-            unit_price: parseFloat(pi.unit_price) || 0
-          });
-        }
-      });
+      if (purchaseItems) {
+        // Match by name and type (exact match first, fallback to name-only)
+        const exactMatches = purchaseItems.filter((pi) =>
+          normalizeName(pi.item_name) === targetName &&
+          normalizeType(pi.type) === targetType
+        );
+        const matchedPurchaseItems = exactMatches.length > 0
+          ? exactMatches
+          : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
+
+        matchedPurchaseItems.forEach(pi => {
+          const purchase = purchases?.find(p => p.id === pi.purchase_id);
+          if (purchase) {
+            // Use created_at for FIFO (more accurate than date only)
+            const fifoDate = purchase.created_at || purchase.date;
+            history.push({
+              ...pi,
+              purchase_date: purchase.date || "-",
+              fifo_date: fifoDate,
+              invoice_number: purchase.invoice_number || "-",
+              supplier_id: purchase.supplier_id,
+              source_type: "Purchase",
+              status: purchase.status || "received",
+              qty: parseFloat(pi.qty) || 0,
+              unit_price: parseFloat(pi.unit_price) || 0
+            });
+          }
+        });
+      }
     }
 
-    // Add add_stock items
-    if (addStockItemsData.length > 0) {
-      const addStockMap = {};
-      addStockRecords?.forEach(r => {
-        addStockMap[r.id] = r.created_at;
-      });
+    // Add add_stock items - match by inventory_id
+    if (addStockIds.length > 0) {
+      const { data: addStockItems, error: addStockItemsErr } = await supabase
+        .from("internal_consumption_items")
+        .select("id, qty, unit_price, consumption_id, inventory_id")
+        .in("consumption_id", addStockIds);
 
-      addStockItemsData.forEach(ai => {
-        const createdAt = addStockMap[ai.consumption_id];
-        history.push({
-          id: ai.id,
-          item_name: item.item_name,
-          qty: parseFloat(ai.qty) || 0,
-          unit_price: parseFloat(ai.unit_price) || 0,
-          total_price: (parseFloat(ai.qty) || 0) * (parseFloat(ai.unit_price) || 0),
-          purchase_date: createdAt ? new Date(createdAt).toISOString().split('T')[0] : "-",
-          fifo_date: createdAt || null,
-          invoice_number: "-",
-          supplier_id: null,
-          source_type: "Add Stock",
-          status: "add_stock"
+      if (addStockItemsErr) {
+        console.error("Error fetching internal_consumption_items:", addStockItemsErr);
+      }
+
+      if (addStockItems) {
+        const addStockMap = {};
+        addStockRecords?.forEach(r => {
+          addStockMap[r.id] = r.created_at;
         });
-      });
+
+        const matchedAddStockItems = addStockItems.filter(ai => ai.inventory_id === targetId);
+
+        matchedAddStockItems.forEach(ai => {
+          const createdAt = addStockMap[ai.consumption_id];
+          history.push({
+            id: ai.id,
+            item_name: targetInv.item_name,
+            qty: parseFloat(ai.qty) || 0,
+            unit_price: parseFloat(ai.unit_price) || 0,
+            total_price: (parseFloat(ai.qty) || 0) * (parseFloat(ai.unit_price) || 0),
+            purchase_date: createdAt ? new Date(createdAt).toISOString().split('T')[0] : "-",
+            fifo_date: createdAt || null,
+            invoice_number: "-",
+            supplier_id: null,
+            source_type: "Add Stock",
+            status: "add_stock"
+          });
+        });
+      }
     }
 
     // Keep list in FIFO order for consistent usage-reduction tracing
+    // Sorted by date/time only - earliest first
     history.sort((a, b) => {
       const tsA = getFifoTimestamp(a.fifo_date);
       const tsB = getFifoTimestamp(b.fifo_date);
       if (tsA !== tsB) return tsA - tsB;
-      if (a.source_type !== b.source_type) return a.source_type === "Purchase" ? -1 : 1;
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
 
@@ -324,7 +383,7 @@ export default function InventoryReport() {
   const totalItems = filteredData.length;
   const totalQty = filteredData.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
   const totalValue = filteredData.reduce((sum, item) => {
-    return sum + getTotalValueByQty(item.item_name, item.qty, item.price);
+    return sum + getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price);
   }, 0);
 
   // Pagination logic
@@ -337,13 +396,13 @@ export default function InventoryReport() {
   const exportToExcel = () => {
     // Prepare export data with latest price × current qty
     const exportData = filteredData.map((item) => {
-      const latestPrice = getEffectiveUnitPrice(item.item_name, item.price);
+      const latestPrice = getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price);
       return {
         Item_Name: item.item_name,
         Quantity: item.qty,
         Unit: item.type,
         Price: latestPrice,
-        Total_Value: getTotalValueByQty(item.item_name, item.qty, item.price),
+        Total_Value: getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price),
         Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
       };
     });
@@ -461,7 +520,7 @@ export default function InventoryReport() {
           </div>
           <div>
             <p className="text-sm text-slate-500">Total Value</p>
-            <p className="text-xl font-bold text-emerald-600">{mmkFormatter.format(totalValue)}</p>
+            <p className="text-xl font-bold text-emerald-600">{formatMMK(totalValue)}</p>
           </div>
         </div>
       </div>
@@ -554,12 +613,12 @@ export default function InventoryReport() {
 
                   {/* Latest Price */}
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {mmkFormatter.format(getEffectiveUnitPrice(item.item_name, item.price))}
+                    {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
                   </td>
 
                   {/* Total Value - latest price × current qty */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {mmkFormatter.format(getTotalValueByQty(item.item_name, item.qty, item.price))}
+                    {formatMMK(getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price))}
                   </td>
                 </tr>
               ))
@@ -623,6 +682,9 @@ export default function InventoryReport() {
                     purchaseHistory.map((item, idx) => {
                       const qty = parseFloat(item.qty) || 0;
                       const isZero = qty === 0;
+                      const rowTotal =
+                        toFiniteNumber(item.total_price) ||
+                        ((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0));
                       return (
                         <tr
                           key={idx}
@@ -643,8 +705,8 @@ export default function InventoryReport() {
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.purchase_date}</td>
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{getSupplierName(item.supplier_id)}</td>
                           <td className="px-4 py-2 text-center text-slate-600 dark:text-slate-400">{item.qty}</td>
-                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{mmkFormatter.format(item.unit_price)}</td>
-                          <td className="px-4 py-2 text-right font-medium text-slate-800 dark:text-slate-200">{mmkFormatter.format(item.total_price)}</td>
+                          <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{formatMMK(item.unit_price)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-slate-800 dark:text-slate-200">{formatMMK(rowTotal)}</td>
                         </tr>
                       );
                     })
@@ -660,7 +722,7 @@ export default function InventoryReport() {
                       <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total</td>
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 text-right font-bold text-indigo-600 dark:text-indigo-400">
-                        {mmkFormatter.format(
+                        {formatMMK(
                           purchaseHistory.reduce(
                             (sum, item) =>
                               sum +
