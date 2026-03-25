@@ -183,7 +183,9 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (exists) {
         return prev.filter((i) => i.id !== item.id);
       }
-      return [...prev, { ...item, add_qty: "" }];
+      const itemKey = item.item_name?.toLowerCase().trim();
+      const autoLatestPrice = latestPrices[itemKey] ?? item.price ?? 0;
+      return [...prev, { ...item, add_qty: "", add_price: autoLatestPrice }];
     });
   };
 
@@ -191,6 +193,14 @@ export default function InternalConsumption({ inventory, setInventory }) {
     setSelectedAddItems((prev) =>
       prev.map((i) =>
         i.id === itemId ? { ...i, add_qty: qty } : i,
+      ),
+    );
+  };
+
+  const updateItemAddPrice = (itemId, price) => {
+    setSelectedAddItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, add_price: price } : i,
       ),
     );
   };
@@ -238,16 +248,21 @@ export default function InternalConsumption({ inventory, setInventory }) {
         const currentQty = currentInv ? currentInv.qty : 0;
         const itemKey = item.item_name?.toLowerCase().trim();
         const autoLatestPrice = latestPrices[itemKey] ?? item.price ?? 0;
+        const enteredPrice = item.add_price;
+        const addPrice =
+          enteredPrice === "" || enteredPrice === null || enteredPrice === undefined
+            ? (parseFloat(autoLatestPrice) || 0)
+            : (parseFloat(enteredPrice) || 0);
 
         try {
-          // Insert consumption item using auto latest price
+          // Insert consumption item using manual price (or auto latest as fallback)
           const result = await supabase
             .from("internal_consumption_items")
             .insert({
               consumption_id: record.id,
               inventory_id: item.id,
               qty: addQty,
-              unit_price: autoLatestPrice,
+              unit_price: addPrice,
             });
 
           if (result.error) {
@@ -258,9 +273,9 @@ export default function InternalConsumption({ inventory, setInventory }) {
           console.error("Insert exception:", err);
         }
 
-        // Add inventory and keep latest price in inventory
+        // Add inventory and keep latest chosen price in inventory
         const newQty = currentQty + addQty;
-        const updateData = { qty: newQty, price: autoLatestPrice };
+        const updateData = { qty: newQty, price: addPrice };
         await supabase
           .from("inventory")
           .update(updateData)
@@ -274,7 +289,11 @@ export default function InternalConsumption({ inventory, setInventory }) {
       const updatedInventory = inventory.map((inv) => {
         const added = selectedAddItems.find((s) => s.id === inv.id);
         if (added) {
-          return { ...inv, qty: inv.qty + parseFloat(added.add_qty) };
+          const chosenPrice =
+            added.add_price === "" || added.add_price === null || added.add_price === undefined
+              ? (parseFloat(latestPrices[added.item_name?.toLowerCase().trim()] ?? inv.price) || 0)
+              : (parseFloat(added.add_price) || 0);
+          return { ...inv, qty: inv.qty + parseFloat(added.add_qty), price: chosenPrice };
         }
         return inv;
       });
@@ -1154,6 +1173,20 @@ export default function InternalConsumption({ inventory, setInventory }) {
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={item.add_price ?? displayPrice}
+                              onChange={(e) =>
+                                updateItemAddPrice(
+                                  item.id,
+                                  e.target.value === "" ? "" : parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-28 px-2 py-1 border rounded-lg text-sm"
+                              placeholder="Price"
+                            />
                             <input
                               type="number"
                               step="any"

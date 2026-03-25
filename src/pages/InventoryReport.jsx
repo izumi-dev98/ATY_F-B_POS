@@ -45,6 +45,8 @@ export default function InventoryReport() {
 
   // Store purchase price history per item (latest first)
   const [priceHistoryByItem, setPriceHistoryByItem] = useState({});
+  // Store remaining stock layer value per item so table total matches history total
+  const [stockValueByItem, setStockValueByItem] = useState({});
 
   const getPriceHistory = (itemName, itemType) => {
     const exactKey = buildItemKey(itemName, itemType);
@@ -66,6 +68,18 @@ export default function InventoryReport() {
     return inventoryPrice !== undefined && inventoryPrice !== null
       ? Number(inventoryPrice) || 0
       : 0;
+  };
+
+  const getLayerTotalValue = (itemName, itemType, qty, inventoryPrice) => {
+    const exactKey = buildItemKey(itemName, itemType);
+    const fallbackKey = buildNameOnlyKey(itemName);
+    const exactValue = stockValueByItem[exactKey];
+    const fallbackValue = stockValueByItem[fallbackKey];
+
+    if (Number.isFinite(exactValue)) return exactValue;
+    if (Number.isFinite(fallbackValue)) return fallbackValue;
+
+    return getTotalValueByQty(itemName, itemType, qty, inventoryPrice);
   };
 
   // Total Value format requested:
@@ -130,7 +144,7 @@ export default function InventoryReport() {
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, type, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        ? supabase.from("purchase_items").select("item_name, type, qty, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
         : Promise.resolve({ data: [] }),
       addStockIds.length > 0
         ? supabase.from("internal_consumption_items").select("inventory_id, qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
@@ -142,6 +156,13 @@ export default function InventoryReport() {
 
     // Build purchase price history per item (latest first)
     const priceHistory = {};
+    const stockValue = {};
+    const addLayerValue = (key, qty, unitPrice) => {
+      const numericQty = Number(qty);
+      const numericPrice = Number(unitPrice);
+      if (!Number.isFinite(numericQty) || !Number.isFinite(numericPrice) || numericQty <= 0) return;
+      stockValue[key] = (stockValue[key] || 0) + (numericQty * numericPrice);
+    };
 
     // From purchase_items
     if (purchaseItemsData.data) {
@@ -154,6 +175,8 @@ export default function InventoryReport() {
           if (!priceHistory[fallbackKey]) priceHistory[fallbackKey] = [];
           priceHistory[exactKey].push(item.unit_price);
           priceHistory[fallbackKey].push(item.unit_price);
+          addLayerValue(exactKey, item.qty, item.unit_price);
+          addLayerValue(fallbackKey, item.qty, item.unit_price);
         }
       });
     }
@@ -170,16 +193,19 @@ export default function InventoryReport() {
 
       addStockItemsData.data.forEach(item => {
         const keyPair = inventoryMap[item.inventory_id];
-        if (keyPair && item.unit_price) {
+        if (keyPair && item.unit_price !== undefined && item.unit_price !== null) {
           if (!priceHistory[keyPair.exactKey]) priceHistory[keyPair.exactKey] = [];
           if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
           priceHistory[keyPair.exactKey].push(item.unit_price);
           priceHistory[keyPair.fallbackKey].push(item.unit_price);
+          addLayerValue(keyPair.exactKey, item.qty, item.unit_price);
+          addLayerValue(keyPair.fallbackKey, item.qty, item.unit_price);
         }
       });
     }
 
     setPriceHistoryByItem(priceHistory);
+    setStockValueByItem(stockValue);
     setLoading(false);
   };
 
@@ -379,11 +405,11 @@ export default function InventoryReport() {
     item.item_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Calculate totals - use latest price × current qty
+  // Calculate totals - use layer totals (same basis as history modal)
   const totalItems = filteredData.length;
   const totalQty = filteredData.reduce((sum, item) => sum + (parseFloat(item.qty) || 0), 0);
   const totalValue = filteredData.reduce((sum, item) => {
-    return sum + getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price);
+    return sum + getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price);
   }, 0);
 
   // Pagination logic
@@ -394,7 +420,7 @@ export default function InventoryReport() {
 
   // Export Excel
   const exportToExcel = () => {
-    // Prepare export data with latest price × current qty
+    // Prepare export data with layer totals (matches history modal)
     const exportData = filteredData.map((item) => {
       const latestPrice = getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price);
       return {
@@ -402,7 +428,7 @@ export default function InventoryReport() {
         Quantity: item.qty,
         Unit: item.type,
         Price: latestPrice,
-        Total_Value: getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price),
+        Total_Value: getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price),
         Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
       };
     });
@@ -616,9 +642,9 @@ export default function InventoryReport() {
                     {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
                   </td>
 
-                  {/* Total Value - latest price × current qty */}
+                  {/* Total Value - layer total (matches history modal) */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {formatMMK(getTotalValueByQty(item.item_name, item.type || item.unit, item.qty, item.price))}
+                    {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
                   </td>
                 </tr>
               ))
