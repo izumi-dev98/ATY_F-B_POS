@@ -23,7 +23,7 @@ export default function Navbar({ toggleSidebar, theme, toggleTheme }) {
         >
           <FontAwesomeIcon icon={faBars} />
         </button>
-        <img src={logo} alt="Logo" className="h-8 w-8 object-contain" />
+        <img src={logo} alt="Logo" className="h-10 w-10 rounded-full object-cover border-2 border-indigo-400" />
         <h1 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 glass:text-slate-100">
           Myat Taw Win (ATY) F&B System
         </h1>
