@@ -30,7 +30,103 @@ ChartJS.register(
   Legend
 );
 
+const translations = {
+  en: {
+    title: 'Complete AI Analytics',
+    subtitle: 'Purchase | Discount | History | Reports | Category | Dashboard',
+    exportBtn: 'Export Full Database',
+    purchaseGroup: 'Purchase Group',
+    totalPurchases: 'Total Purchases',
+    totalSpent: 'Total Spent',
+    suppliers: 'Suppliers',
+    outstanding: 'Outstanding',
+    historyOrders: 'History & Orders',
+    totalOrders: 'Total Orders',
+    totalRevenue: 'Total Revenue',
+    todayRevenue: "Today's Revenue",
+    todayOrders: "Today's Orders",
+    inventoryMenu: 'Inventory & Menu',
+    inventoryValue: 'Inventory Value',
+    totalProducts: 'Total Products',
+    lowStockAlert: 'Low Stock Alert',
+    menuItems: 'Menu Items',
+    discount: 'Discount',
+    discountTypes: 'Discount Types',
+    activeDiscounts: 'Active Discounts',
+    categories: 'Categories',
+    dataCategory: 'Data Category',
+    allData: 'All Data',
+    purchase: 'Purchase Group',
+    history: 'History',
+    reports: 'Reports',
+    category: 'Category',
+    dashboard: 'Dashboard',
+    dateRange: 'Date Range',
+    last7Days: 'Last 7 Days',
+    last30Days: 'Last 30 Days',
+    last90Days: 'Last 90 Days',
+    thisYear: 'This Year',
+    dailySales: 'Daily Sales',
+    byCategory: 'By Category',
+    purchasesBySupplier: 'Purchases by Supplier',
+    aiAnalysis: 'AI-Powered Analysis',
+    aiAskAbout: 'Ask about ANY data - Purchase, Discount, History, Reports, Category, Dashboard',
+    askPlaceholder: 'Ask AI about your complete database...',
+    analyze: 'Analyze',
+    analyzing: 'Analyzing...',
+    aiReport: 'AI Analysis Report'
+  },
+  my: {
+    title: 'AI ခွဲခြမ်းစိတ်ဖြာမှု',
+    subtitle: 'အဝယ် | လျှော့ဈေး | သမိုင်း | အစီရင်ခံစာ | ကဏ္ဍ | ဒက်ရှ်ဘုတ်',
+    exportBtn: 'ဒေတာအားလုံး ထုတ်မယ်',
+    purchaseGroup: 'အဝယ်ပိုင်း',
+    totalPurchases: 'အဝယ်အရေအတွက်',
+    totalSpent: 'စုစုပေါင်း သုံးစွဲ',
+    suppliers: 'ပေးသွင်းသူ',
+    outstanding: 'ကျန်ငွေ',
+    historyOrders: 'အော်ဒါ သမိုင်း',
+    totalOrders: 'အော်ဒါ စုစုပေါင်း',
+    totalRevenue: 'စုစုပေါင်း ဝင်ငွေ',
+    todayRevenue: 'ယနေ့ ဝင်ငွေ',
+    todayOrders: 'ယနေ့ အော်ဒါ',
+    inventoryMenu: 'ပစ္စည်းလက်ကျန် & မီနူး',
+    inventoryValue: 'ပစ္စည်းတန်ဖိုး',
+    totalProducts: 'ပစ္စည်းအရေအတွက်',
+    lowStockAlert: 'ပစ္စည်းလက်ကျန် နည်းအသိပေး',
+    menuItems: 'မီနူး အရေအတွက်',
+    discount: 'လျှော့ဈေး',
+    discountTypes: 'လျှော့ဈေး အမျိုးအစား',
+    activeDiscounts: 'တက်ကြွ လျှော့ဈေးများ',
+    categories: 'ကဏ္ဍများ',
+    dataCategory: 'ဒေတာ ကဏ္ဍ',
+    allData: 'ဒေတာ အားလုံး',
+    purchase: 'အဝယ်ပိုင်း',
+    history: 'သမိုင်း',
+    reports: 'အစီရင်ခံစာ',
+    category: 'ကဏ္ဍ',
+    dashboard: 'ဒက်ရှ်ဘုတ်',
+    dateRange: 'ရက်ပိုင်း',
+    last7Days: 'နောက် ၇ ရက်',
+    last30Days: 'နောက် ၃၀ ရက်',
+    last90Days: 'နောက် ၉၀ ရက်',
+    thisYear: 'ယခုနှစ်',
+    dailySales: 'နေ့စဉ် အရောင်း',
+    byCategory: 'ကဏ္ဍအလိုက်',
+    purchasesBySupplier: 'ပေးသွင်းသူအလိုက် အဝယ်',
+    aiAnalysis: 'AI ခွဲခြမ်းစိတ်ဖြာမှု',
+    aiAskAbout: 'မည်သည့်ဒေတာကိုမဆို မေးမြန်းနိုင်ပါ - အဝယ်၊ လျှော့ဈေး၊ သမိုင်း၊ အစီရင်ခံစာ၊ ကဏ္ဍ၊ ဒက်ရှ်ဘုတ်',
+    askPlaceholder: 'သင့်ဒေတာအားလုံးကို AI မှ မေးမြန်းပါ...',
+    analyze: 'ခွဲခြမ်းစိတ်ဖြာ',
+    analyzing: 'ခွဲခြမ်းစိတ်ဖြာနေသည်...',
+    aiReport: 'AI ခွဲခြမ်းစိတ်ဖြာမှု အစီရင်ခံစာ'
+  }
+};
+
 export default function AIAnalytics() {
+  const [language, setLanguage] = useState(() => localStorage.getItem('ai_analytics_language') || 'en');
+  const t = translations[language];
+
   const [analyticsData, setAnalyticsData] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dateRange, setDateRange] = useState('7days');
@@ -139,6 +235,12 @@ export default function AIAnalytics() {
     loadRealData();
   }, []);
 
+  const toggleLanguage = () => {
+    const newLang = language === 'en' ? 'my' : 'en';
+    setLanguage(newLang);
+    localStorage.setItem('ai_analytics_language', newLang);
+  };
+
   const handleAIAnalysis = async () => {
     if (!aiQuestion.trim()) return;
 
@@ -219,29 +321,32 @@ export default function AIAnalytics() {
     Swal.fire('Success', 'Complete database report exported!', 'success');
   };
 
-  const quickQuestions = [
-    // Purchase Group
-    'Show me pending purchases',
-    'Which suppliers do I have?',
-    'What is my outstanding supplier payments?',
-
-    // Discount
-    'What discounts are configured?',
-
-    // History
-    'Analyze my order history',
-    'What are my sales trends?',
-    'Show me today\'s revenue',
-
-    // Reports
-    'What is my total inventory value?',
-    'Which items are low in stock?',
-    'Show me menu performance',
-
-    // Dashboard
-    'Give me a business summary',
-    'What are my key metrics?'
-  ];
+  const quickQuestions = {
+    en: [
+      'Show me pending purchases',
+      'Which suppliers do I have?',
+      'What is my outstanding supplier payments?',
+      'What discounts are configured?',
+      'Analyze my order history',
+      'What are my sales trends?',
+      'Show me today\'s revenue',
+      'What is my total inventory value?',
+      'Which items are low in stock?',
+      'Give me a business summary'
+    ],
+    my: [
+      'Pending အဝယ်များ ပြပါ',
+      'ပေးသွင်းသူများ ကြည့်ရန်',
+      'ကျန်နေသေးသော ပေးသွင်းသူငွေများ',
+      'လျှော့ဈေးများကို ကြည့်ရန်',
+      'အော်ဒါ သမိုင်း ခွဲခြမ်းစိတ်ဖြာ',
+      'အရောင်းအခြေအနေ',
+      'ယနေ့ ဝင်ငွေ ကြည့်ရန်',
+      'စုစုပေါင်း ပစ္စည်းလက်ကျန်တန်ဖိုး',
+      'ပစ္စည်းလက်ကျန် နည်းနေသော ပစ္စည်းများ',
+      'လုပ်ငန်းအကျဉ်းချုပ် ပေးပါ'
+    ]
+  };
 
   if (loading) {
     return (
@@ -270,39 +375,47 @@ export default function AIAnalytics() {
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                Complete AI Analytics
+                {t.title}
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Purchase | Discount | History | Reports | Category | Dashboard
+                {t.subtitle}
               </p>
             </div>
-            <button
-              onClick={exportReport}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-            >
-              Export Full Database
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={toggleLanguage}
+                className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
+              >
+                {language === 'en' ? '🇲🇲 Myanmar' : '🇬🇧 English'}
+              </button>
+              <button
+                onClick={exportReport}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                {t.exportBtn}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Metrics Cards - Purchase Group */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">Purchase Group</h2>
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">{t.purchaseGroup}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Purchases</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.totalPurchases}</p>
               <p className="text-2xl font-bold text-indigo-600">{metrics?.purchase?.total_purchases || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Spent</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.totalSpent}</p>
               <p className="text-2xl font-bold text-indigo-600">{metrics?.purchase?.total_spent?.toLocaleString()} MMK</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Suppliers</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.suppliers}</p>
               <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.suppliers?.total_suppliers || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Outstanding</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.outstanding}</p>
               <p className="text-2xl font-bold text-rose-600">{metrics?.suppliers?.outstanding_total?.toLocaleString()} MMK</p>
             </div>
           </div>
@@ -310,22 +423,22 @@ export default function AIAnalytics() {
 
         {/* Metrics Cards - History & Orders */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">History & Orders</h2>
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">{t.historyOrders}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Orders</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.totalOrders}</p>
               <p className="text-2xl font-bold text-green-600">{metrics?.history?.total_orders || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Revenue</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.totalRevenue}</p>
               <p className="text-2xl font-bold text-green-600">{metrics?.history?.total_revenue?.toLocaleString()} MMK</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Today's Revenue</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.todayRevenue}</p>
               <p className="text-2xl font-bold text-emerald-600">{metrics?.history?.today_revenue?.toLocaleString()} MMK</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Today's Orders</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.todayOrders}</p>
               <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.history?.today_orders || 0}</p>
             </div>
           </div>
@@ -333,22 +446,22 @@ export default function AIAnalytics() {
 
         {/* Metrics Cards - Inventory & Menu */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">Inventory & Menu</h2>
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">{t.inventoryMenu}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Inventory Value</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.inventoryValue}</p>
               <p className="text-2xl font-bold text-blue-600">{metrics?.inventory?.total_value?.toLocaleString()} MMK</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Total Products</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.totalProducts}</p>
               <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.inventory?.total_items || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Low Stock Alert</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.lowStockAlert}</p>
               <p className="text-2xl font-bold text-rose-600">{metrics?.inventory?.low_stock || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Menu Items</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.menuItems}</p>
               <p className="text-2xl font-bold text-slate-700 dark:text-slate-200">{metrics?.menu?.total_items || 0}</p>
             </div>
           </div>
@@ -356,14 +469,14 @@ export default function AIAnalytics() {
 
         {/* Metrics Cards - Discount */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">Discount</h2>
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3">{t.discount}</h2>
           <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Discount Types</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.discountTypes}</p>
               <p className="text-2xl font-bold text-purple-600">{metrics?.discount?.total_types || 0}</p>
             </div>
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">Active Discounts</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.activeDiscounts}</p>
               <p className="text-2xl font-bold text-purple-600">{metrics?.discount?.active_discounts || 0}</p>
             </div>
           </div>
@@ -373,36 +486,36 @@ export default function AIAnalytics() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Data Category
+              {t.dataCategory}
             </label>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-100"
             >
-              <option value="all">All Data</option>
-              <option value="purchase">Purchase Group</option>
-              <option value="discount">Discount</option>
-              <option value="history">History</option>
-              <option value="reports">Reports</option>
-              <option value="category">Category</option>
-              <option value="dashboard">Dashboard</option>
+              <option value="all">{t.allData}</option>
+              <option value="purchase">{t.purchase}</option>
+              <option value="discount">{t.discount}</option>
+              <option value="history">{t.history}</option>
+              <option value="reports">{t.reports}</option>
+              <option value="category">{t.category}</option>
+              <option value="dashboard">{t.dashboard}</option>
             </select>
           </div>
 
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Date Range
+              {t.dateRange}
             </label>
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
               className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-100"
             >
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="90days">Last 90 Days</option>
-              <option value="year">This Year</option>
+              <option value="7days">{t.last7Days}</option>
+              <option value="30days">{t.last30Days}</option>
+              <option value="90days">{t.last90Days}</option>
+              <option value="year">{t.thisYear}</option>
             </select>
           </div>
         </div>
@@ -412,7 +525,7 @@ export default function AIAnalytics() {
           {/* Sales Bar Chart */}
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
-              Daily Sales
+              {t.dailySales}
             </h3>
             <div className="h-48">
               <Bar data={analyticsData?.salesData} options={chartOptions} />
@@ -422,7 +535,7 @@ export default function AIAnalytics() {
           {/* Category Pie Chart */}
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
-              By Category
+              {t.byCategory}
             </h3>
             <div className="h-48">
               <Pie data={analyticsData?.categoryData} options={chartOptions} />
@@ -432,7 +545,7 @@ export default function AIAnalytics() {
           {/* Purchase Chart */}
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
-              Purchases by Supplier
+              {t.purchasesBySupplier}
             </h3>
             <div className="h-48">
               <Bar data={analyticsData?.purchaseData} options={chartOptions} />
@@ -443,15 +556,15 @@ export default function AIAnalytics() {
         {/* AI Analysis Section */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
-            AI-Powered Analysis
+            {t.aiAnalysis}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-            Ask about ANY data - Purchase, Discount, History, Reports, Category, Dashboard
+            {t.aiAskAbout}
           </p>
 
           {/* Quick Questions */}
           <div className="flex flex-wrap gap-2 mb-4">
-            {quickQuestions.map((question, index) => (
+            {quickQuestions[language].map((question, index) => (
               <button
                 key={index}
                 onClick={() => setAiQuestion(question)}
@@ -468,7 +581,7 @@ export default function AIAnalytics() {
               type="text"
               value={aiQuestion}
               onChange={(e) => setAiQuestion(e.target.value)}
-              placeholder="Ask AI about your complete database..."
+              placeholder={t.askPlaceholder}
               className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-100"
               onKeyPress={(e) => e.key === 'Enter' && handleAIAnalysis()}
             />
@@ -477,7 +590,7 @@ export default function AIAnalytics() {
               disabled={isAnalyzing || !aiQuestion.trim()}
               className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white rounded-xl font-medium transition-colors disabled:cursor-not-allowed"
             >
-              {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+              {isAnalyzing ? t.analyzing : t.analyze}
             </button>
           </div>
 
@@ -492,7 +605,7 @@ export default function AIAnalytics() {
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-indigo-800 dark:text-indigo-300 mb-3">
-                    AI Analysis Report
+                    {t.aiReport}
                   </h4>
                   <div
                     className="text-slate-700 dark:text-slate-300 max-h-96 overflow-y-auto prose prose-sm dark:prose-invert"
