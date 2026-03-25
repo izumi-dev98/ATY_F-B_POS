@@ -45,6 +45,8 @@ export default function Dashboard() {
     maximumFractionDigits: 0,
   });
   const isDark = document.documentElement.classList.contains("dark");
+  const chartTextColor = isDark ? "#cbd5e1" : "#334155";
+  const chartGridColor = isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)";
 
   // Fetch menu and menu set list for filter
   useEffect(() => {
@@ -349,19 +351,19 @@ export default function Dashboard() {
     scales: {
       x: {
         ticks: {
-          color: isDark ? "#cbd5e1" : "#334155",
+          color: chartTextColor,
         },
         grid: {
-          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+          color: chartGridColor,
         },
       },
       y: {
         ticks: {
-          color: isDark ? "#cbd5e1" : "#334155",
+          color: chartTextColor,
           callback: (value) => mmkFormatter.format(value),
         },
         grid: {
-          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+          color: chartGridColor,
         },
       },
     },
@@ -376,19 +378,19 @@ export default function Dashboard() {
     scales: {
       x: {
         ticks: {
-          color: isDark ? "#cbd5e1" : "#334155",
+          color: chartTextColor,
         },
         grid: {
-          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+          color: chartGridColor,
         },
       },
       y: {
         ticks: {
-          color: isDark ? "#cbd5e1" : "#334155",
+          color: chartTextColor,
           callback: (value) => value,
         },
         grid: {
-          color: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.25)",
+          color: chartGridColor,
         },
       },
     },
@@ -430,10 +432,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen glass:text-slate-100">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Dashboard</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">View sales analytics</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 glass:text-slate-100">Dashboard</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-300 glass:text-slate-300 mt-1">View sales analytics</p>
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
@@ -467,13 +469,13 @@ export default function Dashboard() {
           </select>
         </div>
 
-        <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 mb-3">Monthly Sales (Menu + Menu Set)</h2>
+        <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 glass:text-slate-100 mb-3">Monthly Sales (Menu + Menu Set)</h2>
 
         {/* Scrollable content */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 min-h-0">
             {monthlyData.length === 0 ? (
-              <p className="text-gray-500 dark:text-slate-300 text-center mt-10">
+              <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">
                 No sales data for this month.
               </p>
             ) : (
@@ -485,8 +487,8 @@ export default function Dashboard() {
 
           {mostSelling && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/30 border-l-4 border-blue-600 rounded-lg">
-              <h3 className="font-semibold text-slate-800 dark:text-slate-100">Most Selling (Menu + Set)</h3>
-              <p className="text-slate-700 dark:text-slate-200">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100 glass:text-slate-100">Most Selling (Menu + Set)</h3>
+              <p className="text-slate-700 dark:text-slate-200 glass:text-slate-200">
                 {mostSelling[0]} — {mmkFormatter.format(mostSelling[1])}
               </p>
             </div>
@@ -507,7 +509,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">Inventory Stock Chart</h2>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 glass:text-slate-100">Inventory Stock Chart</h2>
             <select
               value={inventoryFilter}
               onChange={(e) => setInventoryFilter(e.target.value)}
@@ -519,9 +521,9 @@ export default function Dashboard() {
             </select>
           </div>
           {inventoryChartData.length === 0 ? (
-            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No inventory data.</p>
+            <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">No inventory data.</p>
           ) : inventoryDataForChart.labels.length === 0 ? (
-            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No data for selected inventory filter.</p>
+            <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">No data for selected inventory filter.</p>
           ) : (
             <div className="h-80">
               <Bar data={inventoryDataForChart} options={qtyChartOptions} />
@@ -531,7 +533,7 @@ export default function Dashboard() {
 
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">Supplier Purchase Chart</h2>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 glass:text-slate-100">Supplier Purchase Chart</h2>
             <select
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
@@ -544,9 +546,9 @@ export default function Dashboard() {
             </select>
           </div>
           {supplierChartData.length === 0 ? (
-            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No supplier purchase data for this month.</p>
+            <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">No supplier purchase data for this month.</p>
           ) : supplierDataForChart.labels.length === 0 ? (
-            <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No data for selected supplier.</p>
+            <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">No data for selected supplier.</p>
           ) : (
             <div className="h-80">
               <Bar data={supplierDataForChart} options={currencyChartOptions} />
@@ -557,7 +559,7 @@ export default function Dashboard() {
 
       <div className="mt-6 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100">
+          <h2 className="text-lg md:text-xl font-semibold text-slate-800 dark:text-slate-100 glass:text-slate-100">
             {profitLossRange === "custom"
               ? `All Base Profit & Loss (${formatMonthLabel(customProfitMonthRange.start)} - ${formatMonthLabel(customProfitMonthRange.end)})`
               : `All Base Profit & Loss (Last ${profitLossRange} Months)`}
@@ -576,7 +578,7 @@ export default function Dashboard() {
         {profitLossRange === "custom" && (
           <div className="flex flex-wrap items-end gap-3 mb-4">
             <div>
-              <label className="block text-xs text-slate-500 dark:text-slate-300 mb-1">Start Month</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-300 glass:text-slate-300 mb-1">Start Month</label>
               <input
                 type="month"
                 value={customProfitMonthRange.start}
@@ -585,7 +587,7 @@ export default function Dashboard() {
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 dark:text-slate-300 mb-1">End Month</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-300 glass:text-slate-300 mb-1">End Month</label>
               <input
                 type="month"
                 value={customProfitMonthRange.end}
@@ -599,21 +601,21 @@ export default function Dashboard() {
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="text-sm text-slate-600 dark:text-slate-300">
+          <div className="text-sm text-slate-600 dark:text-slate-300 glass:text-slate-300">
             Revenue: <span className="font-semibold text-emerald-600">{mmkFormatter.format(overallProfitLoss.revenue)}</span>
             {"  |  "}
             Expense: <span className="font-semibold text-rose-600">{mmkFormatter.format(overallProfitLoss.expense)}</span>
             {"  |  "}
-            Net: <span className={`font-semibold ${overallProfitLoss.profit > 0 ? "text-emerald-600" : overallProfitLoss.loss > 0 ? "text-rose-600" : "text-slate-600 dark:text-slate-300"}`}>
+            Net: <span className={`font-semibold ${overallProfitLoss.profit > 0 ? "text-emerald-600" : overallProfitLoss.loss > 0 ? "text-rose-600" : "text-slate-600 dark:text-slate-300 glass:text-slate-300"}`}>
               {mmkFormatter.format(overallProfitLoss.profit > 0 ? overallProfitLoss.profit : -overallProfitLoss.loss)}
             </span>
           </div>
         </div>
         {profitLossTrend.length === 0 ? (
-          <p className="text-gray-500 dark:text-slate-300 text-center mt-10">No profit/loss data found.</p>
+          <p className="text-gray-500 dark:text-slate-300 glass:text-slate-300 text-center mt-10">No profit/loss data found.</p>
         ) : (
           <div className="h-80">
-            <Bar data={profitLossChartData} options={{ ...currencyChartOptions, plugins: { ...currencyChartOptions.plugins, legend: { display: true, labels: { color: isDark ? "#cbd5e1" : "#334155" } } } }} />
+            <Bar data={profitLossChartData} options={{ ...currencyChartOptions, plugins: { ...currencyChartOptions.plugins, legend: { display: true, labels: { color: chartTextColor } } } }} />
           </div>
         )}
       </div>

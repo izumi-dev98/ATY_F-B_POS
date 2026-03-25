@@ -308,7 +308,7 @@ export default function Menu({ inventory }) {
   });
 
   return (
-    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 glass:bg-transparent min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Menu Management</h1>
@@ -329,7 +329,7 @@ export default function Menu({ inventory }) {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             activeTab === "menu"
               ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 glass:bg-white/30 glass:text-slate-800 glass:border-white/40 glass:backdrop-blur-xl glass:hover:bg-white/40"
           }`}
         >
           Menu Items
@@ -339,20 +339,20 @@ export default function Menu({ inventory }) {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             activeTab === "set"
               ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 glass:bg-white/30 glass:text-slate-800 glass:border-white/40 glass:backdrop-blur-xl glass:hover:bg-white/40"
           }`}
         >
           Menu Sets
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 p-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 glass:bg-white/28 glass:border-white/45 glass:backdrop-blur-2xl p-4 mb-6">
         <input
           type="text"
           placeholder={activeTab === "menu" ? "Search menu..." : "Search menu sets..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-600"
+          className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-600 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
         />
       </div>
 
@@ -363,7 +363,7 @@ export default function Menu({ inventory }) {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               selectedCategory === "all"
                 ? "bg-indigo-600 text-white"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 glass:bg-white/30 glass:text-slate-800 glass:border-white/40 glass:backdrop-blur-xl glass:hover:bg-white/40"
             }`}
         >
           All
@@ -375,7 +375,7 @@ export default function Menu({ inventory }) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               selectedCategory === cat.id.toString()
                 ? "bg-indigo-600 text-white"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 glass:bg-white/30 glass:text-slate-800 glass:border-white/40 glass:backdrop-blur-xl glass:hover:bg-white/40"
             }`}
           >
             {cat.name}
@@ -387,7 +387,7 @@ export default function Menu({ inventory }) {
         {filteredData.map((item) => (
           <div
             key={item.id}
-            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 glass:bg-white/28 glass:border-white/45 glass:backdrop-blur-2xl shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
           >
             <div className="absolute right-3 top-3 z-10 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-md">
               {mmkFormatter.format(item.price)}
@@ -406,7 +406,7 @@ export default function Menu({ inventory }) {
               </div>
 
               <div className="mb-4 flex min-h-7 items-center">
-                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200 glass:bg-white/30 glass:text-indigo-900 glass:border glass:border-white/45">
                   {categories.find(c => c.id === item.category_id)?.name || "Uncategorized"}
                 </span>
               </div>
@@ -416,9 +416,9 @@ export default function Menu({ inventory }) {
                   item.ingredients.map((ing, idx) => {
                     const inv = safeInventory.find((i) => i.id === Number(ing.inventory_id));
                     return (
-                      <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-700 px-3 py-2">
+                      <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-700 glass:bg-white/25 glass:border glass:border-white/35 px-3 py-2">
                         <span className="truncate">{inv?.item_name || "Unknown"}</span>
-                        <span className="ml-3 rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-600 dark:text-slate-100">
+                        <span className="ml-3 rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-600 dark:text-slate-100 glass:bg-white/30 glass:text-slate-800">
                           x {ing.qty}
                         </span>
                       </div>
@@ -428,7 +428,7 @@ export default function Menu({ inventory }) {
                   item.menu_items.map((mi, idx) => {
                     const menuItem = menu.find((m) => m.id === Number(mi.menu_id));
                     return (
-                      <div key={idx} className="rounded-lg bg-slate-50 dark:bg-slate-700 px-3 py-2">
+                      <div key={idx} className="rounded-lg bg-slate-50 dark:bg-slate-700 glass:bg-white/25 glass:border glass:border-white/35 px-3 py-2">
                         {menuItem?.menu_name || "Unknown"}
                       </div>
                     );
@@ -458,7 +458,7 @@ export default function Menu({ inventory }) {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg text-slate-800 dark:text-slate-100">
+          <div className="bg-white dark:bg-slate-800 glass:bg-white/28 glass:border glass:border-white/50 glass:backdrop-blur-2xl rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg text-slate-800 dark:text-slate-100">
             <h3 className="text-2xl font-bold mb-4 text-slate-800 dark:text-slate-100">
               {activeTab === "menu"
                 ? (isEditing ? "Edit Menu" : "Add Menu")
@@ -473,7 +473,7 @@ export default function Menu({ inventory }) {
                   placeholder="Menu Name"
                   value={formData.menu_name}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                   required
                 />
                 <input
@@ -482,14 +482,14 @@ export default function Menu({ inventory }) {
                   placeholder="Price"
                   value={formData.price}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                   required
                 />
                 <select
                   name="category_id"
                   value={formData.category_id}
                   onChange={handleFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                 >
                   <option value="">Select Category (Optional)</option>
                   {categories.map((cat) => (
@@ -503,7 +503,7 @@ export default function Menu({ inventory }) {
                       name="inventory_id"
                       value={ing.inventory_id}
                       onChange={(e) => handleIngredientChange(i, e)}
-                      className="flex-1 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                      className="flex-1 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                     >
                       <option value="">Select item</option>
                       {safeInventory.map((inv) => (
@@ -517,7 +517,7 @@ export default function Menu({ inventory }) {
                       min="0"
                       value={ing.qty}
                       onChange={(e) => handleIngredientChange(i, e)}
-                      className="w-20 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                      className="w-20 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                       required
                     />
 
@@ -540,7 +540,7 @@ export default function Menu({ inventory }) {
                   placeholder="Menu Set Name"
                   value={menuSetFormData.set_name}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                   required
                 />
                 <input
@@ -549,14 +549,14 @@ export default function Menu({ inventory }) {
                   placeholder="Price"
                   value={menuSetFormData.price}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                   required
                 />
                 <select
                   name="category_id"
                   value={menuSetFormData.category_id}
                   onChange={handleSetFormChange}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-slate-700 dark:text-slate-100 glass:bg-white/30 glass:border-white/40 glass:backdrop-blur-xl"
                 >
                   <option value="">Select Category (Optional)</option>
                   {categories.map((cat) => (
@@ -565,9 +565,9 @@ export default function Menu({ inventory }) {
                 </select>
                 <div>
                   <p className="font-semibold mb-2 text-slate-800 dark:text-slate-100">Select Menu Items</p>
-                  <div className="max-h-60 overflow-y-auto border border-slate-300 dark:border-slate-600 rounded-lg p-3 space-y-2 bg-white dark:bg-slate-800">
+                  <div className="max-h-60 overflow-y-auto border border-slate-300 dark:border-slate-600 rounded-lg p-3 space-y-2 bg-white dark:bg-slate-800 glass:bg-white/24 glass:border-white/40 glass:backdrop-blur-xl">
                     {menu.map((menuItem) => (
-                      <label key={menuItem.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded">
+                      <label key={menuItem.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 glass:hover:bg-white/35 p-2 rounded">
                         <input
                           type="checkbox"
                           checked={menuSetFormData.menu_items.includes(menuItem.id)}

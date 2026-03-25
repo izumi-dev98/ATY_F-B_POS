@@ -47,6 +47,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.classList.remove("glass");
     localStorage.setItem("theme", theme);
   }, [theme]);
 
@@ -140,7 +141,7 @@ export default function App() {
       {user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
       <div className={`flex-1 min-h-screen bg-gray-100 dark:bg-slate-900 ${user && isOpen ? "ml-60" : "ml-0"}`}>
         {user && <Navbar toggleSidebar={toggleSidebar} theme={theme} toggleTheme={toggleTheme} />}
-        <main className="p-6">
+        <main className={`p-6 ${user ? "pt-16" : ""}`}>
           <Routes>
             {/* Login redirects to dashboard if already logged in */}
             <Route
