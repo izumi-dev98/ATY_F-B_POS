@@ -44,33 +44,24 @@ YOU HAVE DIRECT ACCESS TO ALL TABLES AND CAN ANSWER QUESTIONS ABOUT:
 - purchases: Purchase orders with supplier names, dates, amounts, status
 - purchase_items: Items with names, quantities, prices
 - suppliers: Supplier names, contact info, phone, email, address
-- purchase_return: Returned purchases with reasons
-- supplier_outstanding: Outstanding payments to suppliers
 
 ### DISCOUNT ###
 - discount_types: Discount names, percentages, amounts
-- discount_type: Discount type settings
 
-### HISTORY ###
-- history: Order history records
+### ORDERS & HISTORY ###
 - orders: Customer orders with table numbers, totals, status
 - order_items: Order items with names, quantities, prices
-- internal_consumption: Internal usage records
-- internal_consumption_items: Items consumed internally
 
 ### ALL REPORTS ###
 - inventory: Stock levels with product names, quantities, values
 - menu: Menu items with names, prices, categories
 - menu_sets: Set meal combinations
 - menu_ingredients: Recipe ingredients
-- payments: Payment transactions
 - categories: Product/service categories
 - inventory_categories: Inventory categories
 
 ### CATEGORY ###
 - categories: Product/service categories
-- inventory_categories: Inventory item categories
-- discount_type: Discount categories
 
 ### DASHBOARD DATA ###
 - Real-time sales summary
@@ -134,20 +125,14 @@ export async function fetchAllSystemData() {
     // ==================== PURCHASE GROUP ====================
     purchases: { limit: 500, orderBy: 'created_at', orderOptions: { ascending: false } },
     purchase_items: { limit: 2000 },
-    purchase_return: { limit: 200, orderBy: 'created_at', orderOptions: { ascending: false } },
     suppliers: { limit: 200, orderBy: 'name' },
-    supplier_outstanding: { limit: 500, orderBy: 'created_at', orderOptions: { ascending: false } },
 
     // ==================== DISCOUNT ====================
     discount_types: { limit: 100 },
-    discount_type: { limit: 100 },
 
-    // ==================== HISTORY ====================
-    history: { limit: 500, orderBy: 'created_at', orderOptions: { ascending: false } },
+    // ==================== ORDERS ====================
     orders: { limit: 1000, orderBy: 'created_at', orderOptions: { ascending: false } },
     order_items: { limit: 5000 },
-    internal_consumption: { limit: 500, orderBy: 'created_at', orderOptions: { ascending: false } },
-    internal_consumption_items: { limit: 2000 },
 
     // ==================== INVENTORY & MENU ====================
     inventory: { limit: 1000, orderBy: 'id' },
@@ -157,11 +142,7 @@ export async function fetchAllSystemData() {
     menu_set_items: { limit: 2000 },
 
     // ==================== CATEGORY ====================
-    categories: { limit: 200, orderBy: 'name' },
-    inventory_categories: { limit: 200, orderBy: 'name' },
-
-    // ==================== PAYMENTS & REPORTS ====================
-    payments: { limit: 1000, orderBy: 'created_at', orderOptions: { ascending: false } }
+    categories: { limit: 200, orderBy: 'name' }
   };
 
   const results = {};
@@ -200,9 +181,7 @@ function calculateMetrics(data) {
 
     // Supplier Metrics
     suppliers: {
-      total_suppliers: data.suppliers?.length || 0,
-      outstanding_count: data.supplier_outstanding?.length || 0,
-      outstanding_total: data.supplier_outstanding?.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0) || 0
+      total_suppliers: data.suppliers?.length || 0
     },
 
     // Discount Metrics
@@ -235,12 +214,6 @@ function calculateMetrics(data) {
       total_items: data.menu?.length || 0,
       total_sets: data.menu_sets?.length || 0,
       total_categories: data.categories?.length || 0
-    },
-
-    // Internal Consumption
-    internal_consumption: {
-      total_records: data.internal_consumption?.length || 0,
-      total_value: data.internal_consumption?.reduce((sum, c) => sum + (parseFloat(c.total_amount) || 0), 0) || 0
     }
   };
 }
@@ -273,12 +246,6 @@ ${JSON.stringify(data.purchase_items)}
 SUPPLIERS (${data.suppliers.length} records):
 ${JSON.stringify(data.suppliers)}
 
-PURCHASE RETURNS (${data.purchase_return?.length || 0} records):
-${JSON.stringify(data.purchase_return || [])}
-
-SUPPLIER OUTSTANDING (${data.supplier_outstanding?.length || 0} records):
-${JSON.stringify(data.supplier_outstanding || [])}
-
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ DISCOUNT DATA                                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -286,11 +253,8 @@ ${JSON.stringify(data.supplier_outstanding || [])}
 DISCOUNT TYPES (${data.discount_types.length} records):
 ${JSON.stringify(data.discount_types)}
 
-DISCOUNT TYPE (${data.discount_type.length} records):
-${JSON.stringify(data.discount_type)}
-
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ HISTORY & ORDERS DATA                                                        │
+│ ORDERS DATA                                                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ORDERS (${data.orders.length} records):
@@ -298,15 +262,6 @@ ${JSON.stringify(data.orders)}
 
 ORDER ITEMS (${data.order_items.length} records):
 ${JSON.stringify(data.order_items)}
-
-HISTORY (${data.history.length} records):
-${JSON.stringify(data.history)}
-
-INTERNAL CONSUMPTION (${data.internal_consumption.length} records):
-${JSON.stringify(data.internal_consumption)}
-
-INTERNAL CONSUMPTION ITEMS (${data.internal_consumption_items.length} records):
-${JSON.stringify(data.internal_consumption_items)}
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ INVENTORY & MENU DATA                                                        │
@@ -333,16 +288,6 @@ ${JSON.stringify(data.menu_set_items)}
 
 CATEGORIES (${data.categories.length} records):
 ${JSON.stringify(data.categories)}
-
-INVENTORY CATEGORIES (${data.inventory_categories.length} records):
-${JSON.stringify(data.inventory_categories)}
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PAYMENTS DATA                                                                │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-PAYMENTS (${data.payments.length} records):
-${JSON.stringify(data.payments)}
 `;
 }
 
@@ -383,24 +328,37 @@ export async function chatWithAI(message, conversationHistory = []) {
       throw new Error(`API Error: ${response.status} - ${errorText}`);
     }
 
-    // Parse streaming response
+    // Parse response (handle both streaming and non-streaming)
     const text = await response.text();
-    const lines = text.split('\n').filter(line => line.trim());
+    console.log('Raw response:', text.substring(0, 500));
 
     let fullContent = '';
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const dataStr = line.slice(6);
-        if (dataStr.trim() === '[DONE]') continue;
-        try {
-          const data = JSON.parse(dataStr);
-          const delta = data.choices?.[0]?.delta;
-          if (delta?.content) fullContent += delta.content;
-        } catch (e) { /* Skip invalid JSON */ }
+
+    // Try parsing as streaming response first
+    if (text.includes('data: ')) {
+      const lines = text.split('\n').filter(line => line.trim());
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (dataStr.trim() === '[DONE]') continue;
+          try {
+            const data = JSON.parse(dataStr);
+            const delta = data.choices?.[0]?.delta;
+            if (delta?.content) fullContent += delta.content;
+          } catch (e) { /* Skip invalid JSON */ }
+        }
+      }
+    } else {
+      // Non-streaming response - parse directly
+      try {
+        const data = JSON.parse(text);
+        fullContent = data.choices?.[0]?.message?.content || '';
+      } catch (e) {
+        console.error('Failed to parse response:', e);
       }
     }
 
-    console.log('AI Response received');
+    console.log('AI Response received, content length:', fullContent.length);
     return { success: true, response: fullContent || 'No response from AI' };
 
   } catch (error) {
@@ -496,8 +454,7 @@ export async function getPurchaseData() {
 // Get discount data
 export async function getDiscountData() {
   const discountTypes = await fetchFromTable('discount_types');
-  const discountType = await fetchFromTable('discount_type');
-  return { discountTypes, discountType };
+  return { discountTypes };
 }
 
 // Get history data
@@ -520,10 +477,9 @@ export async function getHistoryData(options = {}) {
 export async function getReportData() {
   const inventory = await fetchFromTable('inventory');
   const menu = await fetchFromTable('menu');
-  const payments = await fetchFromTable('payments', { orderBy: 'created_at', orderOptions: { ascending: false } });
   const categories = await fetchFromTable('categories');
 
-  return { inventory, menu, payments, categories };
+  return { inventory, menu, categories };
 }
 
 // Get dashboard data
