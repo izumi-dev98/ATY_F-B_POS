@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBars, faMoon, faSun } from "@fortawesome/free-solid-svg-icons";
-import logo from "../assets/logo.png";
+import logo from "../assets/Main logo.jpg";
 
 export default function Navbar({ toggleSidebar, theme, toggleTheme }) {
   const [user, setUser] = useState(null);

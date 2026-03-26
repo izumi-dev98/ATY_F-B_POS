@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
+import mainLogo from "../assets/Main logo.jpg";
 
-export default function Login({ setUser }) { // <-- receive setUser from App.js
+export default function Login({ setUser }) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [isDarkMode, setIsDarkMode] = useState(false);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const darkMode = localStorage.getItem('darkMode') === 'true' ||
+                        window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setIsDarkMode(darkMode);
+    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -60,15 +68,11 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
             }
 
             const loginUser = { ...data, permissions };
-
-            // Save user to localStorage
             localStorage.setItem("user", JSON.stringify(loginUser));
-
-            // Update App.js state
             if (setUser) setUser(loginUser);
 
             Swal.fire("Success", "Logged in!", "success").then(() => {
-                navigate("/dashboard"); // redirect to dashboard
+                navigate("/dashboard");
             });
         } catch (err) {
             console.error(err);
@@ -76,114 +80,90 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
         }
     };
 
-  return (
-  <div className="fixed inset-0 bg-white overflow-hidden flex items-center justify-center px-4">
+    const bgGradient = isDarkMode
+        ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
+        : 'bg-gradient-to-br from-blue-50 via-white to-indigo-50';
 
-    <div className="
-      w-full
-      max-w-sm
-      sm:max-w-md
-      bg-white
-      rounded-2xl
-      shadow-2xl
-      p-6
-      sm:p-8
-      border
-    ">
+    const cardClasses = isDarkMode
+        ? 'bg-slate-800/90 border-slate-700 shadow-slate-900/50'
+        : 'bg-white/90 border-white shadow-gray-200/50';
 
-      {/* Header */}
-      <div className="text-center mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-          Myat Taw Win (Aye Thar Yar ) Hospital
-        </h2>
-        <p className="text-xs sm:text-sm text-gray-500">
-          Sign in to continue
-        </p>
-      </div>
+    const titleClasses = isDarkMode ? 'text-white' : 'text-gray-800';
+    const subtitleClasses = isDarkMode ? 'text-slate-400' : 'text-gray-500';
+    const labelClasses = isDarkMode ? 'text-slate-300' : 'text-gray-600';
+    const inputClasses = isDarkMode
+        ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
+        : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400';
 
-      <form onSubmit={handleLogin} className="space-y-4">
+    return (
+        <div className={`fixed inset-0 overflow-hidden flex items-center justify-center px-4 transition-colors duration-300 ${bgGradient}`}>
+            <div className={`w-full max-w-sm sm:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 border backdrop-blur-sm transition-all duration-300 ${cardClasses}`}>
+                {/* Logo */}
+                <div className="flex justify-center mb-6">
+                    <img
+                        src={mainLogo}
+                        alt="Logo"
+                        className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-4 shadow-lg transition-colors duration-300 ${
+                            isDarkMode
+                                ? 'border-slate-500'
+                                : 'border-blue-500'
+                        }`}
+                    />
+                </div>
 
-        {/* Username */}
-        <div>
-          <label className="text-xs sm:text-sm text-gray-600">
-            Username
-          </label>
-          <input
-            type="text"
-            placeholder="Enter username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="
-              mt-1
-              w-full
-              px-3
-              sm:px-4
-              py-2.5
-              rounded-lg
-              border
-              border-gray-300
-              focus:ring-2
-              focus:ring-blue-500
-              focus:outline-none
-            "
-          />
+                {/* Header */}
+                <div className="text-center mb-6">
+                    <h2 className={`text-xl sm:text-2xl font-bold transition-colors duration-300 ${titleClasses}`}>
+                        Myat Taw Win (Aye Thar Yar ) Hospital
+                    </h2>
+                    <p className={`text-xs sm:text-sm mt-1 transition-colors duration-300 ${subtitleClasses}`}>
+                        Sign in to continue
+                    </p>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                    {/* Username */}
+                    <div>
+                        <label className={`text-xs sm:text-sm transition-colors duration-300 ${labelClasses}`}>
+                            Username
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="Enter username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            className={`mt-1 w-full px-3 sm:px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-300 ${inputClasses}`}
+                        />
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                        <label className={`text-xs sm:text-sm transition-colors duration-300 ${labelClasses}`}>
+                            Password
+                        </label>
+                        <input
+                            type="password"
+                            placeholder="Enter password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className={`mt-1 w-full px-3 sm:px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-300 ${inputClasses}`}
+                        />
+                    </div>
+
+                    {/* Button */}
+                    <button
+                        type="submit"
+                        className="w-full py-2.5 sm:py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 active:scale-[0.98] transition"
+                    >
+                        Login
+                    </button>
+                </form>
+
+                {/* Footer */}
+                <p className="text-center text-yellow-500 text-[10px] sm:text-xs mt-6 font-semibold">
+                    © 2026 Nosh
+                </p>
+            </div>
         </div>
-
-        {/* Password */}
-        <div>
-          <label className="text-xs sm:text-sm text-gray-600">
-            Password
-          </label>
-          <input
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="
-              mt-1
-              w-full
-              px-3
-              sm:px-4
-              py-2.5
-              rounded-lg
-              border
-              border-gray-300
-              focus:ring-2
-              focus:ring-blue-500
-              focus:outline-none
-            "
-          />
-        </div>
-
-        {/* Button */}
-        <button
-          type="submit"
-          className="
-            w-full
-            py-2.5
-            sm:py-3
-            rounded-lg
-            bg-blue-600
-            text-white
-            font-semibold
-            hover:bg-blue-700
-            active:scale-[0.98]
-            transition
-          "
-        >
-          Login
-        </button>
-      </form>
-
-      {/* Footer */}
-      <p className="text-center text-[10px] sm:text-xs text-gray-400 mt-6">
-        © 2026 Myat Taw Win Hospital
-      </p>
-    </div>
-
-  </div>
-);
-
-
-
+    );
 }
