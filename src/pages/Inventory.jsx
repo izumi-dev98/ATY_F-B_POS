@@ -99,11 +99,13 @@ export default function Inventory({
   }, []);
 
   // Filter inventory by search and category
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = item.item_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || item.category_id === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredInventory = inventory
+    .filter(item => {
+      const matchesSearch = item.item_name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === "all" || item.category_id === selectedCategory;
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => a.item_name.localeCompare(b.item_name));
 
   const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
 

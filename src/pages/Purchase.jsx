@@ -32,7 +32,7 @@ export default function Purchase({ setInventory }) {
     manual_credit: ""
   });
   const [lineItems, setLineItems] = useState([
-    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }
+    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }
   ]);
   const [nextItemId, setNextItemId] = useState(2);
   const [inventory, setInventoryLocal] = useState([]);
@@ -164,15 +164,16 @@ export default function Purchase({ setInventory }) {
             updated.item_name = invItem.item_name;
             updated.type = invItem.type || "";
             updated.unit_price = invItem.price || "";
-            updated.total_price = (parseFloat(invItem.price || 0) * (parseFloat(item.qty) || 0)).toFixed(2);
+            updated.total_price = calculateLineTotal(updated.qty, updated.foc_qty, invItem.price);
           }
         }
 
-        // Recalculate total when qty or unit_price changes
-        if (field === "qty" || field === "unit_price") {
+        // Recalculate total when qty, foc_qty, or unit_price changes
+        if (field === "qty" || field === "foc_qty" || field === "unit_price") {
           const qty = field === "qty" ? parseFloat(value) || 0 : parseFloat(item.qty) || 0;
+          const focQty = field === "foc_qty" ? parseFloat(value) || 0 : parseFloat(item.foc_qty) || 0;
           const price = field === "unit_price" ? parseFloat(value) || 0 : parseFloat(item.unit_price) || 0;
-          updated.total_price = (qty * price).toFixed(2);
+          updated.total_price = calculateLineTotal(qty, focQty, price);
         }
 
         // If item_name changes, clear inventory_id (manual entry)
@@ -184,6 +185,14 @@ export default function Purchase({ setInventory }) {
       }
       return item;
     }));
+  };
+
+  const calculateLineTotal = (qty, focQty, price) => {
+    const numericQty = parseFloat(qty) || 0;
+    const numericFocQty = parseFloat(focQty) || 0;
+    const numericPrice = parseFloat(price) || 0;
+    const billableQty = numericQty - numericFocQty;
+    return (billableQty * numericPrice).toFixed(2);
   };
 
   const calculateSubTotal = () => {
@@ -217,7 +226,7 @@ export default function Purchase({ setInventory }) {
 
   const openAddModal = () => {
     setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0, tax: 0, payment_type: "Cash Down", credit_option: "", manual_credit: "" });
-    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
+    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }]);
     setNextItemId(2);
     setIsEditing(false);
     setEditId(null);
@@ -246,6 +255,7 @@ export default function Purchase({ setInventory }) {
           id: idx + 1,
           item_name: item.item_name || "",
           qty: item.qty || "",
+          foc_qty: item.foc_qty || "",
           unit_price: item.unit_price || "",
           total_price: item.total_price || "",
           type: item.type || "",
@@ -254,7 +264,7 @@ export default function Purchase({ setInventory }) {
       }));
       setNextItemId(items.length + 1);
     } else {
-      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
+      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }]);
       setNextItemId(2);
     }
 
@@ -304,6 +314,7 @@ export default function Purchase({ setInventory }) {
           purchase_id: editId,
           item_name: item.item_name.trim(),
           qty: parseFloat(item.qty),
+          foc_qty: parseFloat(item.foc_qty) || 0,
           unit_price: parseFloat(item.unit_price),
           total_price: parseFloat(item.total_price),
           type: item.type || "-"
@@ -332,6 +343,7 @@ export default function Purchase({ setInventory }) {
           purchase_id: newPurchase.id,
           item_name: item.item_name.trim(),
           qty: parseFloat(item.qty),
+          foc_qty: parseFloat(item.foc_qty) || 0,
           unit_price: parseFloat(item.unit_price),
           total_price: parseFloat(item.total_price),
           type: item.type || "-"
@@ -610,6 +622,7 @@ export default function Purchase({ setInventory }) {
                   <tr>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700">Item</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">FOC</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
@@ -620,12 +633,19 @@ export default function Purchase({ setInventory }) {
                     <tr key={idx} className="border-t border-slate-100">
                       <td className="px-4 py-2 text-slate-800">{item.item_name}</td>
                       <td className="px-4 py-2 text-center text-slate-600">{item.qty}</td>
+                      <td className="px-4 py-2 text-center">
+                        {item.foc_qty > 0 ? (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{item.foc_qty}</span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
                       <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
                       <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={5} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
                   )}
                 </tbody>
                 <tfoot className="bg-slate-50">
@@ -673,10 +693,11 @@ export default function Purchase({ setInventory }) {
                       <tr>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700">Select from Inventory</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700">Item Name</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-24">Qty</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700 w-24">Unit</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-28">Unit Price</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-28">Total</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">Qty</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">FOC</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700 w-20">Unit</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Unit Price</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Total</th>
                         {canManage && <th className="px-3 py-2 w-10"></th>}
                       </tr>
                     </thead>
@@ -699,12 +720,20 @@ export default function Purchase({ setInventory }) {
                             <input type="number" value={item.qty} onChange={(e) => updateLineItem(item.id, "qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
                           <td className="px-3 py-2">
+                            <input type="number" value={item.foc_qty} onChange={(e) => updateLineItem(item.id, "foc_qty", e.target.value)} placeholder="0" min="0" step="0.01" className="w-full px-2 py-1.5 border border-emerald-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-emerald-50" title="Free of Charge quantity" />
+                          </td>
+                          <td className="px-3 py-2">
                             <input type="text" value={item.type} onChange={(e) => updateLineItem(item.id, "type", e.target.value)} placeholder="kg, pcs, box" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-700">{formatMMK(item.total_price)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-700">
+                            <div className="text-sm">{formatMMK(item.total_price)}</div>
+                            {item.foc_qty > 0 && (
+                              <div className="text-xs text-emerald-600">FOC: {item.foc_qty}</div>
+                            )}
+                          </td>
                           {canManage && (
                             <td className="px-3 py-2 text-center">
                               <button type="button" onClick={() => removeLineItem(item.id)} className="text-rose-500 hover:text-rose-700 font-bold">X</button>

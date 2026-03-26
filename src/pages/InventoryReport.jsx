@@ -76,9 +76,11 @@ export default function InventoryReport() {
     const exactValue = stockValueByItem[exactKey];
     const fallbackValue = stockValueByItem[fallbackKey];
 
+    // Return pre-calculated stock value from ALL purchases (matches history modal total)
     if (Number.isFinite(exactValue)) return exactValue;
     if (Number.isFinite(fallbackValue)) return fallbackValue;
 
+    // Fallback: calculate from qty and price
     return getTotalValueByQty(itemName, itemType, qty, inventoryPrice);
   };
 
@@ -134,7 +136,7 @@ export default function InventoryReport() {
     // Get add_stock records from internal_consumption
     const { data: addStockRecords } = await supabase
       .from("internal_consumption")
-      .select("id")
+      .select("id, created_at")
       .eq("status", "add_stock")
       .order("created_at", { ascending: false });
 
@@ -144,10 +146,10 @@ export default function InventoryReport() {
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, type, qty, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        ? supabase.from("purchase_items").select("item_name, type, qty, foc_qty, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
         : Promise.resolve({ data: [] }),
       addStockIds.length > 0
-        ? supabase.from("internal_consumption_items").select("inventory_id, qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
+        ? supabase.from("internal_consumption_items").select("inventory_id, qty, foc_qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
         : Promise.resolve({ data: [] })
     ]);
 
@@ -157,11 +159,13 @@ export default function InventoryReport() {
     // Build purchase price history per item (latest first)
     const priceHistory = {};
     const stockValue = {};
-    const addLayerValue = (key, qty, unitPrice) => {
+    const addLayerValue = (key, qty, focQty, unitPrice) => {
       const numericQty = Number(qty);
+      const numericFocQty = Number(focQty) || 0;
       const numericPrice = Number(unitPrice);
-      if (!Number.isFinite(numericQty) || !Number.isFinite(numericPrice) || numericQty <= 0) return;
-      stockValue[key] = (stockValue[key] || 0) + (numericQty * numericPrice);
+      const billableQty = numericQty - numericFocQty;
+      if (!Number.isFinite(billableQty) || !Number.isFinite(numericPrice) || billableQty <= 0) return;
+      stockValue[key] = (stockValue[key] || 0) + (billableQty * numericPrice);
     };
 
     // From purchase_items
@@ -175,8 +179,9 @@ export default function InventoryReport() {
           if (!priceHistory[fallbackKey]) priceHistory[fallbackKey] = [];
           priceHistory[exactKey].push(item.unit_price);
           priceHistory[fallbackKey].push(item.unit_price);
-          addLayerValue(exactKey, item.qty, item.unit_price);
-          addLayerValue(fallbackKey, item.qty, item.unit_price);
+          const focQty = item.foc_qty || 0;
+          addLayerValue(exactKey, item.qty, focQty, item.unit_price);
+          addLayerValue(fallbackKey, item.qty, focQty, item.unit_price);
         }
       });
     }
@@ -198,14 +203,16 @@ export default function InventoryReport() {
           if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
           priceHistory[keyPair.exactKey].push(item.unit_price);
           priceHistory[keyPair.fallbackKey].push(item.unit_price);
-          addLayerValue(keyPair.exactKey, item.qty, item.unit_price);
-          addLayerValue(keyPair.fallbackKey, item.qty, item.unit_price);
+          const focQty = item.foc_qty || 0;
+          addLayerValue(keyPair.exactKey, item.qty, focQty, item.unit_price);
+          addLayerValue(keyPair.fallbackKey, item.qty, focQty, item.unit_price);
         }
       });
     }
 
     setPriceHistoryByItem(priceHistory);
     setStockValueByItem(stockValue);
+    console.log("Stock Value By Item:", stockValue);
     setLoading(false);
   };
 
@@ -256,7 +263,7 @@ export default function InventoryReport() {
     if (purchaseIds.length > 0) {
       const { data: purchaseItems, error: purchaseItemsErr } = await supabase
         .from("purchase_items")
-        .select("id, qty, unit_price, purchase_id, item_name, type")
+        .select("id, qty, foc_qty, unit_price, purchase_id, item_name, type")
         .in("purchase_id", purchaseIds);
 
       if (purchaseItemsErr) {
@@ -287,6 +294,7 @@ export default function InventoryReport() {
               source_type: "Purchase",
               status: purchase.status || "received",
               qty: parseFloat(pi.qty) || 0,
+              foc_qty: parseFloat(pi.foc_qty) || 0,
               unit_price: parseFloat(pi.unit_price) || 0
             });
           }
@@ -298,7 +306,7 @@ export default function InventoryReport() {
     if (addStockIds.length > 0) {
       const { data: addStockItems, error: addStockItemsErr } = await supabase
         .from("internal_consumption_items")
-        .select("id, qty, unit_price, consumption_id, inventory_id")
+        .select("id, qty, foc_qty, unit_price, consumption_id, inventory_id")
         .in("consumption_id", addStockIds);
 
       if (addStockItemsErr) {
@@ -315,12 +323,17 @@ export default function InventoryReport() {
 
         matchedAddStockItems.forEach(ai => {
           const createdAt = addStockMap[ai.consumption_id];
+          const qty = parseFloat(ai.qty) || 0;
+          const focQty = parseFloat(ai.foc_qty) || 0;
+          const billableQty = qty - focQty;
+          const unitPrice = parseFloat(ai.unit_price) || 0;
           history.push({
             id: ai.id,
             item_name: targetInv.item_name,
-            qty: parseFloat(ai.qty) || 0,
-            unit_price: parseFloat(ai.unit_price) || 0,
-            total_price: (parseFloat(ai.qty) || 0) * (parseFloat(ai.unit_price) || 0),
+            qty: qty,
+            foc_qty: focQty,
+            unit_price: unitPrice,
+            total_price: billableQty * unitPrice,
             purchase_date: createdAt ? new Date(createdAt).toISOString().split('T')[0] : "-",
             fifo_date: createdAt || null,
             invoice_number: "-",
@@ -644,7 +657,17 @@ export default function InventoryReport() {
 
                   {/* Total Value - layer total (matches history modal) */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
+                    {(() => {
+                      const exactKey = buildItemKey(item.item_name, item.type || item.unit);
+                      const fallbackKey = buildNameOnlyKey(item.item_name);
+                      const exactValue = stockValueByItem[exactKey];
+                      const fallbackValue = stockValueByItem[fallbackKey];
+                      const value = Number.isFinite(exactValue) ? exactValue :
+                                   Number.isFinite(fallbackValue) ? fallbackValue :
+                                   getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price);
+                      console.log(`Item: ${item.item_name}, ExactKey: ${exactKey}, ExactValue: ${exactValue}, FallbackValue: ${fallbackValue}, Final: ${value}`);
+                      return formatMMK(value);
+                    })()}
                   </td>
                 </tr>
               ))
@@ -699,6 +722,7 @@ export default function InventoryReport() {
                     <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Date</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Supplier</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">FOC</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Unit Price</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Total</th>
                   </tr>
@@ -707,10 +731,13 @@ export default function InventoryReport() {
                   {purchaseHistory.length > 0 ? (
                     purchaseHistory.map((item, idx) => {
                       const qty = parseFloat(item.qty) || 0;
+                      const focQty = parseFloat(item.foc_qty) || 0;
+                      const billableQty = qty - focQty;
                       const isZero = qty === 0;
+                      // Total = (Qty - FOC) × Unit Price
                       const rowTotal =
                         toFiniteNumber(item.total_price) ||
-                        ((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0));
+                        (billableQty * (parseFloat(item.unit_price) || 0));
                       return (
                         <tr
                           key={idx}
@@ -731,6 +758,13 @@ export default function InventoryReport() {
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.purchase_date}</td>
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{getSupplierName(item.supplier_id)}</td>
                           <td className="px-4 py-2 text-center text-slate-600 dark:text-slate-400">{item.qty}</td>
+                          <td className="px-4 py-2 text-center">
+                            {focQty > 0 ? (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{focQty}</span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{formatMMK(item.unit_price)}</td>
                           <td className="px-4 py-2 text-right font-medium text-slate-800 dark:text-slate-200">{formatMMK(rowTotal)}</td>
                         </tr>
@@ -745,15 +779,18 @@ export default function InventoryReport() {
                 {purchaseHistory.length > 0 && (
                   <tfoot className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
                     <tr>
-                      <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total</td>
+                      <td colSpan={6} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total</td>
                       <td className="px-4 py-2"></td>
                       <td className="px-4 py-2 text-right font-bold text-indigo-600 dark:text-indigo-400">
                         {formatMMK(
                           purchaseHistory.reduce(
-                            (sum, item) =>
-                              sum +
-                              (parseFloat(item.total_price) ||
-                                ((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0))),
+                            (sum, item) => {
+                              const qty = parseFloat(item.qty) || 0;
+                              const focQty = parseFloat(item.foc_qty) || 0;
+                              const billableQty = qty - focQty;
+                              const price = parseFloat(item.unit_price) || 0;
+                              return sum + (parseFloat(item.total_price) || (billableQty * price));
+                            },
                             0
                           )
                         )}

@@ -245,13 +245,13 @@ export default function History({ setInventory }) {
         }
       }
 
-      // Validate stock before update
-      for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
-        const inv = updatedInventory.find((i) => i.id === Number(inventoryId));
-        if (!inv || (parseFloat(inv.qty) || 0) < neededQty) {
-          throw new Error(`Not enough stock for ${inv?.item_name || `Inventory ID ${inventoryId}`}`);
-        }
-      }
+      // Allow negative inventory - no validation
+      // for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+      //   const inv = updatedInventory.find((i) => i.id === Number(inventoryId));
+      //   if (!inv || (parseFloat(inv.qty) || 0) < neededQty) {
+      //     throw new Error(`Not enough stock for ${inv?.item_name || `Inventory ID ${inventoryId}`}`);
+      //   }
+      // }
 
       // FIFO deduction from stock history (Purchase + Add Stock) by created_at
       const deductFromStockHistory = async (inventoryId, _itemName, _itemType, qtyToDeduct) => {
