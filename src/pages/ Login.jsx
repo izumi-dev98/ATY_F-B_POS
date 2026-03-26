@@ -4,18 +4,29 @@ import Swal from "sweetalert2";
 import supabase from "../createClients";
 import { ROLE_ACCESS_RIGHTS } from "../utils/accessControl";
 import mainLogo from "../assets/Main logo.jpg";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faSun, faMoon } from "@fortawesome/free-solid-svg-icons";
 
 export default function Login({ setUser }) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [theme, setTheme] = useState(() => {
+        const savedTheme = localStorage.getItem("theme");
+        if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    });
     const navigate = useNavigate();
 
     useEffect(() => {
-        const darkMode = localStorage.getItem('darkMode') === 'true' ||
-                        window.matchMedia('(prefers-color-scheme: dark)').matches;
-        setIsDarkMode(darkMode);
-    }, []);
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        localStorage.setItem("theme", theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+    };
+
+    const isDarkMode = theme === "dark";
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -85,8 +96,8 @@ export default function Login({ setUser }) {
         : 'bg-gradient-to-br from-blue-50 via-white to-indigo-50';
 
     const cardClasses = isDarkMode
-        ? 'bg-slate-800/90 border-slate-700 shadow-slate-900/50'
-        : 'bg-white/90 border-white shadow-gray-200/50';
+        ? 'bg-slate-800/90 border-slate-500 shadow-slate-900/50'
+        : 'bg-white border-2 border-black shadow-gray-200/50';
 
     const titleClasses = isDarkMode ? 'text-white' : 'text-gray-800';
     const subtitleClasses = isDarkMode ? 'text-slate-400' : 'text-gray-500';
@@ -97,6 +108,19 @@ export default function Login({ setUser }) {
 
     return (
         <div className={`fixed inset-0 overflow-hidden flex items-center justify-center px-4 transition-colors duration-300 ${bgGradient}`}>
+            {/* Theme Toggle Button */}
+            <button
+                onClick={toggleTheme}
+                className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    isDarkMode
+                        ? 'bg-slate-700 text-yellow-400 hover:bg-slate-600'
+                        : 'bg-white text-slate-700 hover:bg-gray-100 shadow-md'
+                }`}
+                aria-label="Toggle theme"
+            >
+                <FontAwesomeIcon icon={isDarkMode ? faSun : faMoon} className="w-5 h-5" />
+            </button>
+
             <div className={`w-full max-w-sm sm:max-w-md rounded-2xl shadow-2xl p-6 sm:p-8 border backdrop-blur-sm transition-all duration-300 ${cardClasses}`}>
                 {/* Logo */}
                 <div className="flex justify-center mb-6">

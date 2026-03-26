@@ -5,6 +5,21 @@
 const API_BASE = '/api/ai';
 import supabase from '../createClients.js';
 
+// Get current date/time
+const getCurrentDateTime = () => {
+  const now = new Date();
+  return now.toLocaleString('en-US', {
+    timeZone: 'Asia/Yangon',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+};
+
 const SYSTEM_PROMPT = `
 =============================================================================
 YOU ARE AN AI ASSISTANT WITH COMPLETE ACCESS TO THE ENTIRE POS SYSTEM DATABASE
@@ -37,6 +52,10 @@ Items:
 
 EXAMPLE OF BAD RESPONSE (DON'T DO THIS):
 "id: 1, supplier_id: 1, order_date: 2025-01-15, total_amount: 500000"
+
+CURRENT DATE/TIME: ${getCurrentDateTime()}
+- Always use this current date/time when answering questions about "today", "current", "now", etc.
+- When filtering by date, use this as the reference point
 
 YOU HAVE DIRECT ACCESS TO ALL TABLES AND CAN ANSWER QUESTIONS ABOUT:
 
