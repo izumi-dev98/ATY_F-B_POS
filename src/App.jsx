@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Swal from "sweetalert2";
+import { Analytics } from "@vercel/analytics/react";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
@@ -162,6 +163,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <Analytics />
     </div>
   );
 }
