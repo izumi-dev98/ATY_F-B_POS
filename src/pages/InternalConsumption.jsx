@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { buildFifoList, deductFromFifo } from "../utils/fifoService";
 
 export default function InternalConsumption({ inventory, setInventory }) {
   const [records, setRecords] = useState([]);
@@ -358,158 +359,42 @@ export default function InternalConsumption({ inventory, setInventory }) {
         .single();
       if (recordErr) throw recordErr;
 
-      // Deduct from stock history (FIFO by date: earliest first)
-      const deductFromStockHistory = async (itemId, _itemName, _itemType, usageQty) => {
-        const getFifoTimestamp = (value) => {
-          if (!value) return Number.POSITIVE_INFINITY;
-          let ts = new Date(value).getTime();
-          if (Number.isNaN(ts)) return Number.POSITIVE_INFINITY;
-          return ts;
-        };
-
-        // Fetch all received purchases with created_at for accurate FIFO
-        const { data: purchases, error: purchasesErr } = await supabase
-          .from("purchases")
-          .select("id, date, created_at")
-          .eq("status", "received");
-
-        if (purchasesErr) throw purchasesErr;
-        const purchaseIds = (purchases || []).map((p) => p.id);
-
-        // Fetch all add_stock records
-        const { data: addStockRecords, error: addStockErr } = await supabase
-          .from("internal_consumption")
-          .select("id, created_at")
-          .eq("status", "add_stock");
-
-        if (addStockErr) throw addStockErr;
-        const addStockIds = (addStockRecords || []).map((r) => r.id);
-
-        // Build combined FIFO list
-        const fifoList = [];
-
-        // Fetch inventory for matching
-        const { data: allInventory, error: invErr } = await supabase
-          .from("inventory")
-          .select("id, item_name, type");
-
-        if (invErr) throw invErr;
-        const targetInv = allInventory.find(inv => inv.id === itemId);
-
-        if (targetInv) {
-          const normalizeName = (value) => value?.toString().trim().toLowerCase() || "";
-          const normalizeType = (value) => {
-            const normalized = value?.toString().trim().toLowerCase();
-            return normalized || "-";
-          };
-          const targetName = normalizeName(targetInv.item_name);
-          const targetType = normalizeType(targetInv.type);
-
-          // Add purchase items
-          if (purchaseIds.length > 0) {
-            const { data: purchaseItems, error: itemsErr } = await supabase
-              .from("purchase_items")
-              .select("id, qty, unit_price, purchase_id, item_name, type")
-              .in("purchase_id", purchaseIds);
-
-            if (itemsErr) throw itemsErr;
-            if (purchaseItems) {
-              const exactMatches = purchaseItems.filter((pi) =>
-                normalizeName(pi.item_name) === targetName &&
-                normalizeType(pi.type) === targetType
-              );
-              const matchedPurchaseItems = exactMatches.length > 0
-                ? exactMatches
-                : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
-
-              matchedPurchaseItems.forEach(pi => {
-                const purchase = purchases?.find(p => p.id === pi.purchase_id);
-                // Use created_at for FIFO (more accurate than date only)
-                const fifoDate = purchase?.created_at || purchase?.date;
-                fifoList.push({
-                  id: pi.id,
-                  qty: parseFloat(pi.qty) || 0,
-                  unit_price: parseFloat(pi.unit_price) || 0,
-                  date: fifoDate,
-                  fifoTimestamp: getFifoTimestamp(fifoDate),
-                  source: "purchase"
-                });
-              });
-            }
-          }
-
-          // Add add_stock items
-          if (addStockIds.length > 0) {
-            const { data: addStockItems, error: itemsErr } = await supabase
-              .from("internal_consumption_items")
-              .select("id, qty, unit_price, consumption_id, inventory_id")
-              .in("consumption_id", addStockIds);
-
-            if (itemsErr) throw itemsErr;
-            if (addStockItems) {
-              addStockItems.forEach(ai => {
-                if (ai.inventory_id === itemId) {
-                  const addStock = addStockRecords?.find(r => r.id === ai.consumption_id);
-                  fifoList.push({
-                    id: ai.id,
-                    qty: parseFloat(ai.qty) || 0,
-                    unit_price: parseFloat(ai.unit_price) || 0,
-                    date: addStock?.created_at || null,
-                    fifoTimestamp: getFifoTimestamp(addStock?.created_at),
-                    source: "add_stock"
-                  });
-                }
-              });
-            }
-          }
-        }
-
-        // True FIFO across sources:
-        // 1) oldest date/time first (purchases prioritized on same date)
-        // 2) stable numeric id as final tie-breaker
-        fifoList.sort((a, b) => {
-          if (a.fifoTimestamp !== b.fifoTimestamp) return a.fifoTimestamp - b.fifoTimestamp;
-          return (Number(a.id) || 0) - (Number(b.id) || 0);
+      // Deduct from stock history using centralized FIFO service
+      const deductFromStockHistory = async (itemId, itemName, itemType, usageQty) => {
+        // Build FIFO list using centralized service
+        const fifoList = await buildFifoList(itemId, itemName, itemType, {
+          includePurchase: true,
+          includeAddStock: true,
+          onlyWithRemainingQty: false
         });
 
-        // Deduct using FIFO
-        let remaining = usageQty;
-        for (const row of fifoList) {
-          if (remaining <= 0) break;
+        console.log(`[Usage FIFO] Item: ${itemName}, Usage Qty: ${usageQty}`);
+        console.log(`[Usage FIFO] Available layers:`, fifoList.map(l => ({
+          source: l.source,
+          id: l.id,
+          qty: l.qty,
+          unit_price: l.unit_price
+        })));
 
-          const currentQty = row.qty;
-          const unitPrice = row.unit_price;
-          if (currentQty <= 0) continue;
+        // Deduct from FIFO layers - automatically updates purchase_items/internal_consumption_items
+        const fifoResult = await deductFromFifo(fifoList, usageQty);
 
-          const consumeQty = Math.min(currentQty, remaining);
-          const newQty = currentQty - consumeQty;
+        console.log(`[Usage FIFO] Result:`, {
+          success: fifoResult.success,
+          remaining: fifoResult.remaining,
+          consumedLayers: fifoResult.consumedLayers.map(l => ({
+            source: l.source,
+            sourceId: l.sourceId,
+            qtyConsumed: l.qtyConsumed,
+            unitPrice: l.unitPrice
+          }))
+        });
 
-          // Update the appropriate table
-          if (row.source === "purchase") {
-            const { error: updateErr } = await supabase
-              .from("purchase_items")
-              .update({
-                qty: newQty,
-                total_price: newQty * unitPrice,
-              })
-              .eq("id", row.id);
-
-            if (updateErr) throw updateErr;
-          } else if (row.source === "add_stock") {
-            const { error: updateErr } = await supabase
-              .from("internal_consumption_items")
-              .update({
-                qty: newQty,
-              })
-              .eq("id", row.id);
-
-            if (updateErr) throw updateErr;
-          }
-
-          remaining -= consumeQty;
+        if (!fifoResult.success) {
+          console.warn(`[Usage FIFO] Warning: ${fifoResult.remaining} units could not be allocated for ${itemName}`);
         }
 
-        return { remaining, success: remaining <= 0 };
+        return fifoResult;
       };
 
       // Create consumption items and deduct inventory

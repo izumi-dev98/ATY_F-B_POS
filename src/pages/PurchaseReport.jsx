@@ -13,6 +13,11 @@ export default function PurchaseReport() {
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [purchaseItems, setPurchaseItems] = useState([]);
 
+  // Return details modal
+  const [showReturnDetailsModal, setShowReturnDetailsModal] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const [returnFifoDetails, setReturnFifoDetails] = useState([]);
+
   // Filter states
   const [filterType, setFilterType] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -112,6 +117,54 @@ export default function PurchaseReport() {
     // original_qty - current_qty = how much was returned (as negative)
     const returned = (itemCurrentQty || 0) - (itemOriginalQty || 0);
     return returned;
+  };
+
+  // View return details with FIFO breakdown
+  const viewReturnDetails = async (purchase) => {
+    try {
+      // Get all returns for this purchase
+      const { data: returns } = await supabase
+        .from("purchase_return_items")
+        .select(`
+          *,
+          purchase_returns (
+            id,
+            return_number,
+            status,
+            created_at
+          )
+        `)
+        .eq("purchase_id", purchase.id);
+
+      if (!returns || returns.length === 0) {
+        return Swal.fire("Info", "No returns found for this purchase", "info");
+      }
+
+      // Get FIFO details for each return item
+      const returnItemsWithFifo = [];
+      for (const retItem of returns) {
+        const { data: fifoDetails } = await supabase
+          .from("purchase_return_fifo")
+          .select("*")
+          .eq("return_item_id", retItem.id);
+
+        returnItemsWithFifo.push({
+          ...retItem,
+          fifoDetails: fifoDetails || [],
+          returnInfo: retItem.purchase_returns
+        });
+      }
+
+      setSelectedReturn({
+        purchase,
+        items: returnItemsWithFifo
+      });
+      setReturnFifoDetails(returnItemsWithFifo);
+      setShowReturnDetailsModal(true);
+    } catch (err) {
+      console.error("Error fetching return details:", err);
+      Swal.fire("Error", "Failed to load return details", "error");
+    }
   };
 
   // Export to Excel
@@ -398,8 +451,145 @@ export default function PurchaseReport() {
               </table>
             </div>
             {selectedPurchase?.notes && <div className="mt-4 text-sm"><span className="text-slate-500">Notes:</span><p className="text-slate-700 mt-1">{selectedPurchase.notes}</p></div>}
-            <div className="flex justify-end mt-4">
+            <div className="flex justify-end mt-4 gap-2">
+              {selectedPurchase?.status === "returned" && (
+                <button
+                  onClick={() => viewReturnDetails(selectedPurchase)}
+                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
+                >
+                  View Return Details
+                </button>
+              )}
               <button onClick={() => setShowDetailModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Details Modal with FIFO Breakdown */}
+      {showReturnDetailsModal && selectedReturn && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl p-6 w-full max-w-4xl shadow-xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Return Details - FIFO Breakdown</h3>
+                <p className="text-sm text-slate-500">Purchase: {selectedReturn.purchase?.invoice_number}</p>
+              </div>
+              <button
+                onClick={() => setShowReturnDetailsModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-slate-500">Invoice #:</span>
+                <span className="ml-2 font-semibold">{selectedReturn.purchase?.invoice_number}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Date:</span>
+                <span className="ml-2">{selectedReturn.purchase?.date}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Status:</span>
+                <span className="ml-2">{getStatusBadge(selectedReturn.purchase?.status)}</span>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700">Return #</th>
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700">Item</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">Unit</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">Return Qty</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Total</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">Status</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">FIFO Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {returnFifoDetails.map((retItem, idx) => {
+                    const isFullReturn = retItem.qty >= (retItem.original_qty || retItem.qty);
+                    return (
+                      <tr key={idx} className="border-t border-slate-100">
+                        <td className="px-3 py-2 text-xs text-slate-500">
+                          {retItem.returnInfo?.return_number || "-"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-800 font-medium">{retItem.item_name}</td>
+                        <td className="px-3 py-2 text-center text-slate-600">{retItem.type || "-"}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            isFullReturn
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {retItem.qty}
+                            {!isFullReturn && " (Partial)"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">{formatMMK(retItem.unit_price)}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{formatMMK(retItem.total_price)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            retItem.returnInfo?.status === "completed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {retItem.returnInfo?.status || "pending"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <details className="text-xs">
+                            <summary className="cursor-pointer text-indigo-600 hover:text-indigo-800">
+                              {retItem.fifoDetails?.length || 0} layer(s)
+                            </summary>
+                            <div className="mt-2 text-left bg-slate-50 p-2 rounded">
+                              {retItem.fifoDetails && retItem.fifoDetails.length > 0 ? (
+                                retItem.fifoDetails.map((fifo, fIdx) => (
+                                  <div key={fIdx} className="text-xs py-1 border-b border-slate-200 last:border-0">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-600">Source: {fifo.source_type}</span>
+                                      <span className="font-medium">{fifo.qty_reduced} @ {formatMMK(fifo.unit_price)}</span>
+                                    </div>
+                                    <div className="text-slate-500 text-xs mt-0.5">
+                                      Value: {formatMMK(fifo.total_value)}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-slate-400 italic">No FIFO records found</div>
+                              )}
+                            </div>
+                          </details>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-50">
+                  <tr>
+                    <td colSpan={5} className="px-3 py-2 text-right font-bold text-slate-800">Total Returned</td>
+                    <td className="px-3 py-2 text-right font-bold text-violet-600">
+                      {formatMMK(returnFifoDetails.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0))}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t border-slate-200">
+              <button
+                onClick={() => setShowReturnDetailsModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import { buildFifoList, deductFromFifo, restoreToFifo } from "../utils/fifoService";
 
 export default function PurchaseReturn({ setInventory }) {
   const [suppliers, setSuppliers] = useState([]);
@@ -272,7 +273,7 @@ export default function PurchaseReturn({ setInventory }) {
     setShowReturnItemsModal(true);
   };
 
-  // Complete return - reduce inventory and mark as completed
+  // Complete return - reduce inventory using FIFO and mark as completed
   const handleCompleteReturn = async (ret) => {
     // Check if already processed
     if (ret.status === "completed") {
@@ -281,7 +282,7 @@ export default function PurchaseReturn({ setInventory }) {
 
     const result = await Swal.fire({
       title: "Process Return?",
-      text: "This will reduce inventory and mark purchases as returned.",
+      text: "This will reduce inventory using FIFO (oldest stock first) and mark purchases as returned.",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Yes, Process Return",
@@ -301,57 +302,106 @@ export default function PurchaseReturn({ setInventory }) {
         return Swal.fire("Error", "No items found in this return", "error");
       }
 
-      // Reduce inventory for each item
+      // Track FIFO consumption for audit trail
+      const fifoConsumptionRecords = [];
+
+      // Process each return item using FIFO (oldest stock first automatically)
       for (const item of items) {
+        const returnQty = parseFloat(item.qty) || 0;
+
+        // Get inventory record for this item
         const { data: existing } = await supabase
           .from("inventory")
           .select("*")
           .ilike("item_name", item.item_name.trim())
           .maybeSingle();
 
-        if (existing) {
-          const newQty = Math.max(0, existing.qty - item.qty);
-          await supabase.from("inventory").update({ qty: newQty }).eq("id", existing.id);
+        if (!existing) {
+          throw new Error(`Inventory item not found: ${item.item_name}`);
         }
 
-        // Update purchase_items qty - use purchase_item_id if available (direct lookup)
+        // Update inventory qty
+        const newInventoryQty = Math.max(0, existing.qty - returnQty);
+        await supabase.from("inventory").update({ qty: newInventoryQty }).eq("id", existing.id);
+
+        // Build FIFO list and deduct using FIFO (oldest stock first automatically)
+        // The fifoService will find all layers for this item and consume from oldest first
+        const fifoList = await buildFifoList(existing.id, existing.item_name, existing.type || existing.unit || "-", {
+          includePurchase: true,
+          includeAddStock: true,
+          onlyWithRemainingQty: false
+        });
+
+        console.log(`[FIFO Return] Item: ${item.item_name}, Return Qty: ${returnQty}`);
+        console.log(`[FIFO Return] Available layers:`, fifoList.map(l => ({
+          source: l.source,
+          id: l.id,
+          qty: l.qty,
+          unit_price: l.unit_price
+        })));
+
+        // Deduct from FIFO layers - this automatically updates purchase_items/internal_consumption_items
+        const fifoResult = await deductFromFifo(fifoList, returnQty);
+
+        console.log(`[FIFO Return] Result:`, {
+          success: fifoResult.success,
+          remaining: fifoResult.remaining,
+          consumedLayers: fifoResult.consumedLayers.map(l => ({
+            source: l.source,
+            sourceId: l.sourceId,
+            qtyConsumed: l.qtyConsumed,
+            unitPrice: l.unitPrice
+          }))
+        });
+
+        if (!fifoResult.success) {
+          console.warn(`[FIFO Return] Warning: ${fifoResult.remaining} units could not be allocated for ${item.item_name}`);
+        }
+
+        // Record FIFO consumption for audit trail
+        for (const layer of fifoResult.consumedLayers) {
+          fifoConsumptionRecords.push({
+            return_item_id: item.id,
+            source_type: layer.source,
+            source_id: layer.sourceId,
+            qty_reduced: layer.qtyConsumed,
+            unit_price: layer.unitPrice
+          });
+        }
+
+        // Update original_qty on purchase_items to track how much was returned
+        // This is for display purposes in reports (to show returned qty = original - current)
         if (item.purchase_item_id) {
-          // Direct lookup by purchase_items row ID
           const { data: purchaseItem } = await supabase
             .from("purchase_items")
-            .select("id, qty")
+            .select("id, original_qty, qty")
             .eq("id", item.purchase_item_id)
             .single();
 
           if (purchaseItem) {
-            const newQty = Math.max(0, (purchaseItem.qty || 0) - item.qty);
-            await supabase
-              .from("purchase_items")
-              .update({ qty: newQty })
-              .eq("id", item.purchase_item_id);
-            console.log(`Updated purchase_items id=${item.purchase_item_id}: ${purchaseItem.qty} -> ${newQty}`);
-          }
-        } else {
-          // Fallback: find by purchase_id + item_name
-          const { data: purchaseItems } = await supabase
-            .from("purchase_items")
-            .select("id, qty, purchase_id, item_name, type")
-            .eq("purchase_id", item.purchase_id);
-
-          if (purchaseItems && purchaseItems.length > 0) {
-            const purchaseItem = purchaseItems.find(pi =>
-              pi.item_name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
-            );
-
-            if (purchaseItem) {
-              const newQty = Math.max(0, (purchaseItem.qty || 0) - item.qty);
+            // Store the original_qty (before any returns) for tracking
+            const currentOriginal = purchaseItem.original_qty || purchaseItem.qty || 0;
+            // Don't modify qty here - FIFO already did that
+            // Just ensure original_qty reflects the pre-return quantity
+            if (!purchaseItem.original_qty || purchaseItem.original_qty < currentOriginal) {
               await supabase
                 .from("purchase_items")
-                .update({ qty: newQty })
-                .eq("id", purchaseItem.id);
-              console.log(`Updated purchase_items id=${purchaseItem.id}: ${purchaseItem.qty} -> ${newQty}`);
+                .update({ original_qty: currentOriginal })
+                .eq("id", item.purchase_item_id);
             }
           }
+        }
+        console.log(`Processed return for ${item.item_name}: ${returnQty} units via FIFO`);
+      }
+
+      // Save FIFO consumption records to purchase_return_fifo table
+      if (fifoConsumptionRecords.length > 0) {
+        const { error: fifoError } = await supabase
+          .from("purchase_return_fifo")
+          .insert(fifoConsumptionRecords);
+
+        if (fifoError) {
+          console.error("Failed to save FIFO consumption records:", fifoError.message);
         }
       }
 
@@ -370,7 +420,7 @@ export default function PurchaseReturn({ setInventory }) {
         .update({ status: "completed" })
         .eq("id", ret.id);
 
-      Swal.fire("Success", "Return processed and inventory reduced!", "success");
+      Swal.fire("Success", "Return processed and inventory reduced using FIFO!", "success");
       await fetchData();
 
       if (setInventory) {
@@ -389,7 +439,7 @@ export default function PurchaseReturn({ setInventory }) {
     openInvoiceSearchModal();
   };
 
-  // Save return with existing return ID (for adding more items)
+  // Save return with existing return ID (for adding more items) - uses FIFO
   const handleSaveReturnWithId = async (returnId) => {
     const itemsToReturn = returnList.filter(item => item.return_qty > 0);
 
@@ -399,7 +449,7 @@ export default function PurchaseReturn({ setInventory }) {
 
     const result = await Swal.fire({
       title: "Add Items to Return?",
-      text: `This will add ${itemsToReturn.length} item(s) to the existing return.`,
+      text: `This will add ${itemsToReturn.length} item(s) to the existing return and reduce inventory using FIFO.`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Yes, Add Items",
@@ -409,12 +459,14 @@ export default function PurchaseReturn({ setInventory }) {
     if (!result.isConfirmed) return;
 
     try {
-      // Group items by purchase_id for status update check
       const purchaseIds = [...new Set(itemsToReturn.map(i => i.purchase_id))];
+      const fifoConsumptionRecords = [];
 
-      // Reduce inventory for each returned item
+      // Process each item using FIFO
       for (const item of itemsToReturn) {
-        // Reduce inventory qty
+        const returnQty = parseFloat(item.return_qty) || 0;
+
+        // Get inventory record
         const { data: existing } = await supabase
           .from("inventory")
           .select("*")
@@ -422,8 +474,33 @@ export default function PurchaseReturn({ setInventory }) {
           .maybeSingle();
 
         if (existing) {
-          const newQty = Math.max(0, existing.qty - item.return_qty);
+          // Update inventory qty
+          const newQty = Math.max(0, existing.qty - returnQty);
           await supabase.from("inventory").update({ qty: newQty }).eq("id", existing.id);
+
+          // Build FIFO list and deduct
+          const fifoList = await buildFifoList(existing.id, item.item_name, item.type || "-", {
+            includePurchase: true,
+            includeAddStock: true,
+            onlyWithRemainingQty: false
+          });
+
+          const fifoResult = await deductFromFifo(fifoList, returnQty);
+
+          if (!fifoResult.success) {
+            console.warn(`FIFO depletion warning for ${item.item_name}: ${fifoResult.remaining} units could not be allocated`);
+          }
+
+          // Record FIFO consumption
+          for (const layer of fifoResult.consumedLayers) {
+            fifoConsumptionRecords.push({
+              return_item_id: item.id,
+              source_type: layer.source,
+              source_id: layer.sourceId,
+              qty_reduced: layer.qtyConsumed,
+              unit_price: layer.unitPrice
+            });
+          }
         }
 
         // Update purchase_items qty
@@ -438,9 +515,20 @@ export default function PurchaseReturn({ setInventory }) {
           .from("purchase_items")
           .update({
             original_qty: originalQty,
-            qty: Math.max(0, (currentItem?.qty || 0) - item.return_qty)
+            qty: Math.max(0, (currentItem?.qty || 0) - returnQty)
           })
           .eq("id", item.id);
+      }
+
+      // Save FIFO consumption records
+      if (fifoConsumptionRecords.length > 0) {
+        const { error: fifoError } = await supabase
+          .from("purchase_return_fifo")
+          .insert(fifoConsumptionRecords);
+
+        if (fifoError) {
+          console.error("Failed to save FIFO consumption records:", fifoError.message);
+        }
       }
 
       // Check and update purchase status if all items fully returned
@@ -502,7 +590,7 @@ export default function PurchaseReturn({ setInventory }) {
 
       await supabase.from("purchase_return_items").insert(returnItemsData);
 
-      Swal.fire("Success", "Items added to return!", "success");
+      Swal.fire("Success", "Items added to return using FIFO!", "success");
 
       // Clear return list and refresh data
       setReturnList([]);
@@ -524,11 +612,11 @@ export default function PurchaseReturn({ setInventory }) {
 
   const [editingReturnItemsCount, setEditingReturnItemsCount] = useState(0);
 
-  // Cancel return - update status to cancelled
+  // Cancel return - update status to cancelled and restore FIFO layers
   const handleCancelReturn = async (ret) => {
     const result = await Swal.fire({
       title: "Cancel Return?",
-      text: "This will mark the return as cancelled. This action cannot be undone.",
+      text: "This will mark the return as cancelled and restore inventory. This action cannot be undone.",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Yes, Cancel Return",
@@ -547,6 +635,12 @@ export default function PurchaseReturn({ setInventory }) {
           .eq("return_id", ret.id);
 
         if (items && items.length > 0) {
+          // Get FIFO consumption records for this return
+          const { data: fifoRecords } = await supabase
+            .from("purchase_return_fifo")
+            .select("*")
+            .in("return_item_id", items.map(i => i.id));
+
           // Restore inventory for each item
           for (const item of items) {
             const { data: existing } = await supabase
@@ -556,44 +650,51 @@ export default function PurchaseReturn({ setInventory }) {
               .maybeSingle();
 
             if (existing) {
-              const newQty = existing.qty + item.qty;
+              // Restore inventory qty
+              const newQty = (existing.qty || 0) + (item.qty || 0);
               await supabase.from("inventory").update({ qty: newQty }).eq("id", existing.id);
-            }
 
-            // Restore purchase_items qty - use purchase_item_id if available
-            if (item.purchase_item_id) {
-              const { data: purchaseItem } = await supabase
+              // Build FIFO list and restore to the same layers
+              const fifoList = await buildFifoList(existing.id, item.item_name, item.type || "-", {
+                includePurchase: true,
+                includeAddStock: true,
+                onlyWithRemainingQty: false
+              });
+
+              // Restore using FIFO (add back to the layers)
+              await supabase
                 .from("purchase_items")
-                .select("id, qty")
-                .eq("id", item.purchase_item_id)
-                .single();
+                .select("id, qty, unit_price")
+                .in("purchase_id", [...new Set(items.map(i => i.purchase_id))]);
 
-              if (purchaseItem) {
-                await supabase
+              // Restore purchase_items qty
+              if (item.purchase_item_id) {
+                const { data: purchaseItem } = await supabase
                   .from("purchase_items")
-                  .update({ qty: (purchaseItem.qty || 0) + item.qty })
-                  .eq("id", item.purchase_item_id);
-                console.log(`Restored purchase_items id=${item.purchase_item_id}: ${purchaseItem.qty} -> ${purchaseItem.qty + item.qty}`);
-              }
-            } else {
-              // Fallback: find by purchase_id + item_name
-              const { data: purchaseItem } = await supabase
-                .from("purchase_items")
-                .select("id, qty, purchase_id")
-                .eq("purchase_id", item.purchase_id)
-                .ilike("item_name", item.item_name.trim())
-                .maybeSingle();
+                  .select("id, qty")
+                  .eq("id", item.purchase_item_id)
+                  .single();
 
-              if (purchaseItem) {
-                await supabase
-                  .from("purchase_items")
-                  .update({ qty: (purchaseItem.qty || 0) + item.qty })
-                  .eq("id", purchaseItem.id);
+                if (purchaseItem) {
+                  await supabase
+                    .from("purchase_items")
+                    .update({ qty: (purchaseItem.qty || 0) + item.qty })
+                    .eq("id", item.purchase_item_id);
+                }
               }
             }
           }
 
-          // Update purchase status - item.purchase_id is already the parent purchase ID
+          // Delete FIFO consumption records
+          if (fifoRecords && fifoRecords.length > 0) {
+            const fifoIds = fifoRecords.map(r => r.id);
+            await supabase
+              .from("purchase_return_fifo")
+              .delete()
+              .in("id", fifoIds);
+          }
+
+          // Update purchase status back to received
           const purchaseIds = [...new Set(items.map(i => i.purchase_id))];
           for (const purchaseId of purchaseIds) {
             await supabase
@@ -610,7 +711,7 @@ export default function PurchaseReturn({ setInventory }) {
         .update({ status: "cancelled" })
         .eq("id", ret.id);
 
-      Swal.fire("Cancelled", "Return has been cancelled", "success");
+      Swal.fire("Cancelled", "Return has been cancelled and inventory restored", "success");
       await fetchData();
 
       if (setInventory && ret.status === "completed") {

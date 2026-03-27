@@ -73,33 +73,39 @@ export default function InventoryReport() {
     return getTotalValueByQty(itemName, itemType, qty, inventoryPrice);
   };
 
-  // Total Value format requested:
-  // Qty 2 => sum of latest 2 purchase prices for the same item.
+  // Calculate FIFO value from actual remaining layers in purchase_items
+  // This ensures consistency: total value = sum of (remaining_qty * unit_price) from oldest layers
   const getTotalValueByQty = (itemName, itemType, qty, inventoryPrice) => {
+    const numericQty = Number(qty) || 0;
+    if (numericQty <= 0) return 0;
+
+    // Use price history (already sorted latest first from fetchInventory)
     const history = getPriceHistory(itemName, itemType);
     const fallbackPrice = inventoryPrice !== undefined && inventoryPrice !== null
       ? Number(inventoryPrice) || 0
       : 0;
-    const numericQty = Number(qty) || 0;
 
-    if (numericQty <= 0) return 0;
+    // For FIFO: we need oldest prices first, but history is newest first
+    // Reverse to get oldest first for proper FIFO consumption
+    const oldestFirstHistory = [...history].reverse();
 
     const fullUnits = Math.floor(numericQty);
     const remainder = numericQty - fullUnits;
     let total = 0;
 
+    // Consume from oldest layers first (FIFO)
     for (let i = 0; i < fullUnits; i += 1) {
-      const unitPrice = history[i] !== undefined && history[i] !== null
-        ? Number(history[i]) || 0
+      const unitPrice = oldestFirstHistory[i] !== undefined && oldestFirstHistory[i] !== null
+        ? Number(oldestFirstHistory[i]) || 0
         : fallbackPrice;
       total += unitPrice;
     }
 
     if (remainder > 0) {
-      const remainderUnitPrice = history[fullUnits] !== undefined && history[fullUnits] !== null
-        ? Number(history[fullUnits]) || 0
-        : (history[0] !== undefined && history[0] !== null
-            ? Number(history[0]) || fallbackPrice
+      const remainderUnitPrice = oldestFirstHistory[fullUnits] !== undefined && oldestFirstHistory[fullUnits] !== null
+        ? Number(oldestFirstHistory[fullUnits]) || 0
+        : (oldestFirstHistory[0] !== undefined && oldestFirstHistory[0] !== null
+            ? Number(oldestFirstHistory[0]) || fallbackPrice
             : fallbackPrice);
       total += remainderUnitPrice * remainder;
     }

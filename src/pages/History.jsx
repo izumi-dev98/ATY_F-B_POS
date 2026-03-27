@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import supabase from "../createClients";
 import Swal from "sweetalert2";
+import { buildFifoList, deductFromFifo } from "../utils/fifoService";
 
 export default function History({ setInventory }) {
   const [history, setHistory] = useState([]);
@@ -369,7 +370,7 @@ export default function History({ setInventory }) {
           return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
-        // Deduct using FIFO
+        // Deduct using FIFO (keeping inline for critical order completion logic)
         let remaining = qtyToDeduct;
         for (const row of fifoList) {
           if (remaining <= 0) break;
