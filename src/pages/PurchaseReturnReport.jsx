@@ -16,6 +16,7 @@ export default function PurchaseReturnReport() {
   // FIFO breakdown modal
   const [showFifoModal, setShowFifoModal] = useState(false);
   const [fifoBreakdown, setFifoBreakdown] = useState([]);
+  const [remainingValues, setRemainingValues] = useState({});
 
   // Filter states
   const [filterType, setFilterType] = useState("all");
@@ -41,6 +42,30 @@ export default function PurchaseReturnReport() {
 
       if (!returnsRes.error) setReturns(returnsRes.data || []);
       if (!itemsRes.error) setReturnItems(itemsRes.data || []);
+
+      // Calculate remaining values for each return
+      const remainingVals = {};
+      for (const ret of returnsRes.data || []) {
+        const returnItemsList = (itemsRes.data || []).filter(i => i.return_id === ret.id);
+        let remainingTotal = 0;
+
+        for (const item of returnItemsList) {
+          // Get current remaining qty from purchase_items
+          const { data: purchaseItem } = await supabase
+            .from("purchase_items")
+            .select("qty, unit_price")
+            .eq("id", item.purchase_item_id)
+            .single();
+
+          if (purchaseItem) {
+            // Remaining value = current qty * unit price
+            remainingTotal += (parseFloat(purchaseItem.qty) || 0) * (parseFloat(purchaseItem.unit_price) || 0);
+          }
+        }
+
+        remainingVals[ret.id] = remainingTotal;
+      }
+      setRemainingValues(remainingVals);
     } catch (err) {
       console.error("Error fetching data:", err);
     }
@@ -98,8 +123,10 @@ export default function PurchaseReturnReport() {
 
   // Calculate totals
   const totalReturns = filteredReturns.length;
-  const totalAmount = filteredReturns.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0);
   const totalItems = filteredReturns.reduce((sum, r) => sum + (parseInt(r.items_count) || 0), 0);
+
+  // Total amount shows the returned amount (original behavior)
+  const totalAmount = filteredReturns.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0);
 
   // View details
   const viewDetails = async (ret) => {
@@ -302,7 +329,7 @@ export default function PurchaseReturnReport() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Items</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Returned Amount</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
             </tr>
           </thead>

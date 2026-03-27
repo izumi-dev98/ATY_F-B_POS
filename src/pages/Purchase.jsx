@@ -18,6 +18,7 @@ export default function Purchase({ setInventory }) {
   const itemsPerPage = 10;
   const [dateFilter, setDateFilter] = useState("all");
   const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
+  const [currentValues, setCurrentValues] = useState({});
   
 
   const [formData, setFormData] = useState({
@@ -59,7 +60,25 @@ export default function Purchase({ setInventory }) {
         console.error("Purchases fetch error:", purchasesRes.error);
         setError("Failed to load purchases: " + purchasesRes.error.message);
       } else {
-        setPurchases(purchasesRes.data || []);
+        const purchasesData = purchasesRes.data || [];
+        setPurchases(purchasesData);
+
+        // Calculate current value for each purchase ((qty - foc_qty) * unit_price)
+        const values = {};
+        for (const purchase of purchasesData) {
+          const { data: items } = await supabase
+            .from("purchase_items")
+            .select("qty, foc_qty, unit_price")
+            .eq("purchase_id", purchase.id);
+
+          values[purchase.id] = (items || []).reduce((sum, item) => {
+            const qty = parseFloat(item.qty) || 0;
+            const focQty = parseFloat(item.foc_qty) || 0;
+            const billableQty = qty - focQty;
+            return sum + (billableQty * (parseFloat(item.unit_price) || 0));
+          }, 0);
+        }
+        setCurrentValues(values);
       }
 
       if (!inventoryRes.error) {
@@ -302,12 +321,14 @@ export default function Purchase({ setInventory }) {
       return afterTax;
     };
 
-    // Calculate grand total from adjusted prices
+    // Calculate grand total from adjusted prices (exclude FOC qty)
     const totalAmount = validItems.reduce((sum, item) => {
       const qty = parseFloat(item.qty) || 0;
+      const focQty = parseFloat(item.foc_qty) || 0;
+      const billableQty = qty - focQty; // Exclude FOC from price calculation
       const basePrice = parseFloat(item.unit_price) || 0;
       const adjustedPrice = calculateAdjustedPrice(basePrice);
-      return sum + (qty * adjustedPrice);
+      return sum + (billableQty * adjustedPrice);
     }, 0).toFixed(2);
 
     try {
@@ -333,14 +354,16 @@ export default function Purchase({ setInventory }) {
           const basePrice = parseFloat(item.unit_price) || 0;
           const adjustedPrice = calculateAdjustedPrice(basePrice);
           const qty = parseFloat(item.qty) || 0;
+          const focQty = parseFloat(item.foc_qty) || 0;
+          const billableQty = qty - focQty; // Exclude FOC from price
           return {
             purchase_id: editId,
             item_name: item.item_name.trim(),
             original_qty: qty,
             qty: qty,
-            foc_qty: parseFloat(item.foc_qty) || 0,
+            foc_qty: focQty,
             unit_price: adjustedPrice, // Store adjusted price for FIFO
-            total_price: qty * adjustedPrice,
+            total_price: billableQty * adjustedPrice, // Store billable total
             type: item.type || "-"
           };
         });
@@ -368,14 +391,16 @@ export default function Purchase({ setInventory }) {
           const basePrice = parseFloat(item.unit_price) || 0;
           const adjustedPrice = calculateAdjustedPrice(basePrice);
           const qty = parseFloat(item.qty) || 0;
+          const focQty = parseFloat(item.foc_qty) || 0;
+          const billableQty = qty - focQty; // Exclude FOC from price
           return {
             purchase_id: newPurchase.id,
             item_name: item.item_name.trim(),
             original_qty: qty,
             qty: qty,
-            foc_qty: parseFloat(item.foc_qty) || 0,
+            foc_qty: focQty,
             unit_price: adjustedPrice, // Store adjusted price for FIFO
-            total_price: qty * adjustedPrice,
+            total_price: billableQty * adjustedPrice, // Store billable total
             type: item.type || "-"
           };
         });
@@ -577,7 +602,7 @@ export default function Purchase({ setInventory }) {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
                   <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
-                  <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(purchase.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(currentValues[purchase.id] || 0)}</td>
                   <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status, purchase.payment_type)}</td>
                   <td className="px-4 py-3 text-center">
                     {canManage && (
@@ -681,8 +706,15 @@ export default function Purchase({ setInventory }) {
                 </tbody>
                 <tfoot className="bg-slate-50">
                   <tr>
-                    <td colSpan={4} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total</td>
-                    <td className="px-4 py-2 text-right font-bold text-indigo-600">{formatMMK(selectedPurchase?.total_amount)}</td>
+                    <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total (Excl. FOC)</td>
+                    <td className="px-4 py-2 text-right font-bold text-indigo-600">
+                      {formatMMK(selectedPurchaseItems.reduce((sum, item) => {
+                        const qty = parseFloat(item.qty) || 0;
+                        const focQty = parseFloat(item.foc_qty) || 0;
+                        const billableQty = qty - focQty;
+                        return sum + (billableQty * (parseFloat(item.unit_price) || 0));
+                      }, 0))}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

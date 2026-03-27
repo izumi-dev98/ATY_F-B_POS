@@ -17,6 +17,7 @@ export default function PurchaseReport() {
   const [showReturnDetailsModal, setShowReturnDetailsModal] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [returnFifoDetails, setReturnFifoDetails] = useState([]);
+  const [currentValues, setCurrentValues] = useState({});
 
   // Filter states
   const [filterType, setFilterType] = useState("all");
@@ -40,7 +41,30 @@ export default function PurchaseReport() {
         supabase.from("suppliers").select("*").order("name", { ascending: true })
       ]);
 
-      if (!purchasesRes.error) setPurchases(purchasesRes.data || []);
+      if (!purchasesRes.error) {
+        const purchasesData = purchasesRes.data || [];
+        setPurchases(purchasesData);
+
+        // Calculate current value for each purchase ((qty - foc_qty) * unit_price)
+        const values = {};
+        for (const purchase of purchasesData) {
+          const { data: items } = await supabase
+            .from("purchase_items")
+            .select("qty, foc_qty, unit_price")
+            .eq("purchase_id", purchase.id);
+
+          values[purchase.id] = (items || []).reduce((sum, item) => {
+            const qty = parseFloat(item.qty) || 0;
+            const focQty = parseFloat(item.foc_qty) || 0;
+            const billableQty = qty - focQty;
+            const value = billableQty * (parseFloat(item.unit_price) || 0);
+            console.log(`Purchase ${purchase.id}: item=${item.item_name}, qty=${qty}, foc_qty=${focQty}, price=${item.unit_price}, value=${value}`);
+            return sum + value;
+          }, 0);
+          console.log(`Purchase ${purchase.id} total value: ${values[purchase.id]}`);
+        }
+        setCurrentValues(values);
+      }
       if (!suppliersRes.error) setSuppliers(suppliersRes.data || []);
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -199,7 +223,7 @@ export default function PurchaseReport() {
   };
 
   // Calculate totals
-  const totalAmount = filteredPurchases.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
+  const totalAmount = filteredPurchases.reduce((sum, p) => sum + (currentValues[p.id] || 0), 0);
   const totalCount = filteredPurchases.length;
   const pendingCount = filteredPurchases.filter(p => p.status === "pending" || !p.status).length;
   const receivedCount = filteredPurchases.filter(p => p.status === "received").length;
@@ -331,7 +355,7 @@ export default function PurchaseReport() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Invoice #</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Current Value</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">Discount</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">Tax</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Payment</th>
@@ -354,7 +378,7 @@ export default function PurchaseReport() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
                   <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
-                  <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(purchase.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-slate-600 font-medium">{formatMMK(currentValues[purchase.id] || 0)}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{purchase.discount ? `${purchase.discount}%` : "-"}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{purchase.tax ? `${purchase.tax}%` : "-"}</td>
                   <td className="px-4 py-3 text-center text-slate-600">
@@ -414,6 +438,7 @@ export default function PurchaseReport() {
                     <th className="px-4 py-2 text-left font-semibold text-slate-700">Item</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Before Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">FOC Qty</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Returned Qty</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
@@ -422,12 +447,23 @@ export default function PurchaseReport() {
                 <tbody>
                   {purchaseItems.map((item, idx) => {
                     const originalQty = item.original_qty || item.qty;
+                    const focQty = item.foc_qty || 0;
                     const returnedQty = getReturnedQty(originalQty, item.qty);
+                    const billableQty = item.qty - focQty; // Exclude FOC from price calculation
+                    // Calculate current value = (current qty - FOC qty) * unit price
+                    const currentValue = billableQty * (item.unit_price || 0);
                     return (
                       <tr key={idx} className="border-t border-slate-100">
                         <td className="px-4 py-2 text-slate-800">{item.item_name}</td>
                         <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
                         <td className="px-4 py-2 text-center text-slate-600">{originalQty}</td>
+                        <td className="px-4 py-2 text-center">
+                          {focQty > 0 ? (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{focQty}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-center">
                           {returnedQty < 0 ? (
                             <span className="text-rose-600 font-semibold">{returnedQty}</span>
@@ -436,15 +472,17 @@ export default function PurchaseReport() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
-                        <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
+                        <td className="px-4 py-2 text-right font-medium text-emerald-600">{formatMMK(currentValue)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot className="bg-slate-50">
                   <tr>
-                    <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total</td>
-                    <td className="px-4 py-2 text-right font-bold text-indigo-600">{formatMMK(selectedPurchase?.total_amount)}</td>
+                    <td colSpan={6} className="px-4 py-2 text-right font-bold text-slate-800">Total</td>
+                    <td className="px-4 py-2 text-right font-bold text-emerald-600">
+                      {formatMMK(purchaseItems.reduce((sum, item) => sum + (((item.qty || 0) - (item.foc_qty || 0)) * (item.unit_price || 0)), 0))}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

@@ -763,7 +763,7 @@ export default function InventoryReport() {
                             )}
                           </td>
                           <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{formatMMK(item.unit_price)}</td>
-                          <td className="px-4 py-2 text-right font-medium text-slate-800 dark:text-slate-200">{formatMMK(rowTotal)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{formatMMK(rowTotal)}</td>
                         </tr>
                       );
                     })
@@ -776,9 +776,8 @@ export default function InventoryReport() {
                 {purchaseHistory.length > 0 && (
                   <tfoot className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
                     <tr>
-                      <td colSpan={6} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total</td>
-                      <td className="px-4 py-2"></td>
-                      <td className="px-4 py-2 text-right font-bold text-indigo-600 dark:text-indigo-400">
+                      <td colSpan={7} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total (Excl. FOC)</td>
+                      <td className="px-4 py-2 text-right font-bold text-emerald-600 dark:text-emerald-400">
                         {formatMMK(
                           purchaseHistory.reduce(
                             (sum, item) => {
@@ -786,7 +785,7 @@ export default function InventoryReport() {
                               const focQty = parseFloat(item.foc_qty) || 0;
                               const billableQty = qty - focQty;
                               const price = parseFloat(item.unit_price) || 0;
-                              return sum + (parseFloat(item.total_price) || (billableQty * price));
+                              return sum + (billableQty * price);
                             },
                             0
                           )
