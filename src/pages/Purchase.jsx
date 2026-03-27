@@ -289,11 +289,26 @@ export default function Purchase({ setInventory }) {
       return Swal.fire("Error", "Please add at least one item with quantity and price", "error");
     }
 
-    const totalAmount = calculateGrandTotal();
     const discountPercent = parseFloat(formData.discount) || 0;
     const taxPercent = parseFloat(formData.tax) || 0;
     const paymentType = formData.payment_type || "Cash Down";
     const creditOption = formData.payment_type === "Credit" ? (formData.credit_option === "Manual" ? formData.manual_credit || "" : formData.credit_option || "") : "";
+
+    // Calculate adjusted unit price for each item (after discount and tax)
+    // Formula: adjustedPrice = unitPrice * (1 - discount/100) * (1 + tax/100)
+    const calculateAdjustedPrice = (basePrice) => {
+      const afterDiscount = basePrice * (1 - discountPercent / 100);
+      const afterTax = afterDiscount * (1 + taxPercent / 100);
+      return afterTax;
+    };
+
+    // Calculate grand total from adjusted prices
+    const totalAmount = validItems.reduce((sum, item) => {
+      const qty = parseFloat(item.qty) || 0;
+      const basePrice = parseFloat(item.unit_price) || 0;
+      const adjustedPrice = calculateAdjustedPrice(basePrice);
+      return sum + (qty * adjustedPrice);
+    }, 0).toFixed(2);
 
     try {
       if (isEditing && editId) {
@@ -311,19 +326,24 @@ export default function Purchase({ setInventory }) {
 
         if (updateError) throw updateError;
 
-        // Delete old items and insert new ones
+        // Delete old items and insert new ones with adjusted prices
         await supabase.from("purchase_items").delete().eq("purchase_id", editId);
 
-        const itemsToInsert = validItems.map((item) => ({
-          purchase_id: editId,
-          item_name: item.item_name.trim(),
-          original_qty: parseFloat(item.qty),
-          qty: parseFloat(item.qty),
-          foc_qty: parseFloat(item.foc_qty) || 0,
-          unit_price: parseFloat(item.unit_price),
-          total_price: parseFloat(item.total_price),
-          type: item.type || "-"
-        }));
+        const itemsToInsert = validItems.map((item) => {
+          const basePrice = parseFloat(item.unit_price) || 0;
+          const adjustedPrice = calculateAdjustedPrice(basePrice);
+          const qty = parseFloat(item.qty) || 0;
+          return {
+            purchase_id: editId,
+            item_name: item.item_name.trim(),
+            original_qty: qty,
+            qty: qty,
+            foc_qty: parseFloat(item.foc_qty) || 0,
+            unit_price: adjustedPrice, // Store adjusted price for FIFO
+            total_price: qty * adjustedPrice,
+            type: item.type || "-"
+          };
+        });
         await supabase.from("purchase_items").insert(itemsToInsert);
 
         Swal.fire("Success", "Purchase updated!", "success");
@@ -344,16 +364,21 @@ export default function Purchase({ setInventory }) {
 
         if (insertError) throw insertError;
 
-        const itemsToInsert = validItems.map((item) => ({
-          purchase_id: newPurchase.id,
-          item_name: item.item_name.trim(),
-          original_qty: parseFloat(item.qty),
-          qty: parseFloat(item.qty),
-          foc_qty: parseFloat(item.foc_qty) || 0,
-          unit_price: parseFloat(item.unit_price),
-          total_price: parseFloat(item.total_price),
-          type: item.type || "-"
-        }));
+        const itemsToInsert = validItems.map((item) => {
+          const basePrice = parseFloat(item.unit_price) || 0;
+          const adjustedPrice = calculateAdjustedPrice(basePrice);
+          const qty = parseFloat(item.qty) || 0;
+          return {
+            purchase_id: newPurchase.id,
+            item_name: item.item_name.trim(),
+            original_qty: qty,
+            qty: qty,
+            foc_qty: parseFloat(item.foc_qty) || 0,
+            unit_price: adjustedPrice, // Store adjusted price for FIFO
+            total_price: qty * adjustedPrice,
+            type: item.type || "-"
+          };
+        });
         await supabase.from("purchase_items").insert(itemsToInsert);
 
         Swal.fire("Success", "Purchase created!", "success");
