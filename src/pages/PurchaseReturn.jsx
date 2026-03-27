@@ -305,7 +305,7 @@ export default function PurchaseReturn({ setInventory }) {
       // Track FIFO consumption for audit trail
       const fifoConsumptionRecords = [];
 
-      // Process each return item using FIFO (oldest stock first automatically)
+      // Process each return item using FIFO from the SAME invoice only
       for (const item of items) {
         const returnQty = parseFloat(item.qty) || 0;
 
@@ -324,26 +324,74 @@ export default function PurchaseReturn({ setInventory }) {
         const newInventoryQty = Math.max(0, existing.qty - returnQty);
         await supabase.from("inventory").update({ qty: newInventoryQty }).eq("id", existing.id);
 
-        // Build FIFO list and deduct using FIFO (oldest stock first automatically)
-        // The fifoService will find all layers for this item and consume from oldest first
-        const fifoList = await buildFifoList(existing.id, existing.item_name, existing.type || existing.unit || "-", {
-          includePurchase: true,
-          includeAddStock: true,
-          onlyWithRemainingQty: false
+        // Build FIFO list but ONLY from the same purchase/invoice
+        // This ensures return consumes from the original invoice first
+        const { data: purchaseItems, error: piErr } = await supabase
+          .from("purchase_items")
+          .select("id, qty, unit_price, purchase_id, item_name, type")
+          .eq("purchase_id", item.purchase_id);
+
+        if (piErr) throw piErr;
+
+        // Filter to matching items and build FIFO list from this invoice only
+        const fifoList = [];
+        const targetName = item.item_name?.toLowerCase().trim() || "";
+        const targetType = (item.type || "-").toLowerCase().trim();
+
+        if (purchaseItems) {
+          const matchingItems = purchaseItems.filter(pi => {
+            const piName = pi.item_name?.toLowerCase().trim() || "";
+            const piType = (pi.type || "-").toLowerCase().trim();
+            return piName === targetName && piType === targetType;
+          });
+
+          // Get purchase date for ordering
+          const { data: purchase } = await supabase
+            .from("purchases")
+            .select("id, date, created_at")
+            .eq("id", item.purchase_id)
+            .single();
+
+          const fifoDate = purchase?.created_at || purchase?.date;
+          const getFifoTimestamp = (value) => {
+            if (!value) return Number.POSITIVE_INFINITY;
+            let ts = new Date(value).getTime();
+            return Number.isNaN(ts) ? Number.POSITIVE_INFINITY : ts;
+          };
+
+          matchingItems.forEach(pi => {
+            fifoList.push({
+              id: pi.id,
+              qty: parseFloat(pi.qty) || 0,
+              unit_price: parseFloat(pi.unit_price) || 0,
+              date: fifoDate,
+              fifoTimestamp: getFifoTimestamp(fifoDate),
+              source: "purchase",
+              purchase_id: pi.purchase_id,
+              item_name: pi.item_name,
+              type: pi.type
+            });
+          });
+        }
+
+        // Sort by FIFO timestamp (oldest first within same invoice)
+        fifoList.sort((a, b) => {
+          if (a.fifoTimestamp !== b.fifoTimestamp) return a.fifoTimestamp - b.fifoTimestamp;
+          return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
-        console.log(`[FIFO Return] Item: ${item.item_name}, Return Qty: ${returnQty}`);
-        console.log(`[FIFO Return] Available layers:`, fifoList.map(l => ({
+        console.log(`[FIFO Return - Same Invoice] Item: ${item.item_name}, Return Qty: ${returnQty}`);
+        console.log(`[FIFO Return - Same Invoice] Invoice layers:`, fifoList.map(l => ({
           source: l.source,
           id: l.id,
           qty: l.qty,
           unit_price: l.unit_price
         })));
 
-        // Deduct from FIFO layers - this automatically updates purchase_items/internal_consumption_items
+        // Deduct from FIFO layers - this automatically updates purchase_items
         const fifoResult = await deductFromFifo(fifoList, returnQty);
 
-        console.log(`[FIFO Return] Result:`, {
+        console.log(`[FIFO Return - Same Invoice] Result:`, {
           success: fifoResult.success,
           remaining: fifoResult.remaining,
           consumedLayers: fifoResult.consumedLayers.map(l => ({
@@ -355,7 +403,43 @@ export default function PurchaseReturn({ setInventory }) {
         });
 
         if (!fifoResult.success) {
-          console.warn(`[FIFO Return] Warning: ${fifoResult.remaining} units could not be allocated for ${item.item_name}`);
+          console.warn(`[FIFO Return] Warning: ${fifoResult.remaining} units could not be allocated from invoice. Consuming from other stock.`);
+
+          // If invoice stock is depleted, consume from remaining FIFO (other invoices)
+          const remainingFifoList = await buildFifoList(existing.id, existing.item_name, existing.type || existing.unit || "-", {
+            includePurchase: true,
+            includeAddStock: true,
+            onlyWithRemainingQty: true
+          });
+
+          // Filter out the already-processed items from same invoice
+          const processedIds = new Set(fifoList.map(l => l.id));
+          const otherFifoList = remainingFifoList.filter(l => !processedIds.has(l.id));
+
+          if (otherFifoList.length > 0) {
+            const remainingResult = await deductFromFifo(otherFifoList, fifoResult.remaining);
+
+            console.log(`[FIFO Return - Other Stock] Result:`, {
+              success: remainingResult.success,
+              consumedLayers: remainingResult.consumedLayers.map(l => ({
+                source: l.source,
+                sourceId: l.sourceId,
+                qtyConsumed: l.qtyConsumed,
+                unitPrice: l.unitPrice
+              }))
+            });
+
+            // Add remaining consumption to records
+            for (const layer of remainingResult.consumedLayers) {
+              fifoConsumptionRecords.push({
+                return_item_id: item.id,
+                source_type: layer.source,
+                source_id: layer.sourceId,
+                qty_reduced: layer.qtyConsumed,
+                unit_price: layer.unitPrice
+              });
+            }
+          }
         }
 
         // Record FIFO consumption for audit trail
