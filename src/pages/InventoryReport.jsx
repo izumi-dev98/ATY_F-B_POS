@@ -154,9 +154,12 @@ export default function InventoryReport() {
     // Build purchase price history per item (latest first)
     const priceHistory = {};
 
-    // From purchase_items
+    // From purchase_items - exclude FOC (zero price) items
     if (purchaseItemsData.data) {
       purchaseItemsData.data.forEach(item => {
+        // Skip FOC items (zero price) - they shouldn't affect FIFO valuation
+        if (!item.unit_price || parseFloat(item.unit_price) === 0) return;
+
         const nameKey = normalizeName(item.item_name);
         if (nameKey) {
           const exactKey = buildItemKey(item.item_name, item.type);
@@ -180,8 +183,11 @@ export default function InventoryReport() {
       });
 
       addStockItemsData.data.forEach(item => {
+        // Skip FOC items (zero price) - they shouldn't affect FIFO valuation
+        if (!item.unit_price || parseFloat(item.unit_price) === 0) return;
+
         const keyPair = inventoryMap[item.inventory_id];
-        if (keyPair && item.unit_price !== undefined && item.unit_price !== null) {
+        if (keyPair) {
           if (!priceHistory[keyPair.exactKey]) priceHistory[keyPair.exactKey] = [];
           if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
           priceHistory[keyPair.exactKey].push(item.unit_price);
