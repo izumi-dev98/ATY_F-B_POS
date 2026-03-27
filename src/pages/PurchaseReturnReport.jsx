@@ -1,0 +1,458 @@
+import { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import Swal from "sweetalert2";
+import supabase from "../createClients";
+
+export default function PurchaseReturnReport() {
+  const [returns, setReturns] = useState([]);
+  const [returnItems, setReturnItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const [selectedReturnItems, setSelectedReturnItems] = useState([]);
+
+  // Filter states
+  const [filterType, setFilterType] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const formatMMK = (amount) => {
+    const num = Number(amount) || 0;
+    return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
+  };
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [returnsRes, itemsRes] = await Promise.all([
+        supabase.from("purchase_returns").select("*").order("created_at", { ascending: false }),
+        supabase.from("purchase_return_items").select("*")
+      ]);
+
+      if (!returnsRes.error) setReturns(returnsRes.data || []);
+      if (!itemsRes.error) setReturnItems(itemsRes.data || []);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // Filter by date
+  const filteredByDate = returns.filter(r => {
+    if (filterType === "all") return true;
+
+    const returnDate = r.created_at ? r.created_at.split("T")[0] : "";
+
+    if (filterType === "today") {
+      return returnDate === today;
+    }
+
+    if (filterType === "month") {
+      const currentMonth = today.substring(0, 7);
+      return returnDate.substring(0, 7) === currentMonth;
+    }
+
+    if (filterType === "year") {
+      const currentYear = today.substring(0, 4);
+      return returnDate.substring(0, 4) === currentYear;
+    }
+
+    if (filterType === "custom" && startDate && endDate) {
+      return returnDate >= startDate && returnDate <= endDate;
+    }
+
+    return true;
+  });
+
+  // Filter by status
+  const filteredByStatus = filteredByDate.filter(r => {
+    if (statusFilter === "all") return true;
+    return r.status === statusFilter;
+  });
+
+  // Filter by search
+  const filteredReturns = filteredByStatus.filter(r => {
+    const matchesSearch = r.return_number?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  });
+
+  const totalPages = Math.ceil(filteredReturns.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedReturns = filteredReturns.slice(startIndex, startIndex + itemsPerPage);
+
+  // Calculate totals
+  const totalReturns = filteredReturns.length;
+  const totalAmount = filteredReturns.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0);
+  const totalItems = filteredReturns.reduce((sum, r) => sum + (parseInt(r.items_count) || 0), 0);
+
+  // View details
+  const viewDetails = async (ret) => {
+    const items = returnItems.filter(i => i.return_id === ret.id);
+    setSelectedReturn(ret);
+    setSelectedReturnItems(items);
+    setShowDetailModal(true);
+  };
+
+  // Export Excel
+  const exportToExcel = () => {
+    const exportData = filteredReturns.map((ret) => ({
+      "Return #": ret.return_number,
+      "Date": ret.created_at ? new Date(ret.created_at).toLocaleDateString() : "-",
+      "Status": ret.status || "pending",
+      "Items": ret.items_count,
+      "Total Amount": parseFloat(ret.total_amount) || 0
+    }));
+
+    // Add summary row
+    exportData.push({
+      "Return #": "TOTAL",
+      "Date": "",
+      "Status": "",
+      "Items": totalItems,
+      "Total Amount": totalAmount
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase Return Report");
+
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array"
+    });
+
+    const fileData = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+
+    saveAs(fileData, "Purchase_Return_Report.xlsx");
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      pending: "bg-amber-100 text-amber-700",
+      completed: "bg-emerald-100 text-emerald-700",
+      cancelled: "bg-slate-100 text-slate-700"
+    };
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
+        {status || "pending"}
+      </span>
+    );
+  };
+
+  return (
+    <div className="p-6 bg-slate-50 min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Purchase Return Report</h1>
+          <p className="text-sm text-slate-500 mt-1">View and analyze purchase returns</p>
+        </div>
+        <button
+          onClick={exportToExcel}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"
+        >
+          Export Excel
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <div className="flex flex-wrap gap-3">
+          {/* Date Filter */}
+          <select
+            value={filterType}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setStartDate("");
+              setEndDate("");
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="custom">Custom Date</option>
+          </select>
+
+          {/* Custom Date Range */}
+          {filterType === "custom" && (
+            <>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <span className="text-slate-500 self-center">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                max={today}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                onClick={() => setCurrentPage(1)}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+              >
+                Apply
+              </button>
+            </>
+          )}
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search return #..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <p className="text-sm text-slate-500">Total Returns</p>
+          <p className="text-2xl font-bold text-slate-800">{totalReturns}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <p className="text-sm text-slate-500">Total Items Returned</p>
+          <p className="text-2xl font-bold text-slate-800">{totalItems}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <p className="text-sm text-slate-500">Total Amount</p>
+          <p className="text-2xl font-bold text-amber-600">{formatMMK(totalAmount)}</p>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Return #</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Items</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading...</td>
+              </tr>
+            ) : filteredReturns.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No returns found</td>
+              </tr>
+            ) : (
+              paginatedReturns.map((ret) => (
+                <tr
+                  key={ret.id}
+                  className={`border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 ${
+                    ret.status === "completed" ? "bg-emerald-50 dark:bg-emerald-900/20" :
+                    ret.status === "cancelled" ? "bg-slate-50 dark:bg-slate-900/20" :
+                    "bg-amber-50 dark:bg-amber-900/20"
+                  }`}
+                >
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    <button
+                      onClick={() => viewDetails(ret)}
+                      className="text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      {ret.return_number}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {ret.created_at ? new Date(ret.created_at).toLocaleDateString() : "-"}
+                  </td>
+                  <td className="px-4 py-3 text-center">{getStatusBadge(ret.status)}</td>
+                  <td className="px-4 py-3 text-center text-slate-600">{ret.items_count}</td>
+                  <td className="px-4 py-3 text-right font-medium text-slate-600">{formatMMK(ret.total_amount)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => viewDetails(ret)}
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          <tfoot className="bg-slate-50">
+            <tr>
+              <td className="px-4 py-3 text-right font-bold text-slate-800">Total</td>
+              <td></td>
+              <td></td>
+              <td className="px-4 py-3 text-center font-bold text-slate-800">{totalItems}</td>
+              <td className="px-4 py-3 text-right font-bold text-amber-600">{formatMMK(totalAmount)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center mt-6 gap-2">
+          <button
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100"
+          >
+            Previous
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+            <button
+              key={page}
+              onClick={() => setCurrentPage(page)}
+              className={`px-3 py-1.5 border rounded-lg text-sm font-medium ${
+                currentPage === page
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          <button
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Return Details</h3>
+                <p className="text-sm text-slate-500">{selectedReturn?.return_number}</p>
+              </div>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-500">Return #:</span>
+                <span className="ml-2 font-semibold">{selectedReturn?.return_number}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Date:</span>
+                <span className="ml-2">
+                  {selectedReturn?.created_at ? new Date(selectedReturn.created_at).toLocaleString() : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">Status:</span>
+                <span className="ml-2">{getStatusBadge(selectedReturn?.status)}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Items:</span>
+                <span className="ml-2 font-medium">{selectedReturn?.items_count}</span>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Invoice #</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Item</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Qty</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedReturnItems.length > 0 ? (
+                    selectedReturnItems.map((item, idx) => (
+                      <tr key={idx} className="border-t border-slate-100">
+                        <td className="px-4 py-2 text-slate-600 text-xs">{item.invoice_number}</td>
+                        <td className="px-4 py-2 text-slate-800 font-medium">{item.item_name}</td>
+                        <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
+                        <td className="px-4 py-2 text-center text-slate-600">{item.qty}</td>
+                        <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
+                        <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-4 text-center text-slate-500">No items found</td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot className="bg-slate-50">
+                  <tr>
+                    <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total</td>
+                    <td className="px-4 py-2 text-right font-bold text-amber-600">{formatMMK(selectedReturn?.total_amount)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

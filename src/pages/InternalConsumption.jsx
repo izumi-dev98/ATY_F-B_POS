@@ -617,6 +617,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
   const [expandedRecord, setExpandedRecord] = useState(null);
   const [recordItems, setRecordItems] = useState({});
+  const [fifoHistory, setFifoHistory] = useState({});
 
   const toggleRecordDetails = async (record) => {
     if (expandedRecord === record.id) {
@@ -626,6 +627,105 @@ export default function InternalConsumption({ inventory, setInventory }) {
       // Always fetch fresh data when expanding
       const items = await fetchRecordItems(record.id);
       setRecordItems((prev) => ({ ...prev, [record.id]: items }));
+
+      // Fetch FIFO history for each item
+      const historyMap = {};
+      for (const item of items) {
+        const history = await fetchFifoHistory(item.inventory_id, item.id, record.status);
+        historyMap[item.inventory_id] = history;
+      }
+      setFifoHistory((prev) => ({ ...prev, [record.id]: historyMap }));
+    }
+  };
+
+  const fetchFifoHistory = async (inventoryId, consumptionItemId, recordStatus) => {
+    try {
+      const { data: purchases } = await supabase
+        .from("purchases")
+        .select("id, date, created_at")
+        .eq("status", "received");
+
+      const purchaseIds = purchases?.map(p => p.id) || [];
+
+      const { data: addStockRecords } = await supabase
+        .from("internal_consumption")
+        .select("id, created_at")
+        .eq("status", "add_stock");
+
+      const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+      const { data: allInventory } = await supabase
+        .from("inventory")
+        .select("id, item_name, type");
+
+      const targetInv = allInventory?.find(inv => inv.id === inventoryId);
+      const fifoList = [];
+
+      if (targetInv) {
+        const normalizeName = (value) => value?.toString().trim().toLowerCase() || "";
+        const normalizeType = (value) => value?.toString().trim().toLowerCase() || "-";
+        const targetName = normalizeName(targetInv.item_name);
+        const targetType = normalizeType(targetInv.type);
+
+        if (purchaseIds.length > 0) {
+          const { data: purchaseItems } = await supabase
+            .from("purchase_items")
+            .select("id, qty, unit_price, purchase_id, item_name, type")
+            .in("purchase_id", purchaseIds);
+
+          if (purchaseItems) {
+            const exactMatches = purchaseItems.filter((pi) =>
+              normalizeName(pi.item_name) === targetName && normalizeType(pi.type) === targetType
+            );
+            const matchedPurchaseItems = exactMatches.length > 0 ? exactMatches : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
+
+            matchedPurchaseItems.forEach(pi => {
+              const purchase = purchases?.find(p => p.id === pi.purchase_id);
+              const fifoDate = purchase?.created_at || purchase?.date;
+              fifoList.push({
+                id: pi.id,
+                qty: parseFloat(pi.qty) || 0,
+                date: fifoDate,
+                source: "purchase"
+              });
+            });
+          }
+        }
+
+        if (addStockIds.length > 0) {
+          const { data: addStockItems } = await supabase
+            .from("internal_consumption_items")
+            .select("id, qty, unit_price, consumption_id, inventory_id")
+            .in("consumption_id", addStockIds);
+
+          if (addStockItems) {
+            addStockItems.forEach(ai => {
+              if (ai.inventory_id === inventoryId) {
+                const addStock = addStockRecords?.find(r => r.id === ai.consumption_id);
+                fifoList.push({
+                  id: ai.id,
+                  qty: parseFloat(ai.qty) || 0,
+                  date: addStock?.created_at || null,
+                  source: "add_stock"
+                });
+              }
+            });
+          }
+        }
+      }
+
+      // Sort by FIFO (oldest first)
+      fifoList.sort((a, b) => {
+        const aTime = a.date ? new Date(a.date).getTime() : Infinity;
+        const bTime = b.date ? new Date(b.date).getTime() : Infinity;
+        if (aTime !== bTime) return aTime - bTime;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+
+      return fifoList;
+    } catch (err) {
+      console.error("Error fetching FIFO history:", err);
+      return [];
     }
   };
 
@@ -787,6 +887,47 @@ export default function InternalConsumption({ inventory, setInventory }) {
 
                 {expandedRecord === record.id && (
                   <div className="mt-4 border-t pt-4">
+                    <h4 className="font-semibold text-sm text-slate-700 mb-2">FIFO Stock Consumption History</h4>
+                    <table className="w-full text-sm mb-4">
+                      <thead>
+                        <tr className="text-left border-b">
+                          <th className="pb-2">Source</th>
+                          <th className="pb-2">Date</th>
+                          <th className="pb-2">Original Qty</th>
+                          <th className="pb-2">Remaining Qty</th>
+                          <th className="pb-2">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {((fifoHistory[record.id] || {})[(recordItems[record.id] || [])[0]?.inventory_id] || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-gray-500">
+                              No FIFO history available
+                            </td>
+                          </tr>
+                        ) : (
+                          (fifoHistory[record.id] || {})[(recordItems[record.id] || [])[0]?.inventory_id]?.map((row, idx) => {
+                            const isZeroQty = row.qty === 0;
+                            return (
+                              <tr key={idx} className={`border-t ${isZeroQty ? "bg-red-50 dark:bg-red-900/20" : ""}`}>
+                                <td className="py-2 capitalize">{row.source}</td>
+                                <td className="py-2">{row.date ? new Date(row.date).toLocaleDateString() : "-"}</td>
+                                <td className="py-2">{row.qty}</td>
+                                <td className={`py-2 font-medium ${isZeroQty ? "text-red-600" : ""}`}>{row.qty}</td>
+                                <td className="py-2">
+                                  {isZeroQty ? (
+                                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Depleted</span>
+                                  ) : (
+                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">In Stock</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                    <h4 className="font-semibold text-sm text-slate-700 mb-2">Record Items</h4>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left">

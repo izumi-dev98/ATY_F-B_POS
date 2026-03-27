@@ -85,10 +85,14 @@ export default function Purchase({ setInventory }) {
   }, []);
 
   const generateInvoiceNumber = () => {
-    const date = new Date();
-    const dateStr = date.toISOString().split("T")[0].replace(/-/g, "");
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
-    return `PO-${dateStr}-${random}`;
+    // Get the highest POS number from existing purchases
+    const posNumbers = purchases
+      .filter(p => p.invoice_number && p.invoice_number.startsWith("POS-"))
+      .map(p => parseInt(p.invoice_number.replace("POS-", ""), 10))
+      .filter(n => !isNaN(n));
+
+    const nextNum = posNumbers.length > 0 ? Math.max(...posNumbers) + 1 : 1;
+    return `POS-${nextNum}`;
   };
 
   const getSupplierName = (supplierId) => {
@@ -313,6 +317,7 @@ export default function Purchase({ setInventory }) {
         const itemsToInsert = validItems.map((item) => ({
           purchase_id: editId,
           item_name: item.item_name.trim(),
+          original_qty: parseFloat(item.qty),
           qty: parseFloat(item.qty),
           foc_qty: parseFloat(item.foc_qty) || 0,
           unit_price: parseFloat(item.unit_price),
@@ -342,6 +347,7 @@ export default function Purchase({ setInventory }) {
         const itemsToInsert = validItems.map((item) => ({
           purchase_id: newPurchase.id,
           item_name: item.item_name.trim(),
+          original_qty: parseFloat(item.qty),
           qty: parseFloat(item.qty),
           foc_qty: parseFloat(item.foc_qty) || 0,
           unit_price: parseFloat(item.unit_price),

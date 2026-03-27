@@ -10,6 +10,8 @@ export default function History({ setInventory }) {
   const [dateFilter, setDateFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [expandedOrder, setExpandedOrder] = useState(null);
+  const [fifoHistory, setFifoHistory] = useState({});
   const ordersPerPage = 8;
 
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
@@ -457,6 +459,132 @@ export default function History({ setInventory }) {
     }
   };
 
+  // Fetch FIFO history for inventory item
+  const fetchFifoHistory = async (inventoryId) => {
+    try {
+      const { data: purchases } = await supabase
+        .from("purchases")
+        .select("id, date, created_at")
+        .eq("status", "received");
+
+      const purchaseIds = purchases?.map(p => p.id) || [];
+
+      const { data: addStockRecords } = await supabase
+        .from("internal_consumption")
+        .select("id, created_at")
+        .eq("status", "add_stock");
+
+      const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+      const { data: allInventory } = await supabase
+        .from("inventory")
+        .select("id, item_name, type");
+
+      const targetInv = allInventory?.find(inv => inv.id === inventoryId);
+      const fifoList = [];
+
+      if (targetInv) {
+        const normalizeName = (value) => value?.toString().trim().toLowerCase() || "";
+        const normalizeType = (value) => value?.toString().trim().toLowerCase() || "-";
+        const targetName = normalizeName(targetInv.item_name);
+        const targetType = normalizeType(targetInv.type);
+
+        if (purchaseIds.length > 0) {
+          const { data: purchaseItems } = await supabase
+            .from("purchase_items")
+            .select("id, qty, unit_price, purchase_id, item_name, type")
+            .in("purchase_id", purchaseIds);
+
+          if (purchaseItems) {
+            const exactMatches = purchaseItems.filter((pi) =>
+              normalizeName(pi.item_name) === targetName && normalizeType(pi.type) === targetType
+            );
+            const matchedPurchaseItems = exactMatches.length > 0 ? exactMatches : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
+
+            matchedPurchaseItems.forEach(pi => {
+              const purchase = purchases?.find(p => p.id === pi.purchase_id);
+              const fifoDate = purchase?.created_at || purchase?.date;
+              fifoList.push({
+                id: pi.id,
+                qty: parseFloat(pi.qty) || 0,
+                date: fifoDate,
+                source: "purchase",
+                item_name: pi.item_name
+              });
+            });
+          }
+        }
+
+        if (addStockIds.length > 0) {
+          const { data: addStockItems } = await supabase
+            .from("internal_consumption_items")
+            .select("id, qty, unit_price, consumption_id, inventory_id")
+            .in("consumption_id", addStockIds);
+
+          if (addStockItems) {
+            addStockItems.forEach(ai => {
+              if (ai.inventory_id === inventoryId) {
+                const addStock = addStockRecords?.find(r => r.id === ai.consumption_id);
+                fifoList.push({
+                  id: ai.id,
+                  qty: parseFloat(ai.qty) || 0,
+                  date: addStock?.created_at || null,
+                  source: "add_stock",
+                  item_name: targetInv.item_name
+                });
+              }
+            });
+          }
+        }
+      }
+
+      // Sort by FIFO (oldest first)
+      fifoList.sort((a, b) => {
+        const aTime = a.date ? new Date(a.date).getTime() : Infinity;
+        const bTime = b.date ? new Date(b.date).getTime() : Infinity;
+        if (aTime !== bTime) return aTime - bTime;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+
+      return fifoList;
+    } catch (err) {
+      console.error("Error fetching FIFO history:", err);
+      return [];
+    }
+  };
+
+  const toggleOrderDetails = async (order) => {
+    if (expandedOrder === order.id) {
+      setExpandedOrder(null);
+    } else {
+      setExpandedOrder(order.id);
+      // Fetch FIFO history for all ingredients in this order
+      const historyMap = {};
+      const neededByInventoryId = {};
+
+      for (const item of order.items) {
+        if (item.isSet) {
+          for (const setItem of item.setItems || []) {
+            const ingredients = ingredientsMap[setItem.menu_id] || [];
+            for (const ing of ingredients) {
+              neededByInventoryId[ing.inventory_id] = true;
+            }
+          }
+        } else {
+          const ingredients = ingredientsMap[item.menu_id] || [];
+          for (const ing of ingredients) {
+            neededByInventoryId[ing.inventory_id] = true;
+          }
+        }
+      }
+
+      for (const invId of Object.keys(neededByInventoryId)) {
+        historyMap[invId] = await fetchFifoHistory(Number(invId));
+      }
+      setFifoHistory(historyMap);
+    }
+  };
+
   // Cancel pending order only (no stock return because deduction happens on complete)
   const handleCancel = async (order) => {
     const result = await Swal.fire({
@@ -570,8 +698,13 @@ export default function History({ setInventory }) {
               return (
                 <div key={index} className="bg-white rounded-2xl shadow-lg p-6 flex flex-col justify-between">
                   <div className="mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm">Order #{index + 1}</span>
+                    <div className="flex justify-between items-center mb-2 cursor-pointer" onClick={() => toggleOrderDetails(order)}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">Order #{index + 1}</span>
+                        <span className="text-2xl text-gray-400">
+                          {expandedOrder === order.id ? "−" : "+"}
+                        </span>
+                      </div>
                       <span className=" text-sm">Slip :{order.id}</span>
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge.bg} ${statusBadge.text}`}>
                         {statusBadge.label}
@@ -594,6 +727,55 @@ export default function History({ setInventory }) {
                         </li>
                       ))}
                     </ul>
+
+                    {/* Expanded FIFO History Section */}
+                    {expandedOrder === order.id && (
+                      <div className="mt-4 border-t pt-4">
+                        <h4 className="font-semibold text-sm text-slate-700 mb-2">FIFO Stock Consumption History</h4>
+                        <div className="max-h-60 overflow-y-auto">
+                          {(() => {
+                            const allFifoRows = [];
+                            Object.keys(fifoHistory[order.id] || {}).forEach((invId) => {
+                              const rows = fifoHistory[order.id][invId] || [];
+                              rows.forEach((row, rowIdx) => {
+                                const isZeroQty = row.qty === 0;
+                                allFifoRows.push(
+                                  <tr key={`${invId}-${rowIdx}`} className={`${isZeroQty ? "bg-red-50 dark:bg-red-900/20" : ""}`}>
+                                    <td className="py-2">{row.item_name || `Item ${invId}`}</td>
+                                    <td className="py-2 capitalize">{row.source}</td>
+                                    <td className="py-2">{row.date ? new Date(row.date).toLocaleDateString() : "-"}</td>
+                                    <td className={`py-2 font-medium ${isZeroQty ? "text-red-600" : ""}`}>{row.qty}</td>
+                                    <td className="py-2">
+                                      {isZeroQty ? (
+                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Depleted</span>
+                                      ) : (
+                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">In Stock</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            });
+                            return allFifoRows.length > 0 ? (
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="pb-2 text-left">Item</th>
+                                    <th className="pb-2 text-left">Source</th>
+                                    <th className="pb-2 text-left">Date</th>
+                                    <th className="pb-2 text-left">Remaining Qty</th>
+                                    <th className="pb-2 text-left">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>{allFifoRows}</tbody>
+                              </table>
+                            ) : (
+                              <p className="text-gray-500 text-center py-4">No FIFO history available</p>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Price Breakdown */}
                     <div className="mt-2 text-sm">

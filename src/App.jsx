@@ -31,6 +31,7 @@ import Supplier from "./pages/Supplier";
 import Purchase from "./pages/Purchase";
 import PurchaseReturn from "./pages/PurchaseReturn";
 import PurchaseReport from "./pages/PurchaseReport";
+import PurchaseReturnReport from "./pages/PurchaseReturnReport";
 import SupplierOutstanding from "./pages/SupplierOutstanding";
 
 import AIChat from "./pages/AIChat";
@@ -181,6 +182,7 @@ export default function App() {
             <Route path="/supplier" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier']}><Supplier /></PrivateRoute>} />
             <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['purchase-return']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase']}><PurchaseReport /></PrivateRoute>} />
+            <Route path="/purchase-return-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase-return']}><PurchaseReturnReport /></PrivateRoute>} />
             <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
             <Route path="/reports/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
 

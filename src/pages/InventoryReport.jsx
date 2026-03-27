@@ -45,8 +45,6 @@ export default function InventoryReport() {
 
   // Store purchase price history per item (latest first)
   const [priceHistoryByItem, setPriceHistoryByItem] = useState({});
-  // Store remaining stock layer value per item so table total matches history total
-  const [stockValueByItem, setStockValueByItem] = useState({});
 
   const getPriceHistory = (itemName, itemType) => {
     const exactKey = buildItemKey(itemName, itemType);
@@ -71,16 +69,7 @@ export default function InventoryReport() {
   };
 
   const getLayerTotalValue = (itemName, itemType, qty, inventoryPrice) => {
-    const exactKey = buildItemKey(itemName, itemType);
-    const fallbackKey = buildNameOnlyKey(itemName);
-    const exactValue = stockValueByItem[exactKey];
-    const fallbackValue = stockValueByItem[fallbackKey];
-
-    // Return pre-calculated stock value from ALL purchases (matches history modal total)
-    if (Number.isFinite(exactValue)) return exactValue;
-    if (Number.isFinite(fallbackValue)) return fallbackValue;
-
-    // Fallback: calculate from qty and price
+    // Always calculate based on current inventory qty using FIFO prices
     return getTotalValueByQty(itemName, itemType, qty, inventoryPrice);
   };
 
@@ -158,15 +147,6 @@ export default function InventoryReport() {
 
     // Build purchase price history per item (latest first)
     const priceHistory = {};
-    const stockValue = {};
-    const addLayerValue = (key, qty, focQty, unitPrice) => {
-      const numericQty = Number(qty);
-      const numericFocQty = Number(focQty) || 0;
-      const numericPrice = Number(unitPrice);
-      const billableQty = numericQty - numericFocQty;
-      if (!Number.isFinite(billableQty) || !Number.isFinite(numericPrice) || billableQty <= 0) return;
-      stockValue[key] = (stockValue[key] || 0) + (billableQty * numericPrice);
-    };
 
     // From purchase_items
     if (purchaseItemsData.data) {
@@ -179,9 +159,6 @@ export default function InventoryReport() {
           if (!priceHistory[fallbackKey]) priceHistory[fallbackKey] = [];
           priceHistory[exactKey].push(item.unit_price);
           priceHistory[fallbackKey].push(item.unit_price);
-          const focQty = item.foc_qty || 0;
-          addLayerValue(exactKey, item.qty, focQty, item.unit_price);
-          addLayerValue(fallbackKey, item.qty, focQty, item.unit_price);
         }
       });
     }
@@ -203,16 +180,11 @@ export default function InventoryReport() {
           if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
           priceHistory[keyPair.exactKey].push(item.unit_price);
           priceHistory[keyPair.fallbackKey].push(item.unit_price);
-          const focQty = item.foc_qty || 0;
-          addLayerValue(keyPair.exactKey, item.qty, focQty, item.unit_price);
-          addLayerValue(keyPair.fallbackKey, item.qty, focQty, item.unit_price);
         }
       });
     }
 
     setPriceHistoryByItem(priceHistory);
-    setStockValueByItem(stockValue);
-    console.log("Stock Value By Item:", stockValue);
     setLoading(false);
   };
 
@@ -232,17 +204,17 @@ export default function InventoryReport() {
     const targetType = normalizeType(targetInv.type);
     const targetId = item.id;
 
-    // Fetch received purchases with created_at for accurate FIFO
-    const { data: purchases, error: purchasesErr } = await supabase
+    // Fetch ALL purchases (not just received/returned) to include invoice info
+    const { data: allPurchases, error: purchasesErr } = await supabase
       .from("purchases")
       .select("id, date, created_at, invoice_number, supplier_id, status")
-      .eq("status", "received");
+      .order("created_at", { ascending: true });
 
     if (purchasesErr) {
       console.error("Error fetching purchases:", purchasesErr);
     }
 
-    const purchaseIds = purchases?.map(p => p.id) || [];
+    const allPurchaseIds = allPurchases?.map(p => p.id) || [];
 
     // Fetch add_stock records ordered by date (FIFO)
     const { data: addStockRecords, error: addStockErr } = await supabase
@@ -259,12 +231,12 @@ export default function InventoryReport() {
 
     const history = [];
 
-    // Add purchase items - match by name and type from inventory
-    if (purchaseIds.length > 0) {
+    // Add purchase items - fetch ALL purchase_items to get current qty after returns
+    if (allPurchaseIds.length > 0) {
       const { data: purchaseItems, error: purchaseItemsErr } = await supabase
         .from("purchase_items")
-        .select("id, qty, foc_qty, unit_price, purchase_id, item_name, type")
-        .in("purchase_id", purchaseIds);
+        .select("id, qty, foc_qty, unit_price, purchase_id, item_name, type, original_qty")
+        .in("purchase_id", allPurchaseIds);
 
       if (purchaseItemsErr) {
         console.error("Error fetching purchase_items:", purchaseItemsErr);
@@ -281,10 +253,17 @@ export default function InventoryReport() {
           : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
 
         matchedPurchaseItems.forEach(pi => {
-          const purchase = purchases?.find(p => p.id === pi.purchase_id);
+          const purchase = allPurchases?.find(p => p.id === pi.purchase_id);
           if (purchase) {
             // Use created_at for FIFO (more accurate than date only)
             const fifoDate = purchase.created_at || purchase.date;
+            // Current qty after returns (this is what gets updated when return is processed)
+            const currentQty = parseFloat(pi.qty) || 0;
+            // Use original_qty if available, otherwise it means no returns happened yet
+            // so original_qty = current_qty (nothing returned)
+            const originalQty = parseFloat(pi.original_qty) || currentQty;
+            const returnedQty = originalQty - currentQty;
+
             history.push({
               ...pi,
               purchase_date: purchase.date || "-",
@@ -293,7 +272,9 @@ export default function InventoryReport() {
               supplier_id: purchase.supplier_id,
               source_type: "Purchase",
               status: purchase.status || "received",
-              qty: parseFloat(pi.qty) || 0,
+              qty: currentQty,
+              original_qty: originalQty,
+              returned_qty: returnedQty > 0 ? returnedQty : 0,
               foc_qty: parseFloat(pi.foc_qty) || 0,
               unit_price: parseFloat(pi.unit_price) || 0
             });
@@ -655,19 +636,9 @@ export default function InventoryReport() {
                     {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
                   </td>
 
-                  {/* Total Value - layer total (matches history modal) */}
+                  {/* Total Value - calculated from current inventory qty using FIFO prices */}
                   <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {(() => {
-                      const exactKey = buildItemKey(item.item_name, item.type || item.unit);
-                      const fallbackKey = buildNameOnlyKey(item.item_name);
-                      const exactValue = stockValueByItem[exactKey];
-                      const fallbackValue = stockValueByItem[fallbackKey];
-                      const value = Number.isFinite(exactValue) ? exactValue :
-                                   Number.isFinite(fallbackValue) ? fallbackValue :
-                                   getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price);
-                      console.log(`Item: ${item.item_name}, ExactKey: ${exactKey}, ExactValue: ${exactValue}, FallbackValue: ${fallbackValue}, Final: ${value}`);
-                      return formatMMK(value);
-                    })()}
+                    {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
                   </td>
                 </tr>
               ))
@@ -721,7 +692,12 @@ export default function InventoryReport() {
                     <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Invoice #</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Date</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700 dark:text-slate-300">Supplier</th>
-                    <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">Qty</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">
+                      <div className="flex flex-col text-xs">
+                        <span>Qty</span>
+                        <span className="text-slate-500">(Orig/Ret)</span>
+                      </div>
+                    </th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">FOC</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Unit Price</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Total</th>
@@ -757,7 +733,16 @@ export default function InventoryReport() {
                           <td className="px-4 py-2 text-slate-800 dark:text-slate-200 font-medium">{item.invoice_number}</td>
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.purchase_date}</td>
                           <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{getSupplierName(item.supplier_id)}</td>
-                          <td className="px-4 py-2 text-center text-slate-600 dark:text-slate-400">{item.qty}</td>
+                          <td className="px-4 py-2 text-center">
+                            <div className="flex flex-col items-center text-xs">
+                              <span className={`font-medium ${item.qty === 0 ? "text-red-600" : "text-slate-600 dark:text-slate-400"}`}>
+                                {item.qty}
+                              </span>
+                              <span className="text-slate-500 text-[10px]">
+                                (Orig: {item.original_qty} / -{item.returned_qty || 0})
+                              </span>
+                            </div>
+                          </td>
                           <td className="px-4 py-2 text-center">
                             {focQty > 0 ? (
                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">{focQty}</span>

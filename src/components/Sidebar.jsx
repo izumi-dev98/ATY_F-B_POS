@@ -146,6 +146,11 @@ export default function Sidebar({ isOpen }) {
                     Purchase Report
                   </NavLink>
                 )}
+                {canAccess("report-purchase-return") && (
+                  <NavLink to="/purchase-return-report" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
+                    Purchase Return Report
+                  </NavLink>
+                )}
                 {canAccess("report-profit-loss") && (
                   <NavLink to="/reports/profit-loss" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
                     Profit & Loss Report
