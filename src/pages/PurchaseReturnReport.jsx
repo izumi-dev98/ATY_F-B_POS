@@ -13,6 +13,10 @@ export default function PurchaseReturnReport() {
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [selectedReturnItems, setSelectedReturnItems] = useState([]);
 
+  // FIFO breakdown modal
+  const [showFifoModal, setShowFifoModal] = useState(false);
+  const [fifoBreakdown, setFifoBreakdown] = useState([]);
+
   // Filter states
   const [filterType, setFilterType] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -103,6 +107,34 @@ export default function PurchaseReturnReport() {
     setSelectedReturn(ret);
     setSelectedReturnItems(items);
     setShowDetailModal(true);
+  };
+
+  // View FIFO breakdown for completed return
+  const viewFifoBreakdown = async (ret) => {
+    try {
+      // Get return items
+      const items = returnItems.filter(i => i.return_id === ret.id);
+
+      // Get FIFO details for each item
+      const fifoDetails = [];
+      for (const item of items) {
+        const { data: itemFifo } = await supabase
+          .from("purchase_return_fifo")
+          .select("*")
+          .eq("return_item_id", item.id);
+
+        fifoDetails.push({
+          ...item,
+          fifoLayers: itemFifo || []
+        });
+      }
+
+      setFifoBreakdown(fifoDetails);
+      setShowFifoModal(true);
+    } catch (err) {
+      console.error("Error fetching FIFO breakdown:", err);
+      Swal.fire("Error", "Failed to load FIFO breakdown", "error");
+    }
   };
 
   // Export Excel
@@ -308,12 +340,23 @@ export default function PurchaseReturnReport() {
                   <td className="px-4 py-3 text-center text-slate-600">{ret.items_count}</td>
                   <td className="px-4 py-3 text-right font-medium text-slate-600">{formatMMK(ret.total_amount)}</td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => viewDetails(ret)}
-                      className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
-                    >
-                      View Details
-                    </button>
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => viewDetails(ret)}
+                        className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                      >
+                        View Details
+                      </button>
+                      {ret.status === "completed" && (
+                        <button
+                          onClick={() => viewFifoBreakdown(ret)}
+                          className="px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
+                          title="View FIFO Breakdown"
+                        >
+                          FIFO
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -445,6 +488,119 @@ export default function PurchaseReturnReport() {
             <div className="flex justify-end mt-4">
               <button
                 onClick={() => setShowDetailModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FIFO Breakdown Modal for Completed Returns */}
+      {showFifoModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl p-6 w-full max-w-4xl shadow-xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">FIFO Breakdown - Return Details</h3>
+                <p className="text-sm text-slate-500">{selectedReturn?.return_number} (Completed)</p>
+              </div>
+              <button
+                onClick={() => setShowFifoModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-slate-500">Return #:</span>
+                <span className="ml-2 font-semibold">{selectedReturn?.return_number}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Date:</span>
+                <span className="ml-2">
+                  {selectedReturn?.created_at ? new Date(selectedReturn.created_at).toLocaleString() : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">Total Amount:</span>
+                <span className="ml-2 font-bold text-amber-600">{formatMMK(selectedReturn?.total_amount)}</span>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700">Item</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">Unit</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">Return Qty</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Total</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-700">FIFO Layers Consumed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fifoBreakdown.map((item, idx) => (
+                    <tr key={idx} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-800 font-medium">{item.item_name}</td>
+                      <td className="px-3 py-2 text-center text-slate-600">{item.type || "-"}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                          {item.qty}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-violet-600 hover:text-violet-800">
+                            {item.fifoLayers?.length || 0} layer(s)
+                          </summary>
+                          <div className="mt-2 text-left bg-slate-50 p-2 rounded min-w-[200px]">
+                            {item.fifoLayers && item.fifoLayers.length > 0 ? (
+                              item.fifoLayers.map((fifo, fIdx) => (
+                                <div key={fIdx} className="text-xs py-1.5 border-b border-slate-200 last:border-0">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-600">
+                                      {fifo.source_type === "purchase" ? "Purchase" : "Add Stock"}
+                                    </span>
+                                    <span className="font-medium text-slate-800">
+                                      {fifo.qty_reduced} @ {formatMMK(fifo.unit_price)}
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-500 text-xs mt-0.5">
+                                    Value: {formatMMK(fifo.total_value)}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-slate-400 italic">No FIFO records found</div>
+                            )}
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50">
+                  <tr>
+                    <td colSpan={4} className="px-3 py-2 text-right font-bold text-slate-800">Total</td>
+                    <td className="px-3 py-2 text-right font-bold text-amber-600">
+                      {formatMMK(fifoBreakdown.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0))}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t border-slate-200">
+              <button
+                onClick={() => setShowFifoModal(false)}
                 className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 Close
