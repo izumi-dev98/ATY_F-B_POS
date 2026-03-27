@@ -283,6 +283,7 @@ export default function PurchaseReport() {
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="received">Received</option>
+              <option value="returned">Returned</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
