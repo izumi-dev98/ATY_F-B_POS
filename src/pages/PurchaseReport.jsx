@@ -34,8 +34,6 @@ export default function PurchaseReport() {
   };
 
   const calculateTotal = (purchase) => {
-    // For received status, calculate: (before_qty * unit_price) - foc_qty
-    // For other statuses, use current value calculation
     const purchaseItemsData = purchase._items || [];
     if (purchaseItemsData.length === 0) return 0;
 
@@ -43,16 +41,8 @@ export default function PurchaseReport() {
       const beforeQty = parseFloat(item.original_qty || item.qty) || 0;
       const focQty = parseFloat(item.foc_qty) || 0;
       const unitPrice = parseFloat(item.unit_price) || 0;
-
-      if (purchase.status === "received") {
-        // (Before Qty × Unit Price) - FOC Qty
-        return sum + ((beforeQty * unitPrice) - focQty);
-      } else {
-        // Current value: (qty - foc_qty) * unit_price
-        const currentQty = parseFloat(item.qty) || 0;
-        const billableQty = currentQty - focQty;
-        return sum + (billableQty * unitPrice);
-      }
+      const billableQty = beforeQty - focQty;
+      return sum + (billableQty * unitPrice);
     }, 0);
   };
 
@@ -84,16 +74,8 @@ export default function PurchaseReport() {
             const beforeQty = parseFloat(item.original_qty || item.qty) || 0;
             const focQty = parseFloat(item.foc_qty) || 0;
             const unitPrice = parseFloat(item.unit_price) || 0;
-
-            if (purchase.status === "received") {
-              // (Before Qty × Unit Price) - FOC Qty
-              return sum + ((beforeQty * unitPrice) - focQty);
-            } else {
-              // Current value: (qty - foc_qty) * unit_price
-              const currentQty = parseFloat(item.qty) || 0;
-              const billableQty = currentQty - focQty;
-              return sum + (billableQty * unitPrice);
-            }
+            const billableQty = beforeQty - focQty;
+            return sum + (billableQty * unitPrice);
           }, 0);
         }
         setPurchases(purchasesWithItems);
@@ -258,7 +240,6 @@ export default function PurchaseReport() {
 
   // Calculate totals
   const totalAmount = filteredPurchases.reduce((sum, p) => {
-    // Use the calculateTotal function for consistent calculation
     const items = p._items || [];
     if (items.length === 0) return sum + (currentValues[p.id] || 0);
 
@@ -266,14 +247,8 @@ export default function PurchaseReport() {
       const beforeQty = parseFloat(item.original_qty || item.qty) || 0;
       const focQty = parseFloat(item.foc_qty) || 0;
       const unitPrice = parseFloat(item.unit_price) || 0;
-
-      if (p.status === "received") {
-        return itemSum + ((beforeQty * unitPrice) - focQty);
-      } else {
-        const currentQty = parseFloat(item.qty) || 0;
-        const billableQty = currentQty - focQty;
-        return itemSum + (billableQty * unitPrice);
-      }
+      const billableQty = beforeQty - focQty;
+      return itemSum + (billableQty * unitPrice);
     }, 0);
     return sum + purchaseTotal;
   }, 0);
@@ -504,8 +479,8 @@ export default function PurchaseReport() {
                     const focQty = item.foc_qty || 0;
                     const returnedQty = getReturnedQty(beforeQty, item.qty);
                     const unitPrice = item.unit_price || 0;
-                    // Total = (Before Qty × Unit Price) - FOC Qty
-                    const total = (beforeQty * unitPrice) - focQty;
+                    // Total = (Before Qty - FOC Qty) × Unit Price
+                    const total = (beforeQty - focQty) * unitPrice;
                     return (
                       <tr key={idx} className="border-t border-slate-100">
                         <td className="px-4 py-2 text-slate-800">{item.item_name}</td>
@@ -539,7 +514,8 @@ export default function PurchaseReport() {
                         const beforeQty = item.original_qty || item.qty;
                         const focQty = item.foc_qty || 0;
                         const unitPrice = item.unit_price || 0;
-                        return sum + ((beforeQty * unitPrice) - focQty);
+                        const billableQty = beforeQty - focQty;
+                        return sum + (billableQty * unitPrice);
                       }, 0))}
                     </td>
                   </tr>
