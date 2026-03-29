@@ -185,7 +185,7 @@ export default function Login({ setUser }) {
 
                 {/* Footer */}
                 <p className="text-center text-yellow-500 text-[10px] sm:text-xs mt-6 font-semibold">
-                    © 2026 Nosh
+                    © March 2026 Nosh
                 </p>
             </div>
         </div>
