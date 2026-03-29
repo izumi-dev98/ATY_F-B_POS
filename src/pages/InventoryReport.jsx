@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
+import { getSnapshot, compareDates, buildSnapshotMap, getLatestSnapshotOnOrBefore } from "../utils/inventorySnapshot";
 
 export default function InventoryReport() {
   const [inventory, setInventory] = useState([]);
@@ -14,6 +15,13 @@ export default function InventoryReport() {
   // Custom date range
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+
+  // Compare mode state
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareFrom, setCompareFrom] = useState("");
+  const [compareTo, setCompareTo] = useState("");
+  const [compareData, setCompareData] = useState([]);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Modal state for purchase details
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -81,6 +89,13 @@ export default function InventoryReport() {
   useEffect(() => {
     fetchInventory();
   }, []);
+
+  // Fetch compare data when compare mode is enabled and dates are set
+  useEffect(() => {
+    if (compareMode && compareFrom && compareTo) {
+      fetchCompareData(compareFrom, compareTo);
+    }
+  }, [compareMode, compareFrom, compareTo]);
 
   const fetchInventory = async () => {
     setLoading(true);
@@ -163,6 +178,191 @@ export default function InventoryReport() {
 
     setPriceHistoryByItem(priceHistory);
     setLoading(false);
+  };
+
+  // Fetch daily transactions (Add/Reduce) between two dates
+  const fetchCompareData = async (fromDate, toDate) => {
+    if (!fromDate || !toDate) {
+      console.log('Missing dates:', { fromDate, toDate });
+      return;
+    }
+
+    setCompareLoading(true);
+
+    try {
+      // Get all inventory items
+      const { data: allInventory } = await supabase
+        .from('inventory')
+        .select('id, item_name, type, price');
+
+      if (!allInventory || allInventory.length === 0) {
+        setCompareData([]);
+        setCompareLoading(false);
+        return;
+      }
+
+      // Get purchases in date range (use created_at for consistency)
+      const { data: purchases, error: purchasesError } = await supabase
+        .from('purchases')
+        .select('id, date, created_at, status')
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate + 'T23:59:59');
+
+      console.log('Purchases:', purchases?.length || 0, 'error:', purchasesError);
+      const purchaseIds = purchases?.map(p => p.id) || [];
+
+      // Get add_stock in date range (use created_at instead of date)
+      const { data: addStockRecords } = await supabase
+        .from('internal_consumption')
+        .select('id, created_at, status')
+        .eq('status', 'add_stock')
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate + 'T23:59:59');
+
+      const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+      // Get usage/consumption in date range - get all non-add_stock records
+      const { data: usageRecords } = await supabase
+        .from('internal_consumption')
+        .select('id, created_at, status')
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate + 'T23:59:59')
+        .neq('status', 'add_stock');
+
+      const usageIds = usageRecords?.map(r => r.id) || [];
+
+      // Get purchase return items in date range
+      const { data: returnItems, error: returnItemsError } = await supabase
+        .from('purchase_return_items')
+        .select('id, inventory_id, qty, created_at')
+        .gte('created_at', fromDate)
+        .lte('created_at', toDate + 'T23:59:59');
+
+      console.log('Return items:', returnItems?.length || 0, 'error:', returnItemsError);
+      let returnItemsData = [];
+      if (!returnItemsError && returnItems) {
+        returnItemsData = returnItems;
+      }
+
+      // Initialize data structure for each inventory item
+      const itemTransactions = {};
+      allInventory.forEach(inv => {
+        itemTransactions[inv.id] = {
+          inventory_id: inv.id,
+          item_name: inv.item_name,
+          type: inv.type,
+          price: inv.price,
+          received_qty: 0,      // From purchases (received status)
+          added_qty: 0,         // From add_stock
+          reduced_qty: 0,       // From usage/consumption
+          returned_qty: 0,      // From purchase returns
+          net_change: 0,
+        };
+      });
+
+      // Fetch purchase_items (all purchases, not just received)
+      if (purchaseIds.length > 0) {
+        const { data: purchaseItems, error: purchaseItemsError } = await supabase
+          .from('purchase_items')
+          .select('item_name, type, qty, foc_qty, purchase_id')
+          .in('purchase_id', purchaseIds);
+
+        console.log('Purchase items:', purchaseItems?.length || 0, 'error:', purchaseItemsError);
+
+        if (purchaseItems) {
+          purchaseItems.forEach(pi => {
+            // Match by item_name and type
+            const inv = allInventory.find(i =>
+              i.item_name.toLowerCase() === pi.item_name.toLowerCase() &&
+              (i.type || '').toLowerCase() === (pi.type || '').toLowerCase()
+            );
+            if (inv && itemTransactions[inv.id]) {
+              itemTransactions[inv.id].received_qty += (parseFloat(pi.qty) || 0) + (parseFloat(pi.foc_qty) || 0);
+            }
+          });
+        }
+      }
+
+      // Fetch add_stock items
+      if (addStockIds.length > 0) {
+        const { data: addStockItems } = await supabase
+          .from('internal_consumption_items')
+          .select('inventory_id, qty, foc_qty, consumption_id')
+          .in('consumption_id', addStockIds);
+
+        if (addStockItems) {
+          addStockItems.forEach(ai => {
+            if (itemTransactions[ai.inventory_id]) {
+              itemTransactions[ai.inventory_id].added_qty += (parseFloat(ai.qty) || 0);
+            }
+          });
+        }
+      }
+
+      // Fetch usage items
+      if (usageIds.length > 0) {
+        const { data: usageItems } = await supabase
+          .from('internal_consumption_items')
+          .select('inventory_id, qty, consumption_id')
+          .in('consumption_id', usageIds);
+
+        if (usageItems) {
+          usageItems.forEach(ui => {
+            if (itemTransactions[ui.inventory_id]) {
+              itemTransactions[ui.inventory_id].reduced_qty += (parseFloat(ui.qty) || 0);
+            }
+          });
+        }
+      }
+
+      // Fetch purchase return items (already fetched above with date filter)
+      if (returnItemsData && returnItemsData.length > 0) {
+        returnItemsData.forEach(ri => {
+          if (itemTransactions[ri.inventory_id]) {
+            itemTransactions[ri.inventory_id].returned_qty += (parseFloat(ri.qty) || 0);
+          }
+        });
+      }
+
+      // Calculate net change and build comparison array
+      const comparison = Object.values(itemTransactions).map(item => {
+        const netChange = item.received_qty + item.added_qty - item.reduced_qty - item.returned_qty;
+        const totalQty = item.received_qty + item.added_qty;
+        const changePercent = totalQty > 0 ? ((netChange / totalQty) * 100).toFixed(1) : 0;
+
+        return {
+          inventory_id: item.inventory_id,
+          item_name: item.item_name,
+          type: item.type,
+          received_qty: item.received_qty,
+          added_qty: item.added_qty,
+          reduced_qty: item.reduced_qty,
+          returned_qty: item.returned_qty,
+          change_qty: netChange,
+          change_percent: parseFloat(changePercent),
+          unit_price: item.price || 0,
+        };
+      });
+
+      // Filter to only show items with transactions
+      const filteredComparison = comparison.filter(item =>
+        item.received_qty > 0 ||
+        item.added_qty > 0 ||
+        item.reduced_qty > 0 ||
+        item.returned_qty > 0
+      );
+
+      // Sort by item name
+      filteredComparison.sort((a, b) => (a.item_name || '').localeCompare(b.item_name || ''));
+
+      console.log('Daily transactions:', filteredComparison.length, 'items with activity');
+      setCompareData(filteredComparison);
+    } catch (err) {
+      console.error('Error fetching compare data:', err);
+      setCompareData([]);
+    } finally {
+      setCompareLoading(false);
+    }
   };
 
   // View stock history for an item (Purchase + Add Stock mixed, sorted by date oldest first)
@@ -370,9 +570,14 @@ export default function InventoryReport() {
     }
   };
 
-  // Apply date filter then search filter
+  // Apply date filter then search filter (for non-compare mode)
   const dateFiltered = filterByDate(inventory);
   const filteredData = dateFiltered.filter((item) =>
+    item.item_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Filter compare data by search
+  const filteredCompareData = compareData.filter((item) =>
     item.item_name?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -383,36 +588,75 @@ export default function InventoryReport() {
     return sum + getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price);
   }, 0);
 
+  // Calculate compare mode totals (daily transactions)
+  const compareTotalItems = filteredCompareData.length;
+  const compareTotalReceived = filteredCompareData.reduce((sum, item) => sum + (item.received_qty || 0), 0);
+  const compareTotalAdded = filteredCompareData.reduce((sum, item) => sum + (item.added_qty || 0), 0);
+  const compareTotalReduced = filteredCompareData.reduce((sum, item) => sum + (item.reduced_qty || 0), 0);
+  const compareTotalReturned = filteredCompareData.reduce((sum, item) => sum + (item.returned_qty || 0), 0);
+  const compareTotalChange = filteredCompareData.reduce((sum, item) => sum + (item.change_qty || 0), 0);
+
   // Pagination logic
   const indexOfLast = currentPage * rowsPerPage;
   const indexOfFirst = indexOfLast - rowsPerPage;
-  const currentData = filteredData.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  const currentData = compareMode ? filteredCompareData.slice(indexOfFirst, indexOfLast) : filteredData.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil((compareMode ? filteredCompareData.length : filteredData.length) / rowsPerPage);
 
   // Export Excel
   const exportToExcel = () => {
-    // Prepare export data with layer totals (matches history modal)
-    const exportData = filteredData.map((item) => {
-      const latestPrice = getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price);
-      return {
-        Item_Name: item.item_name,
-        Quantity: item.qty,
-        Unit: item.type,
-        Price: latestPrice,
-        Total_Value: getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price),
-        Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
-      };
-    });
+    let exportData = [];
+    let fileName = "Inventory_Report.xlsx";
 
-    // Add summary row
-    exportData.push({
-      Item_Name: "TOTAL",
-      Quantity: totalQty,
-      Unit: "",
-      Price: "",
-      Total_Value: totalValue,
-      Created_At: "",
-    });
+    if (compareMode) {
+      // Compare mode export - Daily Transactions
+      exportData = filteredCompareData.map((item) => ({
+        Item_Name: item.item_name,
+        Unit: item.type,
+        Received: item.received_qty,
+        Added: item.added_qty,
+        Reduced: item.reduced_qty,
+        Returned: item.returned_qty,
+        Net_Change: item.change_qty,
+        Price: item.unit_price,
+      }));
+
+      // Add summary row
+      exportData.push({
+        Item_Name: "TOTAL",
+        Unit: "",
+        Received: compareTotalReceived,
+        Added: compareTotalAdded,
+        Reduced: compareTotalReduced,
+        Returned: compareTotalReturned,
+        Net_Change: compareTotalChange,
+        Price: "",
+      });
+
+      fileName = `Inventory_Daily_${compareFrom}_to_${compareTo}.xlsx`;
+    } else {
+      // Regular mode export
+      exportData = filteredData.map((item) => {
+        const latestPrice = getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price);
+        return {
+          Item_Name: item.item_name,
+          Quantity: item.qty,
+          Unit: item.type,
+          Price: latestPrice,
+          Total_Value: getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price),
+          Created_At: item.created_at ? new Date(item.created_at).toLocaleDateString() : "-",
+        };
+      });
+
+      // Add summary row
+      exportData.push({
+        Item_Name: "TOTAL",
+        Quantity: totalQty,
+        Unit: "",
+        Price: "",
+        Total_Value: totalValue,
+        Created_At: "",
+      });
+    }
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -427,7 +671,7 @@ export default function InventoryReport() {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
 
-    saveAs(fileData, "Inventory_Report.xlsx");
+    saveAs(fileData, fileName);
   };
 
   return (
@@ -436,65 +680,149 @@ export default function InventoryReport() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Inventory Report</h1>
-          <p className="text-sm text-slate-500 mt-1">View inventory report</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {compareMode
+              ? `Compare: ${compareFrom || '...'} to ${compareTo || '...'}`
+              : "View inventory report"}
+          </p>
         </div>
 
-        <button
-          onClick={exportToExcel}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-        >
-          Export Excel
-        </button>
-      </div>
-
-      {/* Search and Filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-3">
-          {/* Date Filter */}
-          <select
-            value={dateFilter}
-            onChange={(e) => {
-              setDateFilter(e.target.value);
-              setCustomStart("");
-              setCustomEnd("");
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (!compareMode) {
+                // Auto-set dates when entering compare mode
+                const today = new Date().toISOString().split('T')[0];
+                const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+                setCompareFrom(yesterday);
+                setCompareTo(today);
+              }
+              setCompareMode(!compareMode);
               setCurrentPage(1);
             }}
-            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              compareMode
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            }`}
           >
-            <option value="all">All Time</option>
-            <option value="day">This Day</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-            <option value="custom">Custom Date</option>
-          </select>
+            {compareMode ? "Comparison Mode" : "Compare Dates"}
+          </button>
 
-          {/* Custom Date Range */}
-          {dateFilter === "custom" && (
-            <>
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="border px-3 py-2 rounded-lg"
-              />
-              <span className="text-slate-500 self-center">-</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="border px-3 py-2 rounded-lg"
-              />
-              <button
-                onClick={() => setCurrentPage(1)}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg"
-              >
-                Apply
-              </button>
-            </>
-          )}
+          <button
+            onClick={exportToExcel}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Export Excel
+          </button>
+        </div>
+      </div>
 
-          {/* Search */}
+      {/* Compare Mode Date Pickers */}
+      {compareMode && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium text-slate-700">From:</label>
+            <input
+              type="date"
+              value={compareFrom}
+              onChange={(e) => {
+                setCompareFrom(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <label className="text-sm font-medium text-slate-700">To:</label>
+            <input
+              type="date"
+              value={compareTo}
+              onChange={(e) => {
+                setCompareTo(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={() => {
+                setCompareFrom("");
+                setCompareTo("");
+                setCompareData([]);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 text-sm text-slate-600 hover:text-slate-800"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search and Filter (only show in non-compare mode) */}
+      {!compareMode && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="flex flex-wrap gap-3">
+            {/* Date Filter */}
+            <select
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setCustomStart("");
+                setCustomEnd("");
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Time</option>
+              <option value="day">This Day</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom Date</option>
+            </select>
+
+            {/* Custom Date Range */}
+            {dateFilter === "custom" && (
+              <>
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="border px-3 py-2 rounded-lg"
+                />
+                <span className="text-slate-500 self-center">-</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="border px-3 py-2 rounded-lg"
+                />
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-lg"
+                >
+                  Apply
+                </button>
+              </>
+            )}
+
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search item..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Search for compare mode */}
+      {compareMode && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
           <input
             type="text"
             placeholder="Search item..."
@@ -503,150 +831,282 @@ export default function InventoryReport() {
               setSearch(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full max-w-md"
           />
         </div>
-      </div>
+      )}
 
       {/* Summary Cards */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-slate-500">Total Items</p>
-            <p className="text-xl font-bold text-slate-800">{totalItems}</p>
+        {compareMode ? (
+          <div className="grid grid-cols-5 gap-4">
+            <div>
+              <p className="text-sm text-slate-500">Items with Activity</p>
+              <p className="text-xl font-bold text-slate-800">{compareTotalItems}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Received</p>
+              <p className="text-xl font-bold text-emerald-600">{compareTotalReceived}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Added</p>
+              <p className="text-xl font-bold text-emerald-600">{compareTotalAdded}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Reduced</p>
+              <p className="text-xl font-bold text-red-600">{compareTotalReduced}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Net Change</p>
+              <p className={`text-xl font-bold ${
+                compareTotalChange > 0 ? 'text-emerald-600' :
+                compareTotalChange < 0 ? 'text-red-600' : 'text-slate-600'
+              }`}>
+                {compareTotalChange > 0 ? '+' : ''}{compareTotalChange}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-slate-500">Total Value</p>
-            <p className="text-xl font-bold text-emerald-600">{formatMMK(totalValue)}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-slate-500">Total Items</p>
+              <p className="text-xl font-bold text-slate-800">{totalItems}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Total Value</p>
+              <p className="text-xl font-bold text-emerald-600">{formatMMK(totalValue)}</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Quantity</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Price</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan="5" className="text-center py-6">
-                  Loading...
-                </td>
-              </tr>
-            ) : currentData.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="text-center py-6">
-                  No Data Found
-                </td>
-              </tr>
-            ) : (
-              currentData.map((item, index) => (
-                <tr
-                  key={index}
-                  className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition"
-                >
-                  {/* Item Name */}
-                  <td className="px-4 py-3 font-medium text-gray-700 dark:text-slate-100">
-                    <button
-                      onClick={() => viewPurchaseHistory(item)}
-                      className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200 underline"
-                    >
-                      {item.item_name}
-                    </button>
-                  </td>
-
-                  {/* Quantity with Low Stock Hover */}
-                  <td className="px-4 py-3 relative group">
-                    {item.qty < 5 ? (
-                      <>
-                        <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold cursor-pointer animate-pulse">
-                          {item.qty}
-                        </span>
-
-                        <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 
-                                        bg-red-600 text-white text-xs rounded-lg p-2 
-                                        opacity-0 group-hover:opacity-100 
-                                        transition duration-300 shadow-lg z-10">
-                          ⚠ Critical Stock Level  
-                          <br />
-                          Only {item.qty} items remaining!
-                        </div>
-                      </>
-                    ) : item.qty < 10 ? (
-                      <>
-                        <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer">
-                          {item.qty}
-                        </span>
-
-                        <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-44 
-                                        bg-red-500 text-white text-xs rounded-lg p-2 
-                                        opacity-0 group-hover:opacity-100 
-                                        transition duration-300 shadow-lg z-10">
-                          ⚠ Low Stock Alert  
-                          <br />
-                          Only {item.qty} items remaining
-                        </div>
-                      </>
-                    ) : (
-                      <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-semibold">
-                        {item.qty}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Type */}
-                  <td className="px-4 py-3 text-gray-600">
-                    {item.type}
-                  </td>
-
-                  {/* Latest Price */}
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
-                  </td>
-
-                  {/* Total Value - calculated from current inventory qty using FIFO prices */}
-                  <td className="px-4 py-3 text-right font-medium text-gray-700">
-                    {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
-                  </td>
+        {compareMode ? (
+          <>
+            {/* Compare Mode Table - Daily Transactions */}
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                  <th className="px-4 py-3 text-right font-semibold text-emerald-700">
+                    Received
+                    <span className="text-xs text-slate-500 font-normal block">(Purchase)</span>
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-emerald-700">
+                    Added
+                    <span className="text-xs text-slate-500 font-normal block">(Add Stock)</span>
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-red-700">
+                    Reduced
+                    <span className="text-xs text-slate-500 font-normal block">(Usage)</span>
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-orange-700">
+                    Returned
+                    <span className="text-xs text-slate-500 font-normal block">(Return)</span>
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Net Change</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
 
-        {/* Pagination */}
-        <div className="flex justify-between items-center p-4 bg-gray-50">
-          <span className="text-sm text-gray-600">
-            Page {currentPage} of {totalPages || 1}
-          </span>
+              <tbody>
+                {compareLoading ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-6">
+                      Loading daily transactions...
+                    </td>
+                  </tr>
+                ) : !compareFrom || !compareTo ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-6">
+                      Select 'From' and 'To' dates to compare
+                    </td>
+                  </tr>
+                ) : filteredCompareData.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-6">
+                      No transactions found in this period
+                    </td>
+                  </tr>
+                ) : (
+                  currentData.map((item, index) => {
+                    const netChangeClass = item.change_qty > 0 ? 'text-emerald-600' :
+                                          item.change_qty < 0 ? 'text-red-600' : 'text-slate-600';
+                    const netChangeBg = item.change_qty > 0 ? 'bg-emerald-100 text-emerald-700' :
+                                       item.change_qty < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
+                    const arrow = item.change_qty > 0 ? '↑' : item.change_qty < 0 ? '↓' : '→';
 
-          <div className="space-x-2">
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(currentPage - 1)}
-              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
-            >
-              Prev
-            </button>
-
-            <button
-              disabled={currentPage === totalPages || totalPages === 0}
-              onClick={() => setCurrentPage(currentPage + 1)}
-              className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+                    return (
+                      <tr
+                        key={index}
+                        className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition"
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-700 dark:text-slate-100">
+                          {item.item_name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {item.type || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {item.received_qty > 0 ? (
+                            <span className="text-emerald-600 font-medium">+{item.received_qty}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {item.added_qty > 0 ? (
+                            <span className="text-emerald-600 font-medium">+{item.added_qty}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {item.reduced_qty > 0 ? (
+                            <span className="text-red-600 font-medium">-{item.reduced_qty}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {item.returned_qty > 0 ? (
+                            <span className="text-orange-600 font-medium">-{item.returned_qty}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${netChangeBg}`}>
+                            {item.change_qty > 0 ? '+' : ''}{item.change_qty}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            {/* Pagination for Compare Mode */}
+            <div className="flex justify-between items-center p-4 bg-gray-50">
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <div className="space-x-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Regular Mode Table */}
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Quantity</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Price</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-6">Loading...</td>
+                  </tr>
+                ) : currentData.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-6">No Data Found</td>
+                  </tr>
+                ) : (
+                  currentData.map((item, index) => (
+                    <tr
+                      key={index}
+                      className="border-b border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition"
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-700 dark:text-slate-100">
+                        <button
+                          onClick={() => viewPurchaseHistory(item)}
+                          className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200 underline"
+                        >
+                          {item.item_name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 relative group">
+                        {item.qty < 5 ? (
+                          <>
+                            <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold cursor-pointer animate-pulse">
+                              {item.qty}
+                            </span>
+                            <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 bg-red-600 text-white text-xs rounded-lg p-2 opacity-0 group-hover:opacity-100 transition duration-300 shadow-lg z-10">
+                              ⚠ Critical Stock Level<br />Only {item.qty} items remaining!
+                            </div>
+                          </>
+                        ) : item.qty < 10 ? (
+                          <>
+                            <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer">
+                              {item.qty}
+                            </span>
+                            <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-44 bg-red-500 text-white text-xs rounded-lg p-2 opacity-0 group-hover:opacity-100 transition duration-300 shadow-lg z-10">
+                              ⚠ Low Stock Alert<br />Only {item.qty} items remaining
+                            </div>
+                          </>
+                        ) : (
+                          <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-semibold">
+                            {item.qty}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{item.type}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-700">
+                        {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {/* Pagination for Regular Mode */}
+            <div className="flex justify-between items-center p-4 bg-gray-50">
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <div className="space-x-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Purchase History Modal */}
