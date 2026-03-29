@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import supabase from "../createClients";
-import { getSnapshot, compareDates, buildSnapshotMap, getLatestSnapshotOnOrBefore } from "../utils/inventorySnapshot";
+import { calculateFifoValue } from "../utils/fifoService";
 
 export default function InventoryReport() {
   const [inventory, setInventory] = useState([]);
@@ -77,13 +77,22 @@ export default function InventoryReport() {
   };
 
   const getLayerTotalValue = (itemName, itemType, qty, inventoryPrice) => {
-    // Simple valuation: current qty * latest effective unit price
-    // This matches the history modal which shows (qty) * unit_price per row
+    // FIFO valuation: value remaining qty using price history (newest first)
+    // Under FIFO, oldest layers are consumed first, so newest layers remain
     const numericQty = Number(qty) || 0;
     if (numericQty <= 0) return 0;
 
-    const latestPrice = getEffectiveUnitPrice(itemName, itemType, inventoryPrice);
-    return numericQty * latestPrice;
+    const history = getPriceHistory(itemName, itemType);
+    const fallbackPrice = inventoryPrice !== undefined && inventoryPrice !== null
+      ? Number(inventoryPrice) || 0
+      : 0;
+
+    // If price history is empty, use fallback price
+    if (!history || history.length === 0) {
+      return numericQty * fallbackPrice;
+    }
+
+    return calculateFifoValue(numericQty, history, fallbackPrice);
   };
 
   useEffect(() => {
@@ -100,60 +109,98 @@ export default function InventoryReport() {
   const fetchInventory = async () => {
     setLoading(true);
 
-    // Get all received purchases first
+    // Get all received purchases with dates for FIFO ordering
     const { data: purchases } = await supabase
       .from("purchases")
-      .select("id")
+      .select("id, date, created_at")
       .eq("status", "received");
 
     const receivedPurchaseIds = purchases?.map(p => p.id) || [];
 
-    // Get add_stock records from internal_consumption
+    // Build a map of purchase_id to date for FIFO ordering
+    const purchaseDateMap = {};
+    purchases?.forEach(p => {
+      purchaseDateMap[p.id] = p.created_at || p.date;
+    });
+
+    // Get add_stock records from internal_consumption with dates
     const { data: addStockRecords } = await supabase
       .from("internal_consumption")
       .select("id, created_at")
-      .eq("status", "add_stock")
-      .order("created_at", { ascending: false });
+      .eq("status", "add_stock");
 
     const addStockIds = addStockRecords?.map(r => r.id) || [];
+
+    // Build a map of consumption_id to date for FIFO ordering
+    const addStockDateMap = {};
+    addStockRecords?.forEach(r => {
+      addStockDateMap[r.id] = r.created_at;
+    });
 
     const [invData, supData, purchaseItemsData, addStockItemsData] = await Promise.all([
       supabase.from("inventory").select("*").order("item_name", { ascending: true }),
       supabase.from("suppliers").select("id, name").order("name", { ascending: true }),
       receivedPurchaseIds.length > 0
-        ? supabase.from("purchase_items").select("item_name, type, qty, foc_qty, unit_price").in("purchase_id", receivedPurchaseIds).order("id", { ascending: false })
+        ? supabase.from("purchase_items").select("item_name, type, qty, foc_qty, unit_price, purchase_id").in("purchase_id", receivedPurchaseIds)
         : Promise.resolve({ data: [] }),
       addStockIds.length > 0
-        ? supabase.from("internal_consumption_items").select("inventory_id, qty, foc_qty, unit_price").in("consumption_id", addStockIds).order("id", { ascending: false })
+        ? supabase.from("internal_consumption_items").select("inventory_id, qty, foc_qty, unit_price, consumption_id").in("consumption_id", addStockIds)
         : Promise.resolve({ data: [] })
     ]);
 
     if (!invData.error) setInventory(invData.data);
     if (!supData.error) setSuppliers(supData.data || []);
 
-    // Build purchase price history per item (latest first)
+    // Build FIFO price history per item based on REMAINING layers
+    // purchase_items.qty already reflects remaining qty after consumption
+    // We need to expand each layer into individual unit prices for calculateFifoValue
     const priceHistory = {};
 
-    // From purchase_items - exclude FOC (zero price) items
-    if (purchaseItemsData.data) {
-      purchaseItemsData.data.forEach(item => {
-        // Skip FOC items (zero price) - they shouldn't affect FIFO valuation
-        if (!item.unit_price || parseFloat(item.unit_price) === 0) return;
+    // Helper: add a layer's prices to history array
+    const addLayerToHistory = (key, unitPrice, remainingQty) => {
+      if (!priceHistory[key]) priceHistory[key] = [];
+      const qty = parseFloat(remainingQty) || 0;
+      if (qty <= 0) return;
+      // Add one price entry per remaining unit in this layer
+      for (let i = 0; i < qty; i++) {
+        priceHistory[key].push(unitPrice);
+      }
+    };
 
+    // Process purchase_items - need to sort by purchase date first
+    if (purchaseItemsData.data && purchases) {
+      // Enrich items with purchase date for sorting
+      const itemsWithDate = purchaseItemsData.data
+        .filter(item => {
+          const remainingQty = parseFloat(item.qty) || 0;
+          return remainingQty > 0 && item.unit_price && parseFloat(item.unit_price) > 0;
+        })
+        .map(item => ({
+          ...item,
+          purchaseDate: purchaseDateMap[item.purchase_id] || null,
+          timestamp: purchaseDateMap[item.purchase_id] ? new Date(purchaseDateMap[item.purchase_id]).getTime() : Infinity
+        }));
+
+      // Sort by date (oldest first) for proper FIFO layer ordering
+      itemsWithDate.sort((a, b) => {
+        if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+
+      // Build price history (oldest layers first, will reverse later)
+      itemsWithDate.forEach(item => {
         const nameKey = normalizeName(item.item_name);
         if (nameKey) {
           const exactKey = buildItemKey(item.item_name, item.type);
           const fallbackKey = buildNameOnlyKey(item.item_name);
-          if (!priceHistory[exactKey]) priceHistory[exactKey] = [];
-          if (!priceHistory[fallbackKey]) priceHistory[fallbackKey] = [];
-          priceHistory[exactKey].push(item.unit_price);
-          priceHistory[fallbackKey].push(item.unit_price);
+          addLayerToHistory(exactKey, item.unit_price, item.qty);
+          addLayerToHistory(fallbackKey, item.unit_price, item.qty);
         }
       });
     }
 
-    // From add_stock items - merge with inventory name
-    if (addStockItemsData.data && invData.data) {
+    // Process add_stock items - sort by date
+    if (addStockItemsData.data && invData.data && addStockRecords) {
       const inventoryMap = {};
       invData.data.forEach(inv => {
         inventoryMap[inv.id] = {
@@ -162,19 +209,38 @@ export default function InventoryReport() {
         };
       });
 
-      addStockItemsData.data.forEach(item => {
-        // Skip FOC items (zero price) - they shouldn't affect FIFO valuation
-        if (!item.unit_price || parseFloat(item.unit_price) === 0) return;
+      // Enrich items with date for sorting
+      const itemsWithDate = addStockItemsData.data
+        .filter(item => {
+          const remainingQty = parseFloat(item.qty) || 0;
+          return remainingQty > 0 && item.unit_price && parseFloat(item.unit_price) > 0;
+        })
+        .map(item => ({
+          ...item,
+          addStockDate: addStockDateMap[item.consumption_id] || null,
+          timestamp: addStockDateMap[item.consumption_id] ? new Date(addStockDateMap[item.consumption_id]).getTime() : Infinity
+        }));
 
+      // Sort by date (oldest first)
+      itemsWithDate.sort((a, b) => {
+        if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+
+      // Build price history (oldest layers first)
+      itemsWithDate.forEach(item => {
         const keyPair = inventoryMap[item.inventory_id];
         if (keyPair) {
-          if (!priceHistory[keyPair.exactKey]) priceHistory[keyPair.exactKey] = [];
-          if (!priceHistory[keyPair.fallbackKey]) priceHistory[keyPair.fallbackKey] = [];
-          priceHistory[keyPair.exactKey].push(item.unit_price);
-          priceHistory[keyPair.fallbackKey].push(item.unit_price);
+          addLayerToHistory(keyPair.exactKey, item.unit_price, item.qty);
+          addLayerToHistory(keyPair.fallbackKey, item.unit_price, item.qty);
         }
       });
     }
+
+    // Reverse so newest layers are first (these remain after FIFO consumption)
+    Object.keys(priceHistory).forEach(key => {
+      priceHistory[key].reverse();
+    });
 
     setPriceHistoryByItem(priceHistory);
     setLoading(false);
@@ -931,11 +997,8 @@ export default function InventoryReport() {
                   </tr>
                 ) : (
                   currentData.map((item, index) => {
-                    const netChangeClass = item.change_qty > 0 ? 'text-emerald-600' :
-                                          item.change_qty < 0 ? 'text-red-600' : 'text-slate-600';
                     const netChangeBg = item.change_qty > 0 ? 'bg-emerald-100 text-emerald-700' :
                                        item.change_qty < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
-                    const arrow = item.change_qty > 0 ? '↑' : item.change_qty < 0 ? '↓' : '→';
 
                     return (
                       <tr
