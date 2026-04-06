@@ -693,8 +693,14 @@ export default function History({ setInventory }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedHistory.map((order , index) => {
               const statusBadge = getStatusBadge(order.status);
-              const subtotal = order.subtotal || 0;
-              const discountAmount = order.discount_amount || 0;
+              const subtotal = order.items.reduce((s, i) => s + ((i.original_price != null ? i.original_price : i.price) * i.qty), 0);
+              const manualDiscount = order.items.reduce((s, i) => {
+                if (i.original_price != null && i.original_price > i.price) {
+                  return s + (i.original_price - i.price) * i.qty;
+                }
+                return s;
+              }, 0);
+              const orderDiscount = order.discount_amount || 0;
               const taxAmount = order.tax_amount || 0;
               return (
                 <div key={index} className="bg-white rounded-2xl shadow-lg p-6 flex flex-col justify-between">
@@ -717,16 +723,21 @@ export default function History({ setInventory }) {
                     </span>
 
                     <ul className="border-t border-b py-2 text-sm max-h-48 overflow-y-auto">
-                      {order.items.map((item, idx) => (
+                      {order.items.map((item, idx) => {
+                        const origTotal = item.original_price != null ? item.original_price * item.qty : item.price * item.qty;
+                        const itemDisc = item.original_price != null ? (item.original_price - item.price) * item.qty : 0;
+                        return (
                         <li key={idx} className="flex justify-between py-1 border-b last:border-b-0">
                           <span>
                             {item.menu_name}
                             {item.isSet && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">SET</span>}
                             {' × '}{item.qty}
+                            {itemDisc > 0 && <span className="ml-1 text-xs text-red-500">(-{mmkFormatter.format(itemDisc)})</span>}
                           </span>
-                          <span>{mmkFormatter.format(item.price * item.qty)}</span>
+                          <span>{mmkFormatter.format(origTotal)}</span>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
 
                     {/* Expanded FIFO History Section */}
@@ -784,10 +795,16 @@ export default function History({ setInventory }) {
                         <span>Subtotal:</span>
                         <span>{mmkFormatter.format(subtotal)}</span>
                       </div>
-                      {discountAmount > 0 && (
+                      {manualDiscount > 0 && (
                         <div className="flex justify-between text-red-500">
-                          <span>Discount:</span>
-                          <span>-{mmkFormatter.format(discountAmount)}</span>
+                          <span>Manual Discount:</span>
+                          <span>-{mmkFormatter.format(manualDiscount)}</span>
+                        </div>
+                      )}
+                      {orderDiscount > 0 && (
+                        <div className="flex justify-between text-red-500">
+                          <span>Discount ({order.discount_percent}%){order.discount_type ? ` ${order.discount_type}` : ''}:</span>
+                          <span>-{mmkFormatter.format(orderDiscount)}</span>
                         </div>
                       )}
                       {taxAmount > 0 && (

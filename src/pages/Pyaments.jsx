@@ -28,7 +28,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
     maximumFractionDigits: 0,
   });
 
-  // Fetch menu and ingredients
+  const [editQty, setEditQty] = useState({});
+  const [itemDiscounts, setItemDiscounts] = useState({}); // { "id-isSet": discount amount }
   const fetchMenu = async () => {
     try {
       const { data: menuData, error: menuErr } = await supabase
@@ -195,6 +196,11 @@ export default function Pyaments({ inventory, setInventory, user }) {
   };
 
   const changeQty = (id, diff, isSet) => {
+    setEditQty((prev) => {
+      const n = { ...prev };
+      delete n[`${id}-${isSet}`];
+      return n;
+    });
     setCart((prev) =>
       prev
         .map((c) => {
@@ -219,12 +225,22 @@ export default function Pyaments({ inventory, setInventory, user }) {
     setSelectedDiscountType(null);
   };
 
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0); // original prices
+  const itemDiscountAmount = cart.reduce((sum, i) => {
+    const key = `${i.id}-${i.isSet}`;
+    const discAmt = itemDiscounts[key];
+    if (discAmt != null) {
+      return sum + Number(discAmt) * i.qty;
+    }
+    return sum;
+  }, 0);
+  const itemDiscountedSubtotal = subtotal - itemDiscountAmount;
   const discountPercent = Number(discount) || 0;
   const taxPercent = Number(tax) || 0;
-  const discountAmount = subtotal * (discountPercent / 100);
-  const taxAmount = subtotal * (taxPercent / 100);
-  const total = subtotal - discountAmount + taxAmount;
+  const orderDiscountAmount = itemDiscountedSubtotal * (discountPercent / 100);
+  const totalDiscountAmount = itemDiscountAmount + orderDiscountAmount;
+  const taxAmount = itemDiscountedSubtotal * (taxPercent / 100);
+  const total = itemDiscountedSubtotal - orderDiscountAmount + taxAmount;
 
   const completeOrder = async () => {
     if (!cart.length)
@@ -266,7 +282,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
           {
             subtotal,
             discount_percent: discountPercent,
-            discount_amount: discountAmount,
+            discount_amount: orderDiscountAmount,
             tax_percent: taxPercent,
             tax_amount: taxAmount,
             total,
@@ -284,29 +300,42 @@ export default function Pyaments({ inventory, setInventory, user }) {
       // Insert order items only.
       // Inventory will be deducted when order is marked completed in History page.
       for (const item of cart) {
+        const key = `${item.id}-${item.isSet}`;
+        const discAmt = itemDiscounts[key] != null ? Number(itemDiscounts[key]) : 0;
+        const effectivePrice = item.price - discAmt;
+        const origPrice = item.price;
         if (item.isSet) {
-          // Insert menu set as order item
           await supabase.from("order_items").insert({
             order_id: order.id,
             menu_id: null,
             menu_set_id: item.id,
             qty: item.qty,
-            price: item.price,
+            price: effectivePrice,
+            original_price: origPrice,
           });
         } else {
-          // Insert regular menu item
           await supabase.from("order_items").insert({
             order_id: order.id,
             menu_id: item.id,
             menu_set_id: null,
             qty: item.qty,
-            price: item.price,
+            price: effectivePrice,
+            original_price: origPrice,
           });
         }
       }
 
       // Print receipt
       const date = new Date().toLocaleString();
+      const itemDiscountHTMLLines = cart
+        .filter((c) => itemDiscounts[`${c.id}-${c.isSet}`] != null)
+        .map((c) => {
+          const key = `${c.id}-${c.isSet}`;
+          const discAmt = Number(itemDiscounts[key]);
+          const finalPrice = c.price - discAmt;
+          const totalDisc = discAmt * c.qty;
+          return `  - ${c.menu_name} (discount ${mmkFormatter.format(discAmt)} × ${c.qty}): -${mmkFormatter.format(totalDisc)}`;
+        });
       const receiptContent = `
         <html>
           <head><title>Order #${order.id}</title></head>
@@ -334,7 +363,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
             <hr/>
             <div style="text-align:right;">
               <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
-              ${discountPercent > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ""}
+              ${itemDiscountHTMLLines.map(l => `<p style="color:black;">${l}</p>`).join("")}
+              ${orderDiscountAmount > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(orderDiscountAmount)}</p>` : ""}
               ${taxPercent > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ""}
               <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(total)}</p>
             </div>
@@ -360,6 +390,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
       setDiscount(0);
       setTax(0);
       setRemark("");
+      setItemDiscounts({});
+      setEditQty({});
       Swal.fire("Success", "Order printed successfully!", "success");
       fetchMenu();
     } catch (err) {
@@ -483,9 +515,31 @@ export default function Pyaments({ inventory, setInventory, user }) {
                     >
                       −
                     </button>
-                    <span className="min-w-10 px-2 text-center text-sm font-semibold text-slate-800">
-                      {item.qty}
-                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editQty[`${item.id}-${item.isSet}`] ?? item.qty}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "");
+                        setEditQty((prev) => ({ ...prev, [`${item.id}-${item.isSet}`]: val }));
+                      }}
+                      onBlur={(e) => {
+                        const num = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                        if (!isNaN(num) && num >= 1) {
+                          setCart((prev) =>
+                            prev.map((c) =>
+                              c.id === item.id && c.isSet === item.isSet ? { ...c, qty: num } : c
+                            )
+                          );
+                        }
+                        setEditQty((prev) => {
+                          const n = { ...prev };
+                          delete n[`${item.id}-${item.isSet}`];
+                          return n;
+                        });
+                      }}
+                      className="w-14 px-2 py-1 text-center text-sm font-semibold text-slate-800 outline-none bg-transparent border border-transparent focus:border-slate-300 rounded"
+                    />
                     <button
                       onClick={() => changeQty(item.id, 1, item.isSet)}
                       className="px-3 py-1.5 text-lg font-semibold text-slate-700 hover:bg-slate-100"
@@ -501,6 +555,59 @@ export default function Pyaments({ inventory, setInventory, user }) {
                     Remove
                   </button>
                 </div>
+
+                {/* Per-item discount */}
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Discount:</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={itemDiscounts[`${item.id}-${item.isSet}`] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setItemDiscounts((prev) => ({ ...prev, [`${item.id}-${item.isSet}`]: val }));
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      const num = parseInt(val, 10);
+                      const key = `${item.id}-${item.isSet}`;
+                      if (!isNaN(num) && num > 0) {
+                        setItemDiscounts((prev) => ({ ...prev, [key]: num }));
+                      } else {
+                        setItemDiscounts((prev) => {
+                          const n = { ...prev };
+                          delete n[key];
+                          return n;
+                        });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.target.blur();
+                    }}
+                    className="w-24 px-2 py-1 text-sm text-right font-semibold text-slate-800 outline-none bg-white border border-slate-300 rounded-lg"
+                    placeholder="0"
+                  />
+                  {itemDiscounts[`${item.id}-${item.isSet}`] != null && Number(itemDiscounts[`${item.id}-${item.isSet}`]) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setItemDiscounts((prev) => {
+                          const n = { ...prev };
+                          delete n[`${item.id}-${item.isSet}`];
+                          return n;
+                        });
+                      }}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+                {itemDiscounts[`${item.id}-${item.isSet}`] != null && Number(itemDiscounts[`${item.id}-${item.isSet}`]) > 0 && (
+                  <p className="text-xs text-red-500 mt-1">
+                    Original: {mmkFormatter.format(item.price)} → Final: {mmkFormatter.format(item.price - Number(itemDiscounts[`${item.id}-${item.isSet}`]))}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -590,7 +697,12 @@ export default function Pyaments({ inventory, setInventory, user }) {
         <div className="mt-4 border-t pt-4">
           <div className="flex justify-between text-sm mb-1">
             <span>Subtotal:</span>
-            <span>{mmkFormatter.format(subtotal)}</span>
+            <span>
+              {mmkFormatter.format(itemDiscountedSubtotal)}
+              {itemDiscountedSubtotal !== subtotal && (
+                <span className="ml-1 text-xs text-slate-400 line-through">{mmkFormatter.format(subtotal)}</span>
+              )}
+            </span>
           </div>
           {discountPercent > 0 && (
             <div className="flex justify-between text-sm mb-1 text-red-500">

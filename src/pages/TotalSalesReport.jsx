@@ -81,8 +81,10 @@ export default function TotalSalesReport() {
         return {
           ...item,
           total: order?.total || 0,
+          discount_percent: order?.discount_percent || 0,
           created_at: order?.created_at,
           menu_name,
+          discount_type: order?.discount_type || null,
           isSet,
           payment_type: order?.payment_type || "cash",
           remark: order?.remark || null,
@@ -154,8 +156,11 @@ export default function TotalSalesReport() {
           qty: 0,
           price: 0,
           item_total: 0,
-          subtotal: order?.subtotal || 0,
+          subtotal: 0,
+          item_discount: 0,
           discount_amount: order?.discount_amount || 0,
+          discount_percent: order?.discount_percent || 0,
+          discount_type: order?.discount_type || null,
           tax_amount: order?.tax_amount || 0,
           total: order?.total || 0,
           payment_type: item.payment_type || "Cash",
@@ -163,10 +168,15 @@ export default function TotalSalesReport() {
           created_at: item.created_at,
         };
       }
-      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, isSet: item.isSet });
+      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, original_price: item.original_price, isSet: item.isSet });
       groups[item.order_id].qty += item.qty;
       groups[item.order_id].price += item.price;
+      if (item.original_price != null) {
+        groups[item.order_id].item_discount += (item.original_price - item.price) * item.qty;
+      }
       groups[item.order_id].item_total += item.qty * item.price;
+      // Use original_price for subtotal if available, otherwise use current price
+      groups[item.order_id].subtotal += (item.original_price != null ? item.original_price : item.price) * item.qty;
     });
     return Object.values(groups).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
@@ -182,7 +192,7 @@ export default function TotalSalesReport() {
   // Calculate totals from slip data
   const getOrderTotals = () => {
     const totalSubtotal = slipData.reduce((sum, s) => sum + s.subtotal, 0);
-    const totalDiscount = slipData.reduce((sum, s) => sum + s.discount_amount, 0);
+    const totalDiscount = slipData.reduce((sum, s) => sum + s.discount_amount + s.item_discount, 0);
     const totalTax = slipData.reduce((sum, s) => sum + s.tax_amount, 0);
     const grandTotal = slipData.reduce((sum, s) => sum + s.total, 0);
 
@@ -201,7 +211,7 @@ export default function TotalSalesReport() {
         Menu: menusText,
         Qty: slip.qty,
         Subtotal: slip.subtotal,
-        Discount: slip.discount_amount,
+        Discount: slip.discount_amount + slip.item_discount,
         Tax: slip.tax_amount,
         Grand_Total: slip.total,
         Payment: paymentText,
@@ -392,7 +402,30 @@ export default function TotalSalesReport() {
                   <td className="px-4 py-3 font-medium text-gray-700">{menusText}</td>
                   <td className="px-4 py-3">{slip.qty}</td>
                   <td className="px-4 py-3">{mmkFormatter.format(slip.subtotal)}</td>
-                  <td className="px-4 py-3 text-red-500">{mmkFormatter.format(slip.discount_amount)}</td>
+                  <td className="px-4 py-3 text-red-500">
+                    {(() => {
+                      if (slip.discount_amount === 0 && slip.item_discount === 0) return "-";
+                      const parts = [];
+                      if (slip.discount_amount > 0) {
+                        parts.push(
+                          <>
+                            {mmkFormatter.format(slip.discount_amount)}
+                            {slip.discount_type && <span className="ml-1 text-xs text-gray-400">{slip.discount_type}</span>}
+                          </>
+                        );
+                      }
+                      if (slip.item_discount > 0) {
+                        parts.push(
+                          <>
+                            {slip.discount_amount > 0 ? "+ " : ""}
+                            {mmkFormatter.format(slip.item_discount)}
+                            <span className="ml-1 text-xs text-gray-400">Manual</span>
+                          </>
+                        );
+                      }
+                      return <div className="flex flex-col">{parts}</div>;
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-blue-500">{mmkFormatter.format(slip.tax_amount)}</td>
                   <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(slip.total)}</td>
                   <td className="px-4 py-3">
