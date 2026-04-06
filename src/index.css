@@ -367,3 +367,53 @@ body {
 .glass [class*="dark:hover:bg-gray-600"]:hover {
     background-color: rgba(219, 234, 254, 0.34) !important;
 }
+
+/* Myanmar New Year greeting animation */
+@keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-2px) rotate(0.8deg); }
+    75% { transform: translateY(1px) rotate(-0.8deg); }
+}
+
+@keyframes glow-pulse {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.4)) brightness(1); }
+    33% { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)) brightness(1.1); }
+    66% { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5)) brightness(1.05); }
+}
+
+@keyframes color-shift {
+    0%   { background-position: 0% 0%; }
+    25%  { background-position: 100% 50%; }
+    50%  { background-position: 50% 0%; }
+    75%  { background-position: 0% 50%; }
+    100% { background-position: 0% 0%; }
+}
+
+.ny-greeting {
+    background-image: linear-gradient(
+        90deg,
+        #FFD700 0%,
+        #3B82F6 20%,
+        #A855F7 40%,
+        #34D399 60%,
+        #F59E0B 80%,
+        #FFD700 100%
+    ) !important;
+    background-size: 400% auto !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    animation: shimmer 3s linear infinite, float 2.5s ease-in-out infinite, glow-pulse 4s ease-in-out infinite, color-shift 8s ease-in-out infinite;
+    font-family: 'Georgia', 'Times New Roman', serif;
+    letter-spacing: 0.5px;
+}
+
+.ny-greeting:hover {
+    animation-duration: 1s, 1.2s, 2s, 4s;
+    filter: drop-shadow(0 0 14px rgba(255, 215, 0, 0.7)) brightness(1.2);
+}
