@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
+import loginBg from "../assets/loginbg.png";
 
 export default function Login({ setUser }) { // <-- receive setUser from App.js
     const [username, setUsername] = useState("");
@@ -41,18 +42,26 @@ export default function Login({ setUser }) { // <-- receive setUser from App.js
     };
 
   return (
-  <div className="fixed inset-0 bg-white overflow-hidden flex items-center justify-center px-4">
+  <div
+    className="fixed inset-0 overflow-hidden flex items-center justify-center px-4 bg-center bg-cover bg-no-repeat"
+    style={{ backgroundImage: `url(${loginBg})` }}
+  >
+    <div className="absolute inset-0 bg-white/20" />
 
     <div className="
+      relative
+      z-10
       w-full
       max-w-sm
       sm:max-w-md
-      bg-white
+      bg-white/88
+      backdrop-blur-md
       rounded-2xl
       shadow-2xl
       p-6
       sm:p-8
       border
+      border-white/70
     ">
 
       {/* Header */}

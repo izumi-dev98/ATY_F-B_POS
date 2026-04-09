@@ -127,7 +127,7 @@ export default function App() {
       {user && <Sidebar isOpen={isOpen} toggleSidebar={toggleSidebar} />}
       <div className={`flex-1 min-h-screen bg-gray-100 ${user && isOpen ? "ml-60" : "ml-0"}`}>
         {user && <Navbar toggleSidebar={toggleSidebar} />}
-        <main className="p-6">
+        <main className={`p-6 ${user ? "pt-20" : ""}`}>
           <Routes>
             {/* Login redirects to dashboard if already logged in */}
             <Route
