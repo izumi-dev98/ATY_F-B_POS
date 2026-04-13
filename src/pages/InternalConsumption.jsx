@@ -165,7 +165,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (exists) {
         return prev.filter((i) => i.id !== item.id);
       }
-      return [...prev, { ...item, usage_qty: "" }];
+      return [...prev, { ...item, usage_qty: "", reason: "" }];
     });
   };
 
@@ -173,6 +173,14 @@ export default function InternalConsumption({ inventory, setInventory }) {
     setSelectedItems((prev) =>
       prev.map((i) =>
         i.id === itemId ? { ...i, usage_qty: qty } : i,
+      ),
+    );
+  };
+
+  const updateItemReason = (itemId, reason) => {
+    setSelectedItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, reason } : i,
       ),
     );
   };
@@ -345,12 +353,18 @@ export default function InternalConsumption({ inventory, setInventory }) {
       // Get user info from user table
       const userName = currentUsername;
 
+      // Auto-build notes from item reasons
+      const reasonNotes = selectedItems
+        .filter((i) => i.reason)
+        .map((i) => `${i.item_name}: ${i.reason}`);
+      const combinedNotes = [formData.notes, ...reasonNotes].filter(Boolean).join(" | ");
+
       // Create consumption record with user info
       const { data: record, error: recordErr } = await supabase
         .from("internal_consumption")
         .insert([
           {
-            notes: formData.notes,
+            notes: combinedNotes,
             status: "completed",
             user_name: userName,
           },
@@ -638,7 +652,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
             }}
             className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            + Record Usage
+            - Usage
           </button>
         </div>
       </div>
@@ -901,7 +915,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg">
-            <h3 className="text-2xl font-bold mb-4">Record Internal Usage</h3>
+            <h3 className="text-2xl font-bold mb-4">Internal Usage</h3>
 
             {!isSuperAdmin && (
               <p className="text-sm text-gray-600 mb-4 bg-yellow-50 p-2 rounded">
@@ -1004,31 +1018,45 @@ export default function InternalConsumption({ inventory, setInventory }) {
               {selectedItems.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Usage Quantity *
+                    Usage Quantity & Reason *
                   </label>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {selectedItems.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <span className="flex-1 text-sm">{item.item_name}</span>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          max={item.qty}
-                          value={item.usage_qty}
-                          onChange={(e) =>
-                            updateItemUsageQty(
-                              item.id,
-                              e.target.value === "" ? "" : parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className="w-24 px-2 py-1 border rounded-xl"
-                          placeholder="Enter qty"
-                        />
-
-                        <span className="text-sm text-gray-500 w-12">
-                          {item.unit}
-                        </span>
+                      <div key={item.id} className="p-3 bg-gray-50 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="flex-1 text-sm font-medium">{item.item_name}</span>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            max={item.qty}
+                            value={item.usage_qty}
+                            onChange={(e) =>
+                              updateItemUsageQty(
+                                item.id,
+                                e.target.value === "" ? "" : parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-24 px-2 py-1 border rounded-xl text-sm"
+                            placeholder="Enter qty"
+                          />
+                          <span className="text-sm text-gray-500 w-12">
+                            {item.unit}
+                          </span>
+                        </div>
+                        <div className="flex gap-4">
+                          {["Waste", "Damage", "Usage"].map((reason) => (
+                            <label key={reason} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={item.reason === reason}
+                                onChange={() => updateItemReason(item.id, reason)}
+                                className="w-4 h-4"
+                              />
+                              <span>{reason}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

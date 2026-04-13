@@ -137,11 +137,11 @@ export default function Login({ setUser }) {
 
                 {/* Header */}
                 <div className="text-center mb-6">
-                    <h2 className={`text-xl sm:text-2xl font-bold transition-colors duration-300 ${titleClasses}`}>
-                        Myat Taw Win (Aye Thar Yar ) Hospital
-                    </h2>
+                    <h1 className={`text-xl text-yellow-500 sm:text-2xl font-bold transition-colors duration-300 ${titleClasses}`}>
+                        NOSH POS
+                    </h1>
                     <p className={`text-xs sm:text-sm mt-1 transition-colors duration-300 ${subtitleClasses}`}>
-                        Sign in to continue
+                        Login to continue
                     </p>
                 </div>
 
