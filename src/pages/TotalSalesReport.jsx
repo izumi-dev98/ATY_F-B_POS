@@ -517,6 +517,7 @@ export default function TotalSalesReport() {
                             .emerald { color: #059669; }
                             .red { color: #dc2626; }
                             .blue { color: #2563eb; }
+                            @page { size: auto; margin: 10mm; }
                             @media print { body { padding: 0; } }
                           </style>
                         </head>

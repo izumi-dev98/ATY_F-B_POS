@@ -28,6 +28,9 @@ export default function PurchaseReport() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Preview modal state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   const formatMMK = (amount) => {
     const num = Number(amount) || 0;
     return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
@@ -275,12 +278,20 @@ export default function PurchaseReport() {
           <h1 className="text-2xl font-bold text-slate-800">Purchase Report</h1>
           <p className="text-sm text-slate-500 mt-1">View purchase order reports</p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-        >
-          Export Excel
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowPreviewModal(true)}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
+            Preview & Print
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Export Excel
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -662,6 +673,149 @@ export default function PurchaseReport() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview & Print Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Purchase Report</h3>
+                <p className="text-sm text-slate-500">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('print-purchase-content');
+                    if (!printContent) return;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+
+                    const statusBadgeStyle = (status) => {
+                      const s = {
+                        pending: 'background:#fef3c7;color:#b45309;',
+                        received: 'background:#d1fae5;color:#047857;',
+                        cancelled: 'background:#ffe4e6;color:#e11d48;',
+                        returned: 'background:#ede9fe;color:#7c3aed;'
+                      };
+                      return s[status] || s.pending;
+                    };
+
+                    let tableRows = filteredPurchases.map(p => {
+                      const totalVal = calculateTotal(p);
+                      const statusStyle = statusBadgeStyle(p.status);
+                      return `<tr>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;">${p.invoice_number || '-'}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;">${p.date}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;">${getSupplierName(p.supplier_id)}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">${formatMMK(totalVal)}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">${p.discount ? p.discount + '%' : '-'}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;">${p.tax ? p.tax + '%' : '-'}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;">${p.payment_type === 'Credit' && p.credit_option ? 'Credit (' + p.credit_option + ')' : (p.payment_type || 'Cash Down')}</td>
+                        <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:500;${statusBadgeStyle(p.status || 'pending')}">${p.status || 'pending'}</span></td>
+                      </tr>`;
+                    }).join('');
+
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Purchase Report</title>
+                          <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 4px; }
+                            .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+                            .brand { font-size: 14px; color: #4f46e5; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+                            th { background: #f1f5f9; font-weight: 600; }
+                            .text-right { text-align: right; }
+                            .summary { margin: 16px 0; display: flex; gap: 16px; flex-wrap: wrap; }
+                            .summary-card { padding: 8px 16px; background: #f8fafc; border-radius: 8px; }
+                            .summary-label { font-size: 11px; color: #64748b; }
+                            .summary-value { font-size: 16px; font-weight: 700; }
+                            @page { size: auto; margin: 10mm; }
+                            @media print { body { padding: 0; } }
+                          </style>
+                        </head>
+                        <body>
+                          ${printContent.innerHTML}
+                          <script>window.onload = function() { window.print(); }</script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Print
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <div id="print-purchase-content" className="p-4">
+                <h1 className="text-lg font-bold text-slate-800 mb-1">Purchase Report</h1>
+                <p className="text-sm text-slate-500 mb-4">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+
+                {/* Table - all filtered purchases (no pagination) */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Invoice #</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Total</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Discount</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Tax</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Payment</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPurchases.length === 0 ? (
+                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No purchase records found</td></tr>
+                      ) : (
+                        filteredPurchases.map((purchase) => (
+                          <tr key={purchase.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                            <td className="px-4 py-3 font-semibold text-slate-800">{purchase.invoice_number}</td>
+                            <td className="px-4 py-3 text-slate-600">{purchase.date}</td>
+                            <td className="px-4 py-3 text-slate-600">{getSupplierName(purchase.supplier_id)}</td>
+                            <td className="px-4 py-3 text-right text-slate-700 font-medium">{formatMMK(calculateTotal(purchase))}</td>
+                            <td className="px-4 py-3 text-right text-slate-600">{purchase.discount ? `${purchase.discount}%` : '-'}</td>
+                            <td className="px-4 py-3 text-right text-slate-600">{purchase.tax ? `${purchase.tax}%` : '-'}</td>
+                            <td className="px-4 py-3 text-center text-slate-600">
+                              {purchase.payment_type === 'Credit' && purchase.credit_option
+                                ? `Credit (${purchase.credit_option})`
+                                : purchase.payment_type || 'Cash Down'}
+                            </td>
+                            <td className="px-4 py-3 text-center">{getStatusBadge(purchase.status)}</td>
+                          </tr>
+                        ))
+                      )}
+                      {/* Summary row */}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                        <td colSpan={3} className="px-4 py-3 text-right text-slate-700">TOTAL</td>
+                        <td className="px-4 py-3 text-right text-indigo-700">{formatMMK(totalAmount)}</td>
+                        <td colSpan={4}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
             </div>
           </div>
         </div>

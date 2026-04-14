@@ -12,6 +12,7 @@ export default function UsageReport() {
   const [recordSearch, setRecordSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const user = JSON.parse(localStorage.getItem("user"));
 
@@ -255,12 +256,20 @@ ${reportData.map(row =>
           <h1 className="text-2xl font-bold text-slate-800">Usage Report</h1>
           <p className="text-sm text-slate-500 mt-1">View internal usage + auto order reduction</p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600"
-        >
-          Export Excel
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowPreviewModal(true)}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
+            Preview & Print
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Export Excel
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
@@ -417,6 +426,109 @@ ${reportData.map(row =>
             </div>
           )}
         </>
+      )}
+
+      {/* Preview & Print Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Usage Report</h3>
+                <p className="text-sm text-slate-500">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('print-usage-content');
+                    if (!printContent) return;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Usage Report</title>
+                          <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 4px; }
+                            .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+                            .brand { font-size: 14px; color: #4f46e5; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                            th { background: #f1f5f9; font-weight: 600; }
+                            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+                            .badge-indigo { background: #e0e7ff; color: #4338ca; }
+                            .badge-orange { background: #ffedd5; color: #c2410c; }
+                            @page { size: auto; margin: 10mm; }
+                            @media print { body { padding: 0; } }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="brand">Nosh POS</div>
+                          ${printContent.innerHTML}
+                          <script>window.onload = function() { window.print(); }</script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Print
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <div id="print-usage-content" className="p-4">
+                <h1 className="text-lg font-bold text-slate-800 mb-1">Usage Report</h1>
+                <p className="text-sm text-slate-500 mb-4">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Type</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRecords.length === 0 ? (
+                        <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                      ) : (
+                        filteredRecords.map((record) => (
+                          <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                            <td className="px-4 py-3 font-medium text-slate-700">{record.display_id || `#${record.id}`}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${record.record_type === "order_auto" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700"}`}>
+                                {record.record_type === "order_auto" ? "Order Auto" : "Internal"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
+                            <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
+                            <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

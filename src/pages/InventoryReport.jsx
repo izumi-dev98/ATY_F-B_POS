@@ -1305,7 +1305,7 @@ export default function InventoryReport() {
       {/* Preview & Print Modal */}
       {showPreviewModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-5xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">
@@ -1332,13 +1332,12 @@ export default function InventoryReport() {
                             body { font-family: Arial, sans-serif; padding: 20px; }
                             h1 { font-size: 18px; margin-bottom: 4px; }
                             .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
-                            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                            .brand { font-size: 14px; color: #4f46e5; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
                             th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
                             th { background: #f1f5f9; font-weight: 600; }
                             .text-right { text-align: right; }
                             .text-center { text-align: center; }
-                            .summary { margin-top: 12px; font-size: 12px; }
-                            .summary span { margin-right: 20px; }
                             .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
                             .badge-red { background: #fee2e2; color: #dc2626; }
                             .badge-green { background: #dcfce7; color: #16a34a; }
@@ -1347,10 +1346,12 @@ export default function InventoryReport() {
                             .red { color: #dc2626; }
                             .orange { color: #ea580c; }
                             .slate { color: #64748b; }
+                            @page { size: auto; margin: 10mm; }
                             @media print { body { padding: 0; } }
                           </style>
                         </head>
                         <body>
+                          <div class="brand">Nosh POS</div>
                           ${printContent.innerHTML}
                           <script>window.onload = function() { window.print(); }</script>
                         </body>
@@ -1368,7 +1369,6 @@ export default function InventoryReport() {
 
             <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
               <div id="print-report-content" className="p-4">
-                {/* Report Header */}
                 <h1 className="text-lg font-bold text-slate-800 mb-1">
                   {compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"}
                 </h1>
@@ -1378,26 +1378,6 @@ export default function InventoryReport() {
                     : `Generated: ${new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}`}
                 </p>
 
-                {/* Summary Cards */}
-                <div className="mb-4 p-3 bg-slate-50 rounded-lg">
-                  {compareMode ? (
-                    <div className="flex gap-6 text-sm">
-                      <span><strong>Items:</strong> {compareTotalItems}</span>
-                      <span className="text-emerald-600"><strong>Received:</strong> {compareTotalReceived}</span>
-                      <span className="text-emerald-600"><strong>Added:</strong> {compareTotalAdded}</span>
-                      <span className="text-red-600"><strong>Reduced:</strong> {compareTotalReduced}</span>
-                      <span><strong>Net Change:</strong> {compareTotalChange > 0 ? '+' : ''}{compareTotalChange}</span>
-                    </div>
-                  ) : (
-                    <div className="flex gap-6 text-sm">
-                      <span><strong>Total Items:</strong> {totalItems}</span>
-                      <span><strong>Total Qty:</strong> {totalQty}</span>
-                      <span className="text-emerald-600"><strong>Total Value:</strong> {formatMMK(totalValue)}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Report Table */}
                 <div className="overflow-x-auto">
                   {compareMode ? (
                     <table className="w-full text-sm">

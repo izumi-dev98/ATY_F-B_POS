@@ -20,6 +20,9 @@ export default function SupplierOutstanding() {
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [selectedPurchaseItems, setSelectedPurchaseItems] = useState([]);
 
+  // Preview modal state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   const formatMMK = (amount) => {
     const num = Number(amount) || 0;
     return new Intl.NumberFormat("my-MM", { style: "currency", currency: "MMK", maximumFractionDigits: 0 }).format(num);
@@ -208,12 +211,20 @@ export default function SupplierOutstanding() {
           <h1 className="text-2xl font-bold text-slate-800">Supplier Outstanding</h1>
           <p className="text-sm text-slate-500 mt-1">Credit purchase paid status report</p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"
-        >
-          Export Excel
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowPreviewModal(true)}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
+            Preview & Print
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"
+          >
+            Export Excel
+          </button>
+        </div>
       </div>
 
       {!isReportOnlyView && (
@@ -447,6 +458,138 @@ export default function SupplierOutstanding() {
               </table>
             </div>
             {selectedPurchase?.notes && <div className="mt-4 text-sm"><span className="text-slate-500">Notes:</span><p className="text-slate-700 mt-1">{selectedPurchase.notes}</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Preview & Print Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Supplier Outstanding Report</h3>
+                <p className="text-sm text-slate-500">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('print-supplier-content');
+                    if (!printContent) return;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Supplier Outstanding Report</title>
+                          <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 4px; }
+                            .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+                            .brand { font-size: 14px; color: #4f46e5; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                            th { background: #f1f5f9; font-weight: 600; }
+                            .text-right { text-align: right; }
+                            .text-center { text-align: center; }
+                            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+                            .badge-green { background: #dcfce7; color: #16a34a; }
+                            .badge-amber { background: #fef3c7; color: #d97706; }
+                            .emerald { color: #059669; }
+                            .amber { color: #d97706; }
+                            @page { size: auto; margin: 10mm; }
+                            @media print { body { padding: 0; } }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="brand">Nosh POS</div>
+                          ${printContent.innerHTML}
+                          <script>window.onload = function() { window.print(); }</script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Print
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <div id="print-supplier-content" className="p-4">
+                <h1 className="text-lg font-bold text-slate-800 mb-1">Supplier Outstanding Report</h1>
+                <p className="text-sm text-slate-500 mb-4">
+                  Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier Name</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Orders</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Invoice #</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Status</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredData.length === 0 ? (
+                        <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                      ) : (
+                        filteredData.map((sup) => (
+                          <Fragment key={sup.supplier_id}>
+                            {/* Supplier row */}
+                            <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                              <td className="px-4 py-3 text-slate-800">{sup.supplier_name}</td>
+                              <td className="px-4 py-3 text-center text-slate-700">{sup.purchase_count}</td>
+                              <td className="px-4 py-3 text-right text-amber-600">{formatMMK(sup.total_payable)}</td>
+                              <td colSpan="4"></td>
+                            </tr>
+                            {/* Purchase rows */}
+                            {sup.purchases.map((p) => (
+                              <tr key={p.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                                <td className="px-4 py-3 text-slate-500 pl-8"></td>
+                                <td className="px-4 py-3 text-center text-slate-600"></td>
+                                <td className="px-4 py-3 text-right text-slate-600"></td>
+                                <td className="px-4 py-3 text-slate-700">{p.invoice_number}</td>
+                                <td className="px-4 py-3 text-slate-600">{p.date}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    p.paid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {p.paid ? 'Paid' : 'Unpaid'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-700 font-medium">{formatMMK(p.total_amount)}</td>
+                              </tr>
+                            ))}
+                          </Fragment>
+                        ))
+                      )}
+                      {/* Total row */}
+                      <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                        <td colSpan="2" className="px-4 py-3 text-right text-slate-700">{totalLabel}</td>
+                        <td className="px-4 py-3 text-right text-indigo-600">{formatMMK(totalOutstanding)}</td>
+                        <td colSpan="4"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
+            </div>
           </div>
         </div>
       )}
