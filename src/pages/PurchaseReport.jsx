@@ -481,6 +481,7 @@ export default function PurchaseReport() {
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">FOC Qty</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Returned Qty</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Expiry Date</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
                   </tr>
                 </thead>
@@ -512,6 +513,19 @@ export default function PurchaseReport() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-right text-slate-600">{formatMMK(unitPrice)}</td>
+                        <td className="px-4 py-2 text-center">
+                          {item.expiry_date ? (
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              new Date(item.expiry_date) <= new Date()
+                                ? "bg-red-100 text-red-700"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {item.expiry_date}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-right font-medium text-emerald-600">{formatMMK(total)}</td>
                       </tr>
                     );
@@ -519,7 +533,7 @@ export default function PurchaseReport() {
                 </tbody>
                 <tfoot className="bg-slate-50">
                   <tr>
-                    <td colSpan={6} className="px-4 py-2 text-right font-bold text-slate-800">Total</td>
+                    <td colSpan={7} className="px-4 py-2 text-right font-bold text-slate-800">Total</td>
                     <td className="px-4 py-2 text-right font-bold text-emerald-600">
                       {formatMMK(purchaseItems.reduce((sum, item) => {
                         const beforeQty = item.original_qty || item.qty;

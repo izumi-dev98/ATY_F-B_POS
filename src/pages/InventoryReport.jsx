@@ -481,7 +481,7 @@ export default function InventoryReport() {
     if (allPurchaseIds.length > 0) {
       const { data: purchaseItems, error: purchaseItemsErr } = await supabase
         .from("purchase_items")
-        .select("id, qty, foc_qty, unit_price, purchase_id, item_name, type, original_qty")
+        .select("id, qty, foc_qty, unit_price, purchase_id, item_name, type, original_qty, expiry_date")
         .in("purchase_id", allPurchaseIds);
 
       if (purchaseItemsErr) {
@@ -1185,7 +1185,7 @@ export default function InventoryReport() {
       {/* Purchase History Modal */}
       {showDetailModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-3xl shadow-xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl p-6 w-full max-w-5xl shadow-xl mx-4 max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Purchase History</h3>
@@ -1210,6 +1210,7 @@ export default function InventoryReport() {
                     </th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">FOC</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Unit Price</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700 dark:text-slate-300">Expiry Date</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700 dark:text-slate-300">Total</th>
                   </tr>
                 </thead>
@@ -1261,20 +1262,33 @@ export default function InventoryReport() {
                             )}
                           </td>
                           <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{formatMMK(item.unit_price)}</td>
+                          <td className="px-4 py-2 text-center">
+                            {item.expiry_date ? (
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                new Date(item.expiry_date) <= new Date()
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-emerald-100 text-emerald-700"
+                              }`}>
+                                {item.expiry_date}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">{formatMMK(rowTotal)}</td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">No stock history found</td>
+                      <td colSpan={9} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">No stock history found</td>
                     </tr>
                   )}
                 </tbody>
                 {purchaseHistory.length > 0 && (
                   <tfoot className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
                     <tr>
-                      <td colSpan={7} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total (Excl. FOC)</td>
+                      <td colSpan={8} className="px-4 py-2 text-right font-bold text-slate-800 dark:text-slate-200">Total (Excl. FOC)</td>
                       <td className="px-4 py-2 text-right font-bold text-emerald-600 dark:text-emerald-400">
                         {formatMMK(
                           purchaseHistory.reduce(
