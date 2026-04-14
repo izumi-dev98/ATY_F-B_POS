@@ -29,6 +29,9 @@ export default function InventoryReport() {
   const [purchaseHistory, setPurchaseHistory] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
 
+  // Preview modal state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 5;
@@ -776,6 +779,13 @@ export default function InventoryReport() {
           </button>
 
           <button
+            onClick={() => setShowPreviewModal(true)}
+            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          >
+            Preview & Print
+          </button>
+
+          <button
             onClick={exportToExcel}
             className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
           >
@@ -1287,6 +1297,201 @@ export default function InventoryReport() {
 
             <div className="flex justify-end mt-4">
               <button onClick={() => setShowDetailModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview & Print Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-5xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">
+                  {compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"}
+                </h3>
+                <p className="text-sm text-slate-500">
+                  {compareMode
+                    ? `Period: ${compareFrom || '...'} to ${compareTo || '...'}`
+                    : `Generated: ${new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('print-report-content');
+                    if (!printContent) return;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Inventory Report</title>
+                          <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 4px; }
+                            .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                            th { background: #f1f5f9; font-weight: 600; }
+                            .text-right { text-align: right; }
+                            .text-center { text-align: center; }
+                            .summary { margin-top: 12px; font-size: 12px; }
+                            .summary span { margin-right: 20px; }
+                            .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+                            .badge-red { background: #fee2e2; color: #dc2626; }
+                            .badge-green { background: #dcfce7; color: #16a34a; }
+                            .badge-yellow { background: #fef9c3; color: #ca8a04; }
+                            .emerald { color: #059669; }
+                            .red { color: #dc2626; }
+                            .orange { color: #ea580c; }
+                            .slate { color: #64748b; }
+                            @media print { body { padding: 0; } }
+                          </style>
+                        </head>
+                        <body>
+                          ${printContent.innerHTML}
+                          <script>window.onload = function() { window.print(); }</script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Print
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
+              <div id="print-report-content" className="p-4">
+                {/* Report Header */}
+                <h1 className="text-lg font-bold text-slate-800 mb-1">
+                  {compareMode ? "Inventory Daily Comparison Report" : "Inventory Report"}
+                </h1>
+                <p className="text-sm text-slate-500 mb-4">
+                  {compareMode
+                    ? `Period: ${compareFrom || '...'} to ${compareTo || '...'}`
+                    : `Generated: ${new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}`}
+                </p>
+
+                {/* Summary Cards */}
+                <div className="mb-4 p-3 bg-slate-50 rounded-lg">
+                  {compareMode ? (
+                    <div className="flex gap-6 text-sm">
+                      <span><strong>Items:</strong> {compareTotalItems}</span>
+                      <span className="text-emerald-600"><strong>Received:</strong> {compareTotalReceived}</span>
+                      <span className="text-emerald-600"><strong>Added:</strong> {compareTotalAdded}</span>
+                      <span className="text-red-600"><strong>Reduced:</strong> {compareTotalReduced}</span>
+                      <span><strong>Net Change:</strong> {compareTotalChange > 0 ? '+' : ''}{compareTotalChange}</span>
+                    </div>
+                  ) : (
+                    <div className="flex gap-6 text-sm">
+                      <span><strong>Total Items:</strong> {totalItems}</span>
+                      <span><strong>Total Qty:</strong> {totalQty}</span>
+                      <span className="text-emerald-600"><strong>Total Value:</strong> {formatMMK(totalValue)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Report Table */}
+                <div className="overflow-x-auto">
+                  {compareMode ? (
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                          <th className="px-4 py-3 text-right font-semibold text-emerald-700">Received</th>
+                          <th className="px-4 py-3 text-right font-semibold text-emerald-700">Added</th>
+                          <th className="px-4 py-3 text-right font-semibold text-red-700">Reduced</th>
+                          <th className="px-4 py-3 text-right font-semibold text-orange-700">Returned</th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">Net Change</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCompareData.length === 0 ? (
+                          <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-500">No transactions found</td></tr>
+                        ) : (
+                          filteredCompareData.map((item, index) => {
+                            const netChangeBg = item.change_qty > 0 ? 'bg-emerald-100 text-emerald-700' :
+                                               item.change_qty < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
+                            return (
+                              <tr key={index} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                                <td className="px-4 py-3 font-medium text-slate-700">{item.item_name}</td>
+                                <td className="px-4 py-3 text-slate-600">{item.type || '-'}</td>
+                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">
+                                  {item.received_qty > 0 ? `+${item.received_qty}` : <span className="text-slate-400">-</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right text-emerald-600 font-medium">
+                                  {item.added_qty > 0 ? `+${item.added_qty}` : <span className="text-slate-400">-</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right text-red-600 font-medium">
+                                  {item.reduced_qty > 0 ? `-${item.reduced_qty}` : <span className="text-slate-400">-</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right text-orange-600 font-medium">
+                                  {item.returned_qty > 0 ? `-${item.returned_qty}` : <span className="text-slate-400">-</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${netChangeBg}`}>
+                                    {item.change_qty > 0 ? '+' : ''}{item.change_qty}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
+                          <th className="px-4 py-3 text-center font-semibold text-slate-700">Quantity</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Price</th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredData.length === 0 ? (
+                          <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                        ) : (
+                          filteredData.map((item, index) => (
+                            <tr key={index} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                              <td className="px-4 py-3 font-medium text-slate-700">{item.item_name}</td>
+                              <td className="px-4 py-3 text-center">
+                                {item.qty < 5 ? (
+                                  <span className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold">{item.qty}</span>
+                                ) : item.qty < 10 ? (
+                                  <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-semibold">{item.qty}</span>
+                                ) : (
+                                  <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-sm font-semibold">{item.qty}</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">{item.type}</td>
+                              <td className="px-4 py-3 text-right text-slate-600">
+                                {formatMMK(getEffectiveUnitPrice(item.item_name, item.type || item.unit, item.price))}
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-700">
+                                {formatMMK(getLayerTotalValue(item.item_name, item.type || item.unit, item.qty, item.price))}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
             </div>
           </div>
         </div>
