@@ -4,6 +4,7 @@ import supabase from "../createClients";
 
 export default function Menu({ inventory }) {
   const [activeTab, setActiveTab] = useState("menu");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [menu, setMenu] = useState([]);
   const [menuSets, setMenuSets] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -17,6 +18,7 @@ export default function Menu({ inventory }) {
     menu_name: "",
     price: "",
     category_id: "",
+    status: "active",
     ingredients: [{ inventory_id: "", qty: 1 }],
   });
 
@@ -42,6 +44,7 @@ export default function Menu({ inventory }) {
 
       const merged = menuData.map((m) => ({
         ...m,
+        status: m.status ?? "active",
         ingredients: ingData.filter((i) => i.menu_id === m.id),
       }));
 
@@ -89,7 +92,7 @@ export default function Menu({ inventory }) {
 
   const openAddModal = () => {
     if (activeTab === "menu") {
-      setFormData({ menu_name: "", price: "", category_id: "", ingredients: [{ inventory_id: "", qty: 1 }] });
+      setFormData({ menu_name: "", price: "", category_id: "", status: "active", ingredients: [{ inventory_id: "", qty: 1 }] });
     } else {
       setMenuSetFormData({ set_name: "", price: "", category_id: "", menu_items: [] });
     }
@@ -104,6 +107,7 @@ export default function Menu({ inventory }) {
         menu_name: item.menu_name || "",
         price: item.price || "",
         category_id: item.category_id || "",
+        status: item.status || "active",
         ingredients: item.ingredients.length ? item.ingredients : [{ inventory_id: "", qty: 1 }],
       });
     } else {
@@ -174,7 +178,8 @@ export default function Menu({ inventory }) {
             .update({
               menu_name: formData.menu_name,
               price: Number(formData.price),
-              category_id: formData.category_id ? Number(formData.category_id) : null
+              category_id: formData.category_id ? Number(formData.category_id) : null,
+              status: formData.status
             })
             .eq("id", editItem.id);
           if (updateErr) throw updateErr;
@@ -195,7 +200,8 @@ export default function Menu({ inventory }) {
             .insert([{
               menu_name: formData.menu_name,
               price: Number(formData.price),
-              category_id: formData.category_id ? Number(formData.category_id) : null
+              category_id: formData.category_id ? Number(formData.category_id) : null,
+              status: formData.status
             }])
             .select()
             .single();
@@ -304,7 +310,8 @@ export default function Menu({ inventory }) {
     const name = activeTab === "menu" ? (item.menu_name || "") : (item.set_name || "");
     const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "all" || item.category_id === Number(selectedCategory);
-    return matchesSearch && matchesCategory;
+    const matchesStatus = activeTab === "set" || statusFilter === "all" || item.status === statusFilter;
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
   return (
@@ -325,7 +332,7 @@ export default function Menu({ inventory }) {
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
         <button
-          onClick={() => { setActiveTab("menu"); setSearchTerm(""); setSelectedCategory("all"); }}
+          onClick={() => { setActiveTab("menu"); setSearchTerm(""); setSelectedCategory("all"); setStatusFilter("active"); }}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             activeTab === "menu"
               ? "bg-indigo-600 text-white"
@@ -345,6 +352,29 @@ export default function Menu({ inventory }) {
           Menu Sets
         </button>
       </div>
+
+      {/* Status Filter (Menu Items only) */}
+      {activeTab === "menu" && (
+        <div className="flex gap-2 mb-4">
+          {["active", "inactive", "all"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                statusFilter === s
+                  ? s === "active"
+                    ? "bg-green-600 text-white"
+                    : s === "inactive"
+                      ? "bg-red-600 text-white"
+                      : "bg-slate-600 text-white"
+                  : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {s === "active" ? "Active" : s === "inactive" ? "Inactive" : "All"}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 dark:bg-slate-800 dark:border-slate-700 glass:bg-white/28 glass:border-white/45 glass:backdrop-blur-2xl p-4 mb-6">
         <input
@@ -403,6 +433,15 @@ export default function Menu({ inventory }) {
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   {activeTab === "menu" ? "Menu" : "Menu Set"}
                 </p>
+                {activeTab === "menu" && (
+                  <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded-full ${
+                    item.status === "active"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}>
+                    {item.status === "active" ? "Active" : "Inactive"}
+                  </span>
+                )}
               </div>
 
               <div className="mb-4 flex min-h-7 items-center">
@@ -437,6 +476,29 @@ export default function Menu({ inventory }) {
               </div>
 
               <div className="flex justify-end gap-2">
+              {activeTab === "menu" && (
+                <button
+                  onClick={async () => {
+                    const newStatus = item.status === "active" ? "inactive" : "active";
+                    const { error } = await supabase
+                      .from("menu")
+                      .update({ status: newStatus })
+                      .eq("id", item.id);
+                    if (error) {
+                      Swal.fire("Error", error.message, "error");
+                    } else {
+                      fetchMenu();
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${
+                    item.status === "active"
+                      ? "bg-red-500 hover:bg-red-600"
+                      : "bg-green-500 hover:bg-green-600"
+                  }`}
+                >
+                  {item.status === "active" ? "Deactivate" : "Activate"}
+                </button>
+              )}
               <button
                 onClick={() => openEditModal(item)}
                 className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
@@ -496,6 +558,33 @@ export default function Menu({ inventory }) {
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </select>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Status</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status: "active" })}
+                      className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                        formData.status === "active"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Active
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status: "inactive" })}
+                      className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                        formData.status === "inactive"
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Inactive
+                    </button>
+                  </div>
+                </div>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">Ingredients</p>
                 {formData.ingredients.map((ing, i) => (
                   <div key={i} className="flex gap-2 mb-2">

@@ -51,6 +51,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
 
       const merged = menuData.map((m) => ({
         ...m,
+        status: m.status ?? "active",
         ingredients: map[m.id] || [],
         isSet: false,
       }));
@@ -122,7 +123,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
       return allItems.filter((m) => {
         const matchesSearch = (m.menu_name || "").toLowerCase().includes(search.toLowerCase());
         const matchesCategory = selectedCategory === "all" || m.category_id === Number(selectedCategory);
-        return matchesSearch && matchesCategory;
+        const matchesStatus = m.isSet || m.status === "active";
+        return matchesSearch && matchesCategory && matchesStatus;
       });
     },
     [menu, menuSets, search, selectedCategory],

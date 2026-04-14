@@ -353,11 +353,11 @@ export default function InternalConsumption({ inventory, setInventory }) {
       // Get user info from user table
       const userName = currentUsername;
 
-      // Auto-build notes from item reasons
-      const reasonNotes = selectedItems
+      // Auto-build notes from item notes
+      const itemNotes = selectedItems
         .filter((i) => i.reason)
         .map((i) => `${i.item_name}: ${i.reason}`);
-      const combinedNotes = [formData.notes, ...reasonNotes].filter(Boolean).join(" | ");
+      const combinedNotes = [formData.notes, ...itemNotes].filter(Boolean).join(" | ");
 
       // Create consumption record with user info
       const { data: record, error: recordErr } = await supabase
@@ -1018,13 +1018,16 @@ export default function InternalConsumption({ inventory, setInventory }) {
               {selectedItems.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Usage Quantity & Reason *
+                    Usage Quantity & Note
                   </label>
                   <div className="space-y-3">
                     {selectedItems.map((item) => (
                       <div key={item.id} className="p-3 bg-gray-50 rounded-xl">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="flex-1 text-sm font-medium">{item.item_name}</span>
+                          <span className="text-sm text-gray-500">
+                            Stock: {item.qty} {item.unit}
+                          </span>
                           <input
                             type="number"
                             step="any"
@@ -1044,19 +1047,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
                             {item.unit}
                           </span>
                         </div>
-                        <div className="flex gap-4">
-                          {["Waste", "Damage", "Usage"].map((reason) => (
-                            <label key={reason} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={item.reason === reason}
-                                onChange={() => updateItemReason(item.id, reason)}
-                                className="w-4 h-4"
-                              />
-                              <span>{reason}</span>
-                            </label>
-                          ))}
-                        </div>
+                        <input
+                          type="text"
+                          value={item.reason || ""}
+                          onChange={(e) => updateItemReason(item.id, e.target.value)}
+                          className="w-full px-3 py-1.5 border rounded-xl text-sm"
+                          placeholder="Add note..."
+                        />
                       </div>
                     ))}
                   </div>
