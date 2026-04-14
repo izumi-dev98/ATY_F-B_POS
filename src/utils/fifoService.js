@@ -74,7 +74,7 @@ export const buildFifoList = async (inventoryId, itemName, itemType, options = {
       if (purchaseIds.length > 0) {
         const { data: purchaseItems, error: itemsErr } = await supabase
           .from("purchase_items")
-          .select("id, qty, original_qty, foc_qty, unit_price, purchase_id, item_name, type")
+          .select("id, qty, original_qty, foc_qty, unit_price, purchase_id, item_name, type, expiry_date, is_expired")
           .in("purchase_id", purchaseIds);
 
         if (!itemsErr && purchaseItems) {
@@ -87,6 +87,11 @@ export const buildFifoList = async (inventoryId, itemName, itemType, options = {
             : purchaseItems.filter((pi) => normalizeName(pi.item_name) === targetName);
 
           matchedPurchaseItems.forEach(pi => {
+            // Skip expired items
+            if (pi.is_expired) return;
+            const today = new Date().toISOString().split("T")[0];
+            if (pi.expiry_date && pi.expiry_date <= today) return;
+
             const purchase = purchases.find(p => p.id === pi.purchase_id);
             const fifoDate = purchase?.created_at || purchase?.date;
             const currentQty = parseFloat(pi.qty) || 0;

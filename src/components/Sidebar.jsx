@@ -17,6 +17,7 @@ export default function Sidebar({ isOpen }) {
     "report-purchase",
     "report-profit-loss",
     "report-supplier-outstanding",
+    "report-expired",
   ].some(canAccess);
 
   const baseLink = "block px-4 py-2.5 rounded-lg text-sm font-medium transition-all";
@@ -159,6 +160,11 @@ export default function Sidebar({ isOpen }) {
                 {canAccess("report-supplier-outstanding") && (
                   <NavLink to="/reports/supplier-outstanding" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
                     Supplier Outstanding Report
+                  </NavLink>
+                )}
+                {canAccess("report-expired") && (
+                  <NavLink to="/reports/expired" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
+                    Expired Report
                   </NavLink>
                 )}
               </div>

@@ -125,13 +125,15 @@ export default function PurchaseReturn({ setInventory }) {
     const itemsWithQty = (items || []).map(item => {
       const invItem = inventory?.find(i => i.item_name.toLowerCase() === item.item_name.toLowerCase());
       const currentInventoryQty = invItem ? invItem.qty : 0;
+      const originalQty = parseFloat(item.qty) || 0;
       return {
         ...item,
         invoice_number: purchase.invoice_number,
         purchase_id: purchase.id,
-        purchase_item_id: item.id, // Store the purchase_items row ID for direct lookup
+        purchase_item_id: item.id,
         purchase_date: purchase.date,
         supplier_name: getSupplierName(purchase.supplier_id),
+        original_qty: originalQty,
         current_inventory_qty: currentInventoryQty,
         return_qty: 0
       };
@@ -150,7 +152,7 @@ export default function PurchaseReturn({ setInventory }) {
   // Update return qty in return list
   const updateReturnQty = (id, qty) => {
     const item = returnList.find(i => i.id === id);
-    const maxQty = item?.current_inventory_qty || 0;
+    const maxQty = item?.original_qty || 0;
     // Keep as string for input, parse for validation
     const numQty = parseFloat(qty) || 0;
     const val = Math.min(Math.max(0, numQty), maxQty);
@@ -1093,7 +1095,7 @@ export default function PurchaseReturn({ setInventory }) {
                         <th className="px-3 py-2 text-left font-semibold text-slate-700">Invoice #</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700">Item</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-700">Unit</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-700">In Stock</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-700">Original Qty</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-700">Return Qty</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-700">Unit Price</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-700">Total</th>
@@ -1108,11 +1110,11 @@ export default function PurchaseReturn({ setInventory }) {
                           <td className="px-3 py-2 text-center text-slate-600">{item.type || "-"}</td>
                           <td className="px-3 py-2 text-center">
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              item.current_inventory_qty > 0
+                              item.original_qty > 0
                                 ? "bg-emerald-100 text-emerald-700"
                                 : "bg-red-100 text-red-700"
                             }`}>
-                              {item.current_inventory_qty}
+                              {item.original_qty}
                             </span>
                           </td>
                           <td className="px-3 py-2">
@@ -1121,7 +1123,7 @@ export default function PurchaseReturn({ setInventory }) {
                               value={item.return_qty === 0 ? '' : item.return_qty}
                               onChange={(e) => updateReturnQty(item.id, e.target.value)}
                               min="0"
-                              max={item.current_inventory_qty}
+                              max={item.original_qty}
                               className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             />
                           </td>

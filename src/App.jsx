@@ -12,6 +12,7 @@ import Category from "./pages/Category";
 import Inventory from "./pages/Inventory";
 
 import supabase from "./createClients";
+import { runExpiryCheck } from "./utils/expiryService";
 import InventoryReport from "./pages/InventoryReport";
 import TotalSalesReport from "./pages/TotalSalesReport";
 import UsageReport from "./pages/UsageReport";
@@ -32,6 +33,7 @@ import Purchase from "./pages/Purchase";
 import PurchaseReturn from "./pages/PurchaseReturn";
 import PurchaseReport from "./pages/PurchaseReport";
 import PurchaseReturnReport from "./pages/PurchaseReturnReport";
+import ExpiredReport from "./pages/ExpiredReport";
 import SupplierOutstanding from "./pages/SupplierOutstanding";
 
 import AIChat from "./pages/AIChat";
@@ -81,6 +83,29 @@ export default function App() {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // ------------------- EXPIRY CHECK -------------------
+  useEffect(() => {
+    if (!user) return;
+    const lastRun = localStorage.getItem("lastExpiryCheck");
+    const today = new Date().toISOString().split("T")[0];
+    if (lastRun !== today) {
+      runExpiryCheck().then((results) => {
+        if (results && results.length > 0) {
+          const message = results
+            .map(r => `${r.item_name}: ${r.expired_qty} units expired on ${r.expiry_date}`)
+            .join("\n");
+          Swal.fire({
+            title: "Items Expired",
+            text: `${results.length} item(s) have expired and been removed from inventory:\n\n${message}`,
+            icon: "warning",
+            confirmButtonText: "OK"
+          });
+        }
+        localStorage.setItem("lastExpiryCheck", today);
+      });
+    }
+  }, [user]);
 
   // ------------------- INVENTORY -------------------
   const fetchInventory = async () => {
@@ -183,6 +208,7 @@ export default function App() {
             <Route path="/purchase-return" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['purchase-return']}><PurchaseReturn setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/purchase-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase']}><PurchaseReport /></PrivateRoute>} />
             <Route path="/purchase-return-report" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-purchase-return']}><PurchaseReturnReport /></PrivateRoute>} />
+            <Route path="/reports/expired" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-expired']}><ExpiredReport /></PrivateRoute>} />
             <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
             <Route path="/reports/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
 

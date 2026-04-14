@@ -18,6 +18,7 @@ export const ROLE_ACCESS_RIGHTS = {
     "report-purchase",
     "report-profit-loss",
     "report-supplier-outstanding",
+    "report-expired",
     "user-create",
     "user-right",
     "internal-consumption",
@@ -51,6 +52,7 @@ export const ROLE_ACCESS_RIGHTS = {
     "report-purchase",
     "report-profit-loss",
     "report-supplier-outstanding",
+    "report-expired",
     "payments",
     "menu",
     "category",
@@ -90,6 +92,7 @@ export const FUNCTION_OPTIONS = [
   { key: "report-purchase", label: "Purchase Report", group: "Navigation" },
   { key: "report-profit-loss", label: "Profit & Loss Report", group: "Navigation" },
   { key: "report-supplier-outstanding", label: "Supplier Outstanding Report", group: "Navigation" },
+  { key: "report-expired", label: "Expired Report", group: "Navigation" },
   { key: "internal-consumption", label: "Internal Consumption", group: "Navigation" },
   { key: "discount-type", label: "Discount Type", group: "Navigation" },
   { key: "user-create", label: "Create User", group: "Navigation" },
@@ -123,6 +126,7 @@ const featureFallback = {
   "report-purchase": ["report"],
   "report-profit-loss": ["report"],
   "report-supplier-outstanding": ["report"],
+  "report-expired": ["report"],
 };
 
 export function getResolvedAccess(user) {

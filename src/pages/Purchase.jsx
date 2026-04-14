@@ -33,7 +33,7 @@ export default function Purchase({ setInventory }) {
     manual_credit: ""
   });
   const [lineItems, setLineItems] = useState([
-    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }
+    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }
   ]);
   const [nextItemId, setNextItemId] = useState(2);
   const [inventory, setInventoryLocal] = useState([]);
@@ -164,7 +164,7 @@ export default function Purchase({ setInventory }) {
   const paginatedPurchases = filteredPurchases.slice(startIndex, startIndex + itemsPerPage);
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "" }]);
+    setLineItems([...lineItems, { id: nextItemId, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }]);
     setNextItemId(nextItemId + 1);
   };
 
@@ -249,7 +249,7 @@ export default function Purchase({ setInventory }) {
 
   const openAddModal = () => {
     setFormData({ date: new Date().toISOString().split("T")[0], supplier_id: "", status: "pending", notes: "", discount: 0, tax: 0, payment_type: "Cash Down", credit_option: "", manual_credit: "" });
-    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }]);
+    setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }]);
     setNextItemId(2);
     setIsEditing(false);
     setEditId(null);
@@ -282,12 +282,13 @@ export default function Purchase({ setInventory }) {
           unit_price: item.unit_price || "",
           total_price: item.total_price || "",
           type: item.type || "",
-          inventory_id: invItem ? String(invItem.id) : ""
+          inventory_id: invItem ? String(invItem.id) : "",
+          expiry_date: item.expiry_date ? item.expiry_date.split("T")[0] : ""
         };
       }));
       setNextItemId(items.length + 1);
     } else {
-      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "" }]);
+      setLineItems([{ id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }]);
       setNextItemId(2);
     }
 
@@ -362,9 +363,10 @@ export default function Purchase({ setInventory }) {
             original_qty: qty,
             qty: qty,
             foc_qty: focQty,
-            unit_price: adjustedPrice, // Store adjusted price for FIFO
-            total_price: billableQty * adjustedPrice, // Store billable total
-            type: item.type || "-"
+            unit_price: adjustedPrice,
+            total_price: billableQty * adjustedPrice,
+            type: item.type || "-",
+            expiry_date: item.expiry_date || null
           };
         });
         await supabase.from("purchase_items").insert(itemsToInsert);
@@ -399,9 +401,10 @@ export default function Purchase({ setInventory }) {
             original_qty: qty,
             qty: qty,
             foc_qty: focQty,
-            unit_price: adjustedPrice, // Store adjusted price for FIFO
-            total_price: billableQty * adjustedPrice, // Store billable total
-            type: item.type || "-"
+            unit_price: adjustedPrice,
+            total_price: billableQty * adjustedPrice,
+            type: item.type || "-",
+            expiry_date: item.expiry_date || null
           };
         });
         await supabase.from("purchase_items").insert(itemsToInsert);
@@ -681,6 +684,7 @@ export default function Purchase({ setInventory }) {
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">FOC</th>
                     <th className="px-4 py-2 text-center font-semibold text-slate-700">Unit</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Unit Price</th>
+                    <th className="px-4 py-2 text-center font-semibold text-slate-700">Expiry Date</th>
                     <th className="px-4 py-2 text-right font-semibold text-slate-700">Total</th>
                   </tr>
                 </thead>
@@ -698,15 +702,28 @@ export default function Purchase({ setInventory }) {
                       </td>
                       <td className="px-4 py-2 text-center text-slate-600">{item.type || "-"}</td>
                       <td className="px-4 py-2 text-right text-slate-600">{formatMMK(item.unit_price)}</td>
+                      <td className="px-4 py-2 text-center text-slate-600">
+                        {item.expiry_date ? (
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            new Date(item.expiry_date) <= new Date()
+                              ? "bg-red-100 text-red-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            {item.expiry_date}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right font-medium text-slate-800">{formatMMK(item.total_price)}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={6} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-4 text-center text-slate-500">No items found</td></tr>
                   )}
                 </tbody>
                 <tfoot className="bg-slate-50">
                   <tr>
-                    <td colSpan={5} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total (Excl. FOC)</td>
+                    <td colSpan={6} className="px-4 py-2 text-right font-bold text-slate-800">Grand Total (Excl. FOC)</td>
                     <td className="px-4 py-2 text-right font-bold text-indigo-600">
                       {formatMMK(selectedPurchaseItems.reduce((sum, item) => {
                         const qty = parseFloat(item.qty) || 0;
@@ -727,7 +744,7 @@ export default function Purchase({ setInventory }) {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 overflow-y-auto py-8">
-          <div className="bg-white rounded-xl p-6 w-full max-w-3xl shadow-xl mx-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-7xl shadow-xl mx-4">
             <h3 className="text-xl font-bold text-slate-800 mb-5">{isEditing ? "Edit Purchase" : "New Purchase"}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -760,6 +777,7 @@ export default function Purchase({ setInventory }) {
                         <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">FOC</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700 w-20">Unit</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Unit Price</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-700 w-36">Expiry Date</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Total</th>
                         {canManage && <th className="px-3 py-2 w-10"></th>}
                       </tr>
@@ -790,6 +808,9 @@ export default function Purchase({ setInventory }) {
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="date" value={item.expiry_date || ""} onChange={(e) => updateLineItem(item.id, "expiry_date", e.target.value)} min={formData.date} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
                           <td className="px-3 py-2 text-right font-medium text-slate-700">
                             <div className="text-sm">{formatMMK(item.total_price)}</div>
