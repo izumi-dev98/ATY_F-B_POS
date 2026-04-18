@@ -25,17 +25,47 @@ export const fetchExpiringPurchaseItems = async () => {
   // Filter to only include items from received purchases
   if (!items || items.length === 0) return [];
 
-  const purchaseIds = [...new Set(items.map(i => i.purchase_id))];
+  const purchaseIds = [...new Set(items.map((i) => i.purchase_id))];
   const { data: purchases } = await supabase
     .from("purchases")
     .select("id, status")
     .in("id", purchaseIds);
 
-  const receivedIds = new Set(
-    (purchases || []).filter(p => p.status === "received").map(p => p.id)
-  );
+  const receivedIds = new Set((purchases || []).filter((p) => p.status === "received").map((p) => p.id));
 
-  return items.filter(i => receivedIds.has(i.purchase_id));
+  return items.filter((i) => receivedIds.has(i.purchase_id));
+};
+
+export const fetchExpiringSoonPurchaseItems = async (daysAhead = 7) => {
+  const todayDate = new Date();
+  const today = todayDate.toISOString().split("T")[0];
+
+  const cutoffDate = new Date(todayDate);
+  cutoffDate.setUTCDate(cutoffDate.getUTCDate() + daysAhead);
+  const cutoff = cutoffDate.toISOString().split("T")[0];
+
+  const { data: items, error } = await supabase
+    .from("purchase_items")
+    .select("id, item_name, qty, expiry_date, purchase_id")
+    .gt("expiry_date", today)
+    .lte("expiry_date", cutoff)
+    .gt("qty", 0)
+    .eq("is_expired", false)
+    .not("expiry_date", "is", null);
+
+  if (error) throw error;
+
+  if (!items || items.length === 0) return [];
+
+  const purchaseIds = [...new Set(items.map((i) => i.purchase_id))];
+  const { data: purchases } = await supabase
+    .from("purchases")
+    .select("id, status")
+    .in("id", purchaseIds);
+
+  const receivedIds = new Set((purchases || []).filter((p) => p.status === "received").map((p) => p.id));
+
+  return items.filter((i) => receivedIds.has(i.purchase_id));
 };
 
 /**
@@ -128,5 +158,6 @@ export default {
   runExpiryCheck,
   getExpiryLog,
   fetchExpiringPurchaseItems,
+  fetchExpiringSoonPurchaseItems,
   processExpiredItems
 };

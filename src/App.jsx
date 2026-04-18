@@ -12,7 +12,7 @@ import Category from "./pages/Category";
 import Inventory from "./pages/Inventory";
 
 import supabase from "./createClients";
-import { runExpiryCheck } from "./utils/expiryService";
+import { fetchExpiringSoonPurchaseItems, runExpiryCheck } from "./utils/expiryService";
 import InventoryReport from "./pages/InventoryReport";
 import TotalSalesReport from "./pages/TotalSalesReport";
 import UsageReport from "./pages/UsageReport";
@@ -87,24 +87,74 @@ export default function App() {
   // ------------------- EXPIRY CHECK -------------------
   useEffect(() => {
     if (!user) return;
-    const lastRun = localStorage.getItem("lastExpiryCheck");
-    const today = new Date().toISOString().split("T")[0];
-    if (lastRun !== today) {
-      runExpiryCheck().then((results) => {
-        if (results && results.length > 0) {
-          const message = results
-            .map(r => `${r.item_name}: ${r.expired_qty} units expired on ${r.expiry_date}`)
-            .join("\n");
-          Swal.fire({
-            title: "Items Expired",
-            text: `${results.length} item(s) have expired and been removed from inventory:\n\n${message}`,
-            icon: "warning",
-            confirmButtonText: "OK"
-          });
-        }
-        localStorage.setItem("lastExpiryCheck", today);
+
+    let cancelled = false;
+
+    const run = async () => {
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+
+      const tomorrowDate = new Date(now);
+      tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+      const tomorrow = tomorrowDate.toISOString().split("T")[0];
+
+      const weekDate = new Date(now);
+      weekDate.setUTCDate(weekDate.getUTCDate() + 7);
+      const week = weekDate.toISOString().split("T")[0];
+
+      const [expiredResults, expiringSoon] = await Promise.all([
+        runExpiryCheck(),
+        fetchExpiringSoonPurchaseItems(7),
+      ]);
+      if (cancelled) return;
+
+      const expiredLines = (expiredResults || []).map(
+        (r) => `${r.item_name}: ${r.expired_qty} units expired on ${r.expiry_date}`
+      );
+
+      const expiringWithin1Day = (expiringSoon || []).filter((i) => i.expiry_date && i.expiry_date <= tomorrow);
+      const expiringWithin1Week = (expiringSoon || []).filter((i) => i.expiry_date && i.expiry_date > tomorrow && i.expiry_date <= week);
+
+      const expiring1DayLines = expiringWithin1Day.map(
+        (i) => `${i.item_name}: ${i.qty} units expiring on ${i.expiry_date}`
+      );
+      const expiring1WeekLines = expiringWithin1Week.map(
+        (i) => `${i.item_name}: ${i.qty} units expiring on ${i.expiry_date}`
+      );
+
+      if (expiredLines.length === 0 && expiring1DayLines.length === 0 && expiring1WeekLines.length === 0) {
+        return;
+      }
+
+      while (!cancelled && Swal.isVisible()) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      if (cancelled) return;
+
+      const sections = [];
+      if (expiredLines.length > 0) {
+        sections.push(`Expired & removed (as of ${today}):\n${expiredLines.join("\n")}`);
+      }
+      if (expiring1DayLines.length > 0) {
+        sections.push(`Expiring within 1 day:\n${expiring1DayLines.join("\n")}`);
+      }
+      if (expiring1WeekLines.length > 0) {
+        sections.push(`Expiring within 1 week:\n${expiring1WeekLines.join("\n")}`);
+      }
+
+      Swal.fire({
+        title: "Expiry Alert",
+        text: sections.join("\n\n"),
+        icon: "warning",
+        confirmButtonText: "OK",
       });
-    }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // ------------------- INVENTORY -------------------
