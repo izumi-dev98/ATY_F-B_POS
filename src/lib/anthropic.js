@@ -336,7 +336,7 @@ export async function chatWithAI(message, conversationHistory = []) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'openrouter/free',
         messages: messages,
         max_tokens: 8192
       })
@@ -422,7 +422,7 @@ Provide a detailed analysis including:
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'openrouter/free',
         messages: messages,
         max_tokens: 8192
       })

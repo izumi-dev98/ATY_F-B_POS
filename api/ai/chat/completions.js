@@ -12,12 +12,20 @@ export default async function handler(req) {
 
   try {
     const body = await req.json();
+    const apiKey = process.env.OPENROUTER_API_KEY;
 
-    const response = await fetch('https://api.kiro.cheap/v1/chat/completions', {
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing OPENROUTER_API_KEY' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer sk-aw-18231c9bdfb3b5dfd7c5298ab1995f4f`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify(body)
     });

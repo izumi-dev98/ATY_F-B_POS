@@ -8,15 +8,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/ai': {
-        target: 'https://api.kiro.cheap',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/ai/, '/v1'),
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            proxyReq.setHeader('Authorization', 'Bearer sk-aw-18231c9bdfb3b5dfd7c5298ab1995f4f');
-            proxyReq.setHeader('Content-Type', 'application/json');
-          });
-        }
+        target: 'http://localhost:3000',
+        changeOrigin: true
       }
     }
   }
