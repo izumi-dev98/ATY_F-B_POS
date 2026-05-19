@@ -12,11 +12,11 @@ export default async function handler(req) {
 
   try {
     const body = await req.json();
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = req.headers.get('x-openrouter-api-key');
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing OPENROUTER_API_KEY' }), {
-        status: 500,
+      return new Response(JSON.stringify({ error: 'Missing OpenRouter API key' }), {
+        status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
     }

@@ -8,8 +8,18 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/ai': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
+        target: 'https://openrouter.ai',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ai/, '/api/v1'),
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const apiKey = req.headers['x-openrouter-api-key'];
+            if (apiKey) {
+              proxyReq.setHeader('Authorization', `Bearer ${apiKey}`);
+            }
+            proxyReq.setHeader('Content-Type', 'application/json');
+          });
+        }
       }
     }
   }

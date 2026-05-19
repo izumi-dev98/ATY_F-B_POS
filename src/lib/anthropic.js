@@ -5,6 +5,34 @@
 const API_BASE = '/api/ai';
 import supabase from '../createClients.js';
 
+const getOpenRouterApiKey = () => {
+  if (typeof window === 'undefined') return null;
+
+  const existingKey = window.localStorage.getItem('openrouter_api_key');
+  if (existingKey) return existingKey;
+
+  const enteredKey = window.prompt('Enter your OpenRouter API key');
+  if (!enteredKey) return null;
+
+  const apiKey = enteredKey.trim();
+  if (!apiKey) return null;
+
+  window.localStorage.setItem('openrouter_api_key', apiKey);
+  return apiKey;
+};
+
+const createAiHeaders = () => {
+  const apiKey = getOpenRouterApiKey();
+  if (!apiKey) {
+    throw new Error('OpenRouter API key is required');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    'x-openrouter-api-key': apiKey
+  };
+};
+
 // Get current date/time
 const getCurrentDateTime = () => {
   const now = new Date();
@@ -334,7 +362,7 @@ export async function chatWithAI(message, conversationHistory = []) {
 
     const response = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: createAiHeaders(),
       body: JSON.stringify({
         model: 'openrouter/free',
         messages: messages,
@@ -344,7 +372,14 @@ export async function chatWithAI(message, conversationHistory = []) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`API Error: ${response.status} - ${errorText}`);
+      let errorMessage = errorText;
+
+      try {
+        const parsedError = JSON.parse(errorText);
+        errorMessage = parsedError.error || errorText;
+      } catch {}
+
+      throw new Error(`API Error: ${response.status} - ${errorMessage}`);
     }
 
     // Parse response (handle both streaming and non-streaming)
@@ -420,7 +455,7 @@ Provide a detailed analysis including:
 
     const response = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: createAiHeaders(),
       body: JSON.stringify({
         model: 'openrouter/free',
         messages: messages,
@@ -430,7 +465,14 @@ Provide a detailed analysis including:
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`API Error: ${response.status} - ${errorText}`);
+      let errorMessage = errorText;
+
+      try {
+        const parsedError = JSON.parse(errorText);
+        errorMessage = parsedError.error || errorText;
+      } catch {}
+
+      throw new Error(`API Error: ${response.status} - ${errorMessage}`);
     }
 
     const text = await response.text();
