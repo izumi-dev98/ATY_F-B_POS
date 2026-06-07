@@ -17,10 +17,9 @@ export default function Navbar({ toggleSidebar }) {
         right-0
         z-50
         h-14
-        grid
-        grid-cols-[auto_1fr_auto]
+        flex
         items-center
-        gap-2
+        justify-between
         px-4
         sm:px-6
         bg-white
@@ -48,35 +47,6 @@ export default function Navbar({ toggleSidebar }) {
         <h1 className="truncate text-sm sm:text-lg font-semibold text-gray-800">
           Myat Taw Win (ATY) F&B System
         </h1>
-      </div>
-
-      <div
-        className="
-          flex
-          justify-self-center
-          justify-center
-          min-w-0
-          max-w-[260px]
-          items-center
-          overflow-hidden
-          rounded-md
-          bg-gradient-to-r
-          from-amber-100
-          via-rose-100
-          to-amber-100
-          px-2
-          py-0.5
-          text-xs
-          text-center
-          font-bold
-          text-rose-700
-          shadow
-          animate-pulse
-          sm:text-sm
-          sm:max-w-[340px]
-        "
-      >
-        <span className="truncate">နှစ်သစ်မှာ ရွှင်လန်း ချမ်းမြေ့ကြပါစေ</span>
       </div>
 
       <div className="flex min-w-0 justify-end">
