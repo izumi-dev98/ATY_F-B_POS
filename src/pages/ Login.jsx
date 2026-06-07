@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import supabase from "../createClients";
-import loginBg from "../assets/loginbg.png";
+import loginBg from "../assets/fb.jpeg";
 
 export default function Login({ setUser }) { // <-- receive setUser from App.js
     const [username, setUsername] = useState("");
