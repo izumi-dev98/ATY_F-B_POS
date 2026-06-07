@@ -33,7 +33,6 @@ export default function TotalSalesReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch only completed orders
       const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
         .select("*")
@@ -41,18 +40,18 @@ export default function TotalSalesReport() {
         .order("created_at", { ascending: false });
       if (ordersErr) throw ordersErr;
 
-      const orderIds = ordersData.map(o => o.id);
+      const orderIds = (ordersData || []).map(o => o.id);
+      const chunkSize = 100;
+      let allOrderItems = [];
 
-      // Fetch order items only for completed orders
-      let items;
-      if (orderIds.length > 0) {
-        const { data } = await supabase
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: itemChunk, error: itemsErr } = await supabase
           .from("order_items")
           .select("*")
-          .in("order_id", orderIds);
-        items = data || [];
-      } else {
-        items = [];
+          .in("order_id", chunk);
+        if (itemsErr) throw itemsErr;
+        allOrderItems = [...allOrderItems, ...itemChunk];
       }
 
       const { data: menuData, error: menuErr } = await supabase.from("menu").select("id, menu_name");
@@ -61,9 +60,9 @@ export default function TotalSalesReport() {
       setOrders(ordersData || []);
       setMenus(menuData || []);
 
-      const merged = (items || []).map((item) => {
-        const order = (ordersData || []).find((o) => o.id === item.order_id);
-        const menu = (menuData || []).find((m) => m.id === item.menu_id);
+      const merged = (allOrderItems || []).map((item) => {
+        const order = (ordersData || []).find((o) => String(o.id) === String(item.order_id));
+        const menu = (menuData || []).find((m) => String(m.id) === String(item.menu_id));
         return {
           ...item,
           total: order?.total || 0,

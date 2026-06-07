@@ -71,11 +71,26 @@ export default function History({ setInventory }) {
         .order("created_at", { ascending: false });
       if (ordersErr) throw ordersErr;
 
-      const { data: orderItems, error: itemsErr } = await supabase
-        .from("order_items")
-        .select("*")
-        .order("id", { ascending: true });
-      if (itemsErr) throw itemsErr;
+      if (!orders || orders.length === 0) {
+        setHistory([]);
+        return;
+      }
+
+      // Chunk order IDs to avoid limits and potential issues with large .in() clauses
+      const orderIds = orders.map(o => o.id);
+      const chunkSize = 100;
+      let allOrderItems = [];
+      
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: itemChunk, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("*")
+          .in("order_id", chunk);
+        
+        if (itemsErr) throw itemsErr;
+        allOrderItems = [...allOrderItems, ...itemChunk];
+      }
 
       const { data: menuData, error: menuErr } = await supabase
         .from("menu")
@@ -95,11 +110,11 @@ export default function History({ setInventory }) {
 
       // Merge menu names
       const historyData = orders.map((order) => {
-        const items = orderItems
-          .filter((i) => i.order_id === order.id)
+        const items = allOrderItems
+          .filter((i) => String(i.order_id) === String(order.id))
           .map((i) => ({
             ...i,
-            menu_name: menuData.find((m) => m.id === i.menu_id)?.menu_name || "Unknown Menu",
+            menu_name: menuData.find((m) => String(m.id) === String(i.menu_id))?.menu_name || "Unknown Menu",
           }));
         return { ...order, items };
       });

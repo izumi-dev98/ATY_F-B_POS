@@ -55,16 +55,32 @@ export default function Dashboard() {
 
       if (ordersErr) throw ordersErr;
 
-      const { data: orderItems, error: itemsErr } = await supabase
-        .from("order_items")
-        .select("*");
-      if (itemsErr) throw itemsErr;
+      if (!orders || orders.length === 0) {
+        setMonthlyData([]);
+        setMostSelling(null);
+        setGrandTotal(0);
+        return;
+      }
+
+      const orderIds = orders.map(o => o.id);
+      const chunkSize = 100;
+      let allOrderItems = [];
+
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: itemChunk, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("*")
+          .in("order_id", chunk);
+        if (itemsErr) throw itemsErr;
+        allOrderItems = [...allOrderItems, ...itemChunk];
+      }
 
       const { data: menuData, error: menuErr } = await supabase.from("menu").select("*");
       if (menuErr) throw menuErr;
 
-      const itemsWithMenu = orderItems.map((item) => {
-        const menu = menuData.find((m) => m.id === item.menu_id);
+      const itemsWithMenu = allOrderItems.map((item) => {
+        const menu = (menuData || []).find((m) => String(m.id) === String(item.menu_id));
         return {
           ...item,
           menu_name: menu?.menu_name || "Unknown",
@@ -72,9 +88,7 @@ export default function Dashboard() {
         };
       });
 
-      const monthItems = itemsWithMenu.filter((i) =>
-        orders.some((o) => o.id === i.order_id)
-      );
+      const monthItems = itemsWithMenu;
 
       // Filter by selected menu
       const filteredItems = selectedMenu === "all"
