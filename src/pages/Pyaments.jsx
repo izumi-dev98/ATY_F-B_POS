@@ -373,9 +373,9 @@ export default function Pyaments({ inventory, setInventory, user }) {
                 <button
                   key={item.id}
                   onClick={() => addToCart(item)}
-                  className="group flex flex-col bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all text-left"
+                  className="group flex flex-col bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all text-left"
                 >
-                  <h3 className="text-xs font-bold text-gray-800 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">{item.menu_name}</h3>
+                  <h3 className="text-xs font-bold text-gray-800  text-wrap group-hover:text-blue-600 transition-colors">{item.menu_name}</h3>
                   <p className="mt-auto pt-3 text-blue-600 font-black text-sm">{mmkFormatter.format(item.price)}</p>
                 </button>
               ))}
