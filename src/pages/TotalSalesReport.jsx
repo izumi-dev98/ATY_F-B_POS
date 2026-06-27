@@ -278,7 +278,7 @@ export default function TotalSalesReport() {
       {/* Payment Type Filter */}
       <div className="flex gap-2 mb-4 items-center">
         <span className="text-sm font-medium text-gray-700">Payment:</span>
-        {["all", "Cash", "Kpay", "FOC"].map((p) => (
+        {["all", "Cash", "Kpay", "FOC" , "COUPON"].map((p) => (
           <button
             key={p}
             onClick={() => {
@@ -287,7 +287,7 @@ export default function TotalSalesReport() {
             }}
             className={`px-3 py-1.5 rounded-lg capitalize ${
               paymentFilter === p
-                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
+                ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ?"bg-blue-600 text-white" : p === "COUPON" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
                 : "bg-white border"
             }`}
           >
@@ -371,9 +371,9 @@ export default function TotalSalesReport() {
                   <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(slip.total)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
+                      paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" :paymentType === "COUPON" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
                     }`}>
-                      {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : "FOC"}
+                      {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : paymentType === "COUPON" ? "COUPON" : "FOC" }
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{displayRemark}</td>
