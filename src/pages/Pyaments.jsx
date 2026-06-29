@@ -445,7 +445,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
 
                 <div className="grid grid-cols-3 gap-1.5">
                   {["Cash", "Kpay", "FOC" , "COUPON"].map((type) => (
-                    <button key={type} onClick={() => { setPaymentType(type); if (type === "FOC" || type == "COUPON") setDiscount(100); else if (paymentType === "FOC") setDiscount(0); }} className={`py-2 rounded-xl text-[15px] font-bold transition-all ${paymentType === type ? "bg-blue-600 text-white shadow-sm" : "bg-gray-100 text-black hover:bg-gray-200"}`}>{type}</button>
+                    <button key={type} onClick={() => { setPaymentType(type); if (type === "FOC" ) setDiscount(100); else if (paymentType === "FOC") setDiscount(0); }} className={`py-2 rounded-xl text-[15px] font-bold transition-all ${paymentType === type ? "bg-blue-600 text-white shadow-sm" : "bg-gray-100 text-black hover:bg-gray-200"}`}>{type}</button>
                   ))}
                 </div>
 
