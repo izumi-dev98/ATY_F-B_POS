@@ -17,6 +17,11 @@ export default function Pyaments({ inventory, setInventory, user }) {
   const [remark, setRemark] = useState("");
   const [discountTypes, setDiscountTypes] = useState([]);
   const [selectedDiscountType, setSelectedDiscountType] = useState(null);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const COUPONS = {
+    KAPY10: { code: "KAPY10", type: "percent", value: 10, name: "Kapy 10%" },
+    KAPY50: { code: "KAPY50", type: "fixed", value: 5000, name: "Kapy MMK 5,000" },
+  };
 
   const isAdmin = user?.role === "superadmin" || user?.role === "admin";
 
@@ -225,6 +230,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
     setPaymentType("Cash");
     setRemark("");
     setSelectedDiscountType(null);
+    setAppliedCoupon(null);
   };
 
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0); // original prices
@@ -241,8 +247,14 @@ export default function Pyaments({ inventory, setInventory, user }) {
   const taxPercent = Number(tax) || 0;
   const orderDiscountAmount = itemDiscountedSubtotal * (discountPercent / 100);
   const totalDiscountAmount = itemDiscountAmount + orderDiscountAmount;
+  // Coupon: percent coupons are applied on the original subtotal (origin amount)
+  const couponDiscount = appliedCoupon
+    ? appliedCoupon.type === "percent"
+      ? subtotal * (appliedCoupon.value / 100)
+      : Number(appliedCoupon.value || 0)
+    : 0;
   const taxAmount = itemDiscountedSubtotal * (taxPercent / 100);
-  const total = itemDiscountedSubtotal - orderDiscountAmount + taxAmount;
+  const total = itemDiscountedSubtotal - orderDiscountAmount - couponDiscount + taxAmount;
 
   const completeOrder = async () => {
     if (!cart.length)
@@ -345,7 +357,6 @@ export default function Pyaments({ inventory, setInventory, user }) {
             <h1 style="text-align:center;">F&B ATY SLIP </h1>
             <p>Slip ID: ${order.id}</p>
             <p>Date: ${date}</p>
-            <p>Status: PENDING</p>
             ${remark ? `<p>Remark: ${remark}</p>` : ""}
             <table style="width:100%; border-collapse: collapse;">
               <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
@@ -367,6 +378,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
               <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
               ${itemDiscountHTMLLines.map(l => `<p style="color:black;">${l}</p>`).join("")}
               ${orderDiscountAmount > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(orderDiscountAmount)}</p>` : ""}
+              ${couponDiscount > 0 ? `<p style="color:black;">Coupon${appliedCoupon?.code ? ` (${appliedCoupon.code})` : ""}: -${mmkFormatter.format(couponDiscount)}</p>` : ""}
               ${taxPercent > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ""}
               <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(total)}</p>
             </div>
@@ -394,6 +406,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
       setRemark("");
       setItemDiscounts({});
       setEditQty({});
+      setAppliedCoupon(null);
       Swal.fire("Success", "Order printed successfully!", "success");
       fetchMenu();
     } catch (err) {
@@ -483,14 +496,15 @@ export default function Pyaments({ inventory, setInventory, user }) {
             {cart.length} item{cart.length === 1 ? "" : "s"}
           </span>
         </div>
-        {cart.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-slate-400">
-            Your cart is empty
-          </div>
-        ) : (
-          <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-            {cart.map((item) => (
-              <div
+        <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+          {cart.length === 0 ? (
+            <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-slate-400">
+              Your cart is empty
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cart.map((item) => (
+                <div
                 key={`${item.id}-${item.isSet ? 'set' : 'menu'}`}
                 className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800 p-4"
               >
@@ -614,6 +628,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
             ))}
           </div>
         )}
+        </div>
 
         {/* Discount Form */}
         <div className="mt-4 border-t pt-4">
@@ -709,7 +724,13 @@ export default function Pyaments({ inventory, setInventory, user }) {
           {discountPercent > 0 && (
             <div className="flex justify-between text-sm mb-1 text-red-500">
               <span>Discount ({discountPercent}%):</span>
-              <span>-{mmkFormatter.format(discountAmount)}</span>
+              <span>-{mmkFormatter.format(orderDiscountAmount)}</span>
+            </div>
+          )}
+          {couponDiscount > 0 && (
+            <div className="flex justify-between text-sm mb-1 text-red-500">
+              <span>Coupon{appliedCoupon?.code ? ` (${appliedCoupon.code})` : ""}:</span>
+              <span>-{mmkFormatter.format(couponDiscount)}</span>
             </div>
           )}
           {taxPercent > 0 && (
@@ -734,6 +755,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
               onClick={() => {
                 setPaymentType("Kpay");
                 setDiscount(0);
+                setAppliedCoupon(null);
               }}
               className={`flex-1 py-3 rounded-xl font-medium transition ${
                 paymentType === "Kpay"
@@ -747,6 +769,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
               onClick={() => {
                 setPaymentType("Cash");
                 setDiscount(0);
+                setAppliedCoupon(null);
               }}
               className={`flex-1 py-3 rounded-xl font-medium transition ${
                 paymentType === "Cash"
@@ -758,8 +781,23 @@ export default function Pyaments({ inventory, setInventory, user }) {
             </button>
             <button
               onClick={() => {
+                // Enter coupon payment mode (no other side-effects)
+                setPaymentType("Coupon");
+                setDiscount(0);
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Coupon"
+                  ? "bg-yellow-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Coupon
+            </button>
+            <button
+              onClick={() => {
                 setPaymentType("FOC");
                 setDiscount(100);
+                setAppliedCoupon(null);
               }}
               className={`flex-1 py-3 rounded-xl font-medium transition ${
                 paymentType === "FOC"
@@ -803,5 +841,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
         </div>
       </div>
     </div>
+    
   );
 }
+

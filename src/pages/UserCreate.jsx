@@ -215,15 +215,7 @@ export default function UserManagement() {
       {/* PAGINATION */}
       <div className="mt-4 flex justify-center items-center space-x-2">
         <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 bg-gray-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded hover:bg-gray-400 dark:hover:bg-slate-600">Prev</button>
-        {[...Array(totalPages)].map((_, i) => (
-          <button
-            key={i}
-            onClick={() => goToPage(i + 1)}
-            className={`px-3 py-1 rounded ${currentPage === i + 1 ? "bg-blue-500 text-white" : "bg-gray-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-gray-300 dark:hover:bg-slate-600"}`}
-          >
-            {i + 1}
-          </button>
-        ))}
+        <span className="text-sm text-slate-600 dark:text-slate-300">Page {currentPage} of {totalPages}</span>
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 bg-gray-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded hover:bg-gray-400 dark:hover:bg-slate-600">Next</button>
       </div>
       </div>

@@ -642,10 +642,7 @@ export default function Purchase({ setInventory }) {
         <div className="flex justify-center items-center mt-6 gap-2">
           <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}
             className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100">Previous</button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-            <button key={page} onClick={() => setCurrentPage(page)}
-              className={`px-3 py-1.5 border rounded-lg text-sm font-medium ${currentPage === page ? "bg-indigo-600 text-white border-indigo-600" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}>{page}</button>
-          ))}
+          <span className="text-sm text-slate-600">Page {currentPage} of {totalPages}</span>
           <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}
             className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-100">Next</button>
         </div>

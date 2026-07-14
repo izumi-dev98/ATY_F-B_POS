@@ -36,9 +36,6 @@ import PurchaseReturnReport from "./pages/PurchaseReturnReport";
 import ExpiredReport from "./pages/ExpiredReport";
 import SupplierOutstanding from "./pages/SupplierOutstanding";
 
-import AIChat from "./pages/AIChat";
-import AIAnalytics from "./pages/AIAnalytics";
-
 export default function App() {
   const [isOpen, setIsOpen] = useState(window.innerWidth >= 768);
   const [inventory, setInventory] = useState([]);
@@ -261,10 +258,6 @@ export default function App() {
             <Route path="/reports/expired" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-expired']}><ExpiredReport /></PrivateRoute>} />
             <Route path="/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
             <Route path="/reports/supplier-outstanding" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']} allowedFeatures={['report-supplier-outstanding']}><SupplierOutstanding /></PrivateRoute>} />
-
-            {/* AI Routes */}
-            <Route path="/ai-chat" element={<PrivateRoute user={user} allowedFeatures={['ai-chat']}><AIChat /></PrivateRoute>} />
-            <Route path="/ai-analytics" element={<PrivateRoute user={user} allowedFeatures={['ai-analytics']}><AIAnalytics /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />

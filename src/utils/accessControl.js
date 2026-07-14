@@ -37,12 +37,14 @@ export const ROLE_ACCESS_RIGHTS = {
     "btn-purchase-edit",
     "btn-purchase-delete",
     "btn-report-export",
-    "ai-chat",
-    "ai-analytics",
+    "history-complete",
+    "history-cancel",
   ],
   admin: [
     "dashboard",
     "history",
+    "history-complete",
+    "history-cancel",
     "inventory",
     "report",
     "report-inventory",
@@ -65,11 +67,9 @@ export const ROLE_ACCESS_RIGHTS = {
     "supplier-outstanding",
     "btn-inventory-edit-category",
     "btn-report-export",
-    "ai-chat",
-    "ai-analytics",
   ],
-  chef: ["dashboard", "history", "report", "menu", "category", "internal-consumption", "ai-chat", "ai-analytics"],
-  user: ["dashboard", "payments", "history", "report", "internal-consumption", "ai-chat", "ai-analytics"],
+  chef: ["dashboard", "history", "report", "menu", "category", "internal-consumption"],
+  user: ["dashboard", "payments", "history", "report", "internal-consumption"],
 };
 
 export const FUNCTION_OPTIONS = [
@@ -110,8 +110,8 @@ export const FUNCTION_OPTIONS = [
   { key: "btn-purchase-edit", label: "Button: Edit Purchase", group: "Buttons" },
   { key: "btn-purchase-delete", label: "Button: Delete Purchase", group: "Buttons" },
   { key: "btn-report-export", label: "Button: Export Reports", group: "Buttons" },
-  { key: "ai-chat", label: "AI Chat", group: "AI Features" },
-  { key: "ai-analytics", label: "AI Analytics", group: "AI Features" },
+  { key: "history-complete", label: "History Complete Button", group: "History" },
+  { key: "history-cancel", label: "History Cancel Button", group: "History" },
 ];
 
 const featureFallback = {

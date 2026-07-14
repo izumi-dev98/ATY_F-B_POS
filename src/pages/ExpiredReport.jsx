@@ -277,19 +277,7 @@ export default function ExpiredReport() {
           >
             Previous
           </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-            <button
-              key={page}
-              onClick={() => setCurrentPage(page)}
-              className={`px-3 py-1.5 border rounded-lg text-sm font-medium ${
-                currentPage === page
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {page}
-            </button>
-          ))}
+          <span className="text-sm text-slate-600">Page {currentPage} of {totalPages}</span>
           <button
             onClick={() => setCurrentPage(currentPage + 1)}
             disabled={currentPage === totalPages}

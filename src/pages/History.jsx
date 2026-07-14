@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import supabase from "../createClients";
 import Swal from "sweetalert2";
 import { buildFifoList, deductFromFifo } from "../utils/fifoService";
+import { hasFeature } from "../utils/accessControl";
 
 export default function History({ setInventory }) {
   const [history, setHistory] = useState([]);
@@ -20,6 +21,9 @@ export default function History({ setInventory }) {
     currency: "MMK",
     maximumFractionDigits: 0,
   });
+  const localUser = JSON.parse(localStorage.getItem("user") || "null");
+  const canComplete = hasFeature(localUser, "history-complete");
+  const canCancel = hasFeature(localUser, "history-cancel");
 
   // Get date range based on filter type
   const getDateRange = () => {
@@ -90,6 +94,11 @@ export default function History({ setInventory }) {
         .select("*");
       if (setsErr) throw setsErr;
 
+      // Fetch users to resolve cancelled_by
+      const { data: usersData } = await supabase.from("user").select("id, full_name");
+      const userMap = {};
+      (usersData || []).forEach((u) => { userMap[u.id] = u; });
+
       const { data: menuSetItemsData, error: setItemsErr } = await supabase
         .from("menu_set_items")
         .select("*");
@@ -134,7 +143,12 @@ export default function History({ setInventory }) {
               };
             }
           });
-        return { ...order, items };
+        return {
+          ...order,
+          items,
+          cancelled_by_name: userMap[order.cancelled_by]?.full_name || null,
+          completed_by_name: userMap[order.completed_by]?.full_name || null,
+        };
       });
 
       setHistory(historyData);
@@ -174,6 +188,7 @@ export default function History({ setInventory }) {
     const discountAmount = order.discount_amount || 0;
     const taxPercent = order.tax_percent || 0;
     const taxAmount = order.tax_amount || 0;
+    const printedByName = localUser?.full_name || localUser?.username || localUser?.id || 'Unknown';
     const receiptContent = `
       <html>
         <head><title>Order #${order.id}</title></head>
@@ -181,7 +196,6 @@ export default function History({ setInventory }) {
           <h1 style="text-align:center;">F&B ATY SLIP</h1>
           <p>Slip ID: ${order.id}</p>
           <p>Date: ${date}</p>
-          <p>Status: ${statusLabel}</p>
           <table style="width:100%; border-collapse: collapse;">
             <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
             <tbody>
@@ -200,6 +214,7 @@ export default function History({ setInventory }) {
             ${taxAmount > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ''}
             <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(order.total)}</p>
           </div>
+          <p style="margin-top:12px;">Printed by: ${printedByName}</p>
           <p style="text-align:center;">Thank you!</p>
         </body>
       </html>
@@ -220,6 +235,9 @@ export default function History({ setInventory }) {
 
   // Complete order - deduct inventory + purchase history (FIFO), then set status
   const handleComplete = async (order) => {
+    if (!canComplete) {
+      return Swal.fire("Not allowed", "You do not have permission to complete orders", "error");
+    }
     try {
       const { data: inventoryData, error: inventoryErr } = await supabase
         .from("inventory")
@@ -439,7 +457,7 @@ export default function History({ setInventory }) {
 
       const { error: statusErr } = await supabase
         .from("orders")
-        .update({ status: "completed" })
+        .update({ status: "completed", completed_by: localUser?.id || null, completed_at: new Date().toISOString() })
         .eq("id", order.id);
       if (statusErr) throw statusErr;
 
@@ -588,20 +606,53 @@ export default function History({ setInventory }) {
 
   // Cancel pending order only (no stock return because deduction happens on complete)
   const handleCancel = async (order) => {
+    if (!canCancel) {
+      return Swal.fire("Not allowed", "You do not have permission to cancel orders", "error");
+    }
+
     const result = await Swal.fire({
-      title: "Cancel Order?",
-      text: "This will cancel this pending order.",
-      icon: "warning",
+      title: "Cancel Order",
+      input: "textarea",
+      inputLabel: "Reason for cancellation (optional)",
+      inputPlaceholder: "Enter note for cancellation...",
       showCancelButton: true,
-      confirmButtonText: "Yes, Cancel",
-      cancelButtonText: "No"
+      confirmButtonText: "Cancel Order",
+      cancelButtonText: "Back",
+      preConfirm: (value) => value,
     });
 
     if (!result.isConfirmed) return;
 
+    const note = (result.value || "").trim();
+
     try {
-      // Update order status to cancelled
-      await supabase.from("orders").update({ status: "cancelled" }).eq("id", order.id);
+      // Try to set a cancel_note, cancelled_by and cancelled_at columns if they exist; also update status.
+      const payload = {
+        status: "cancelled",
+        cancel_note: note,
+        cancelled_by: localUser?.id || null,
+        cancelled_at: new Date().toISOString(),
+      };
+
+      const { error: updateErr } = await supabase
+        .from("orders")
+        .update(payload)
+        .eq("id", order.id);
+
+      if (updateErr) {
+        // Fallback: append cancel note to remark if cancel_note column not available
+        const remark = note ? `${order.remark || ""}${order.remark ? " | " : ""}Cancel Note: ${note}` : order.remark || null;
+        const fallbackPayload = {
+          status: "cancelled",
+          remark,
+        };
+        const { error: fallbackErr } = await supabase
+          .from("orders")
+          .update(fallbackPayload)
+          .eq("id", order.id);
+        if (fallbackErr) throw fallbackErr;
+      }
+
       Swal.fire("Cancelled", "Order cancelled successfully!", "success");
       fetchHistory();
     } catch (err) {
@@ -813,6 +864,23 @@ export default function History({ setInventory }) {
                           <span>+{mmkFormatter.format(taxAmount)}</span>
                         </div>
                       )}
+                      {order.status === 'completed' && (
+                        <div className="mt-2 p-2 rounded bg-green-50 border border-green-100 text-sm">
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-green-500">Completed</span>
+                            <span className="text-xs text-gray-500">{order.completed_at ? new Date(order.completed_at).toLocaleString() : ''}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">By: {order.completed_by_name || order.completed_by || '-'}</div>
+                        </div>
+                      )}
+                      {order.status === 'cancelled' && (
+                        <div className="mt-2 p-3 rounded border border-red-200  text-sm">
+                          <div className="font-semibold text-red-700">Cancelled</div>
+                          <div className="text-xs text-gray-600 mt-1">{order.cancelled_at ? new Date(order.cancelled_at).toLocaleString() : ''}</div>
+                          <div className="mt-2 text-sm text-slate-700">By: {order.cancelled_by_name || order.cancelled_by || '-'}</div>
+                          {order.cancel_note && <div className="mt-1 text-sm text-slate-700">Note: {order.cancel_note}</div>}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -830,18 +898,22 @@ export default function History({ setInventory }) {
                     </button>
                     {order.status === 'pending' && (
                       <>
-                        <button
-                          onClick={() => handleComplete(order)}
-                          className="flex-1 bg-green-600 text-white px-3 py-2 rounded-xl hover:bg-green-700 transition"
-                        >
-                          Complete
-                        </button>
-                        <button
-                          onClick={() => handleCancel(order)}
-                          className="flex-1 bg-red-500 text-white px-3 py-2 rounded-xl hover:bg-red-600 transition"
-                        >
-                          Cancel
-                        </button>
+                        {canComplete && (
+                          <button
+                            onClick={() => handleComplete(order)}
+                            className="flex-1 bg-green-600 text-white px-3 py-2 rounded-xl hover:bg-green-700 transition"
+                          >
+                            Complete
+                          </button>
+                        )}
+                        {canCancel && (
+                          <button
+                            onClick={() => handleCancel(order)}
+                            className="flex-1 bg-red-500 text-white px-3 py-2 rounded-xl hover:bg-red-600 transition"
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -859,19 +931,7 @@ export default function History({ setInventory }) {
             >
               Prev
             </button>
-
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button
-                key={i + 1}
-                onClick={() => setPage(i + 1)}
-                className={`px-3 py-1 rounded-lg transition ${
-                  page === i + 1 ? "bg-blue-600 text-white" : "bg-gray-200 hover:bg-gray-300"
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-
+            <span className="text-sm text-slate-600">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
               className="px-3 py-1 rounded-lg bg-gray-200 hover:bg-gray-300 transition"

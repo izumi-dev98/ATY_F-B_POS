@@ -7,13 +7,14 @@ export default function TotalSalesReport() {
   const [orderItems, setOrderItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [menus, setMenus] = useState([]);
+  const [userMap, setUserMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   // Preset filter: "all", "day", "week", "month", "year"
   const [presetFilter, setPresetFilter] = useState("all");
 
-  // Payment type filter: "all", "cash", "card"
+  // Payment type filter: "all", "Cash", "Kpay", "FOC", "Coupon"
   const [paymentFilter, setPaymentFilter] = useState("all");
 
   // Custom date range
@@ -27,6 +28,9 @@ export default function TotalSalesReport() {
   // Preview modal state
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  const currentUser = JSON.parse(localStorage.getItem("user") || "null");
+  const printedByName = currentUser?.full_name || currentUser?.username || currentUser?.id || "Unknown";
+
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
     style: "currency",
     currency: "MMK",
@@ -36,11 +40,11 @@ export default function TotalSalesReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch only completed orders
+      // Fetch completed and cancelled orders for report (include cancelled so cancel info and totals show)
       const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
         .select("*")
-        .eq("status", "completed")
+        .in("status", ["completed", "cancelled"])
         .order("created_at", { ascending: false });
       if (ordersErr) throw ordersErr;
 
@@ -63,6 +67,12 @@ export default function TotalSalesReport() {
 
       const { data: menuSetsData, error: setsErr } = await supabase.from("menu_sets").select("id, set_name");
       if (setsErr) throw setsErr;
+
+      // Fetch users to map cancelled_by and completed_by
+      const { data: usersData } = await supabase.from("user").select("id, full_name");
+      const uMap = {};
+      (usersData || []).forEach(u => { uMap[u.id] = u; });
+      setUserMap(uMap);
 
       setOrders(ordersData || []);
       setMenus(menuData || []);
@@ -91,6 +101,13 @@ export default function TotalSalesReport() {
           isSet,
           payment_type: order?.payment_type || "cash",
           remark: order?.remark || null,
+          cancel_note: order?.cancel_note || null,
+          cancelled_by: order?.cancelled_by || null,
+          cancelled_at: order?.cancelled_at || null,
+          cancelled_by_name: userMap[order?.cancelled_by]?.full_name || null,
+          completed_by: order?.completed_by || null,
+          completed_at: order?.completed_at || null,
+          completed_by_name: userMap[order?.completed_by]?.full_name || null,
         };
       });
 
@@ -169,6 +186,13 @@ export default function TotalSalesReport() {
           payment_type: item.payment_type || "Cash",
           remark: item.remark || null,
           created_at: item.created_at,
+          cancel_note: order?.cancel_note || null,
+          cancelled_by: order?.cancelled_by || null,
+          cancelled_at: order?.cancelled_at || null,
+          cancelled_by_name: userMap[order?.cancelled_by]?.full_name || null,
+          completed_by: order?.completed_by || null,
+          completed_at: order?.completed_at || null,
+          completed_by_name: userMap[order?.completed_by]?.full_name || null,
         };
       }
       groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, original_price: item.original_price, isSet: item.isSet });
@@ -194,10 +218,12 @@ export default function TotalSalesReport() {
 
   // Calculate totals from slip data
   const getOrderTotals = () => {
-    const totalSubtotal = slipData.reduce((sum, s) => sum + s.subtotal, 0);
-    const totalDiscount = slipData.reduce((sum, s) => sum + s.discount_amount + s.item_discount, 0);
-    const totalTax = slipData.reduce((sum, s) => sum + s.tax_amount, 0);
-    const grandTotal = slipData.reduce((sum, s) => sum + s.total, 0);
+    // Exclude cancelled slips from totals
+    const activeSlips = slipData.filter((s) => !s.cancelled_at);
+    const totalSubtotal = activeSlips.reduce((sum, s) => sum + (s.subtotal || 0), 0);
+    const totalDiscount = activeSlips.reduce((sum, s) => sum + ((s.discount_amount || 0) + (s.item_discount || 0)), 0);
+    const totalTax = activeSlips.reduce((sum, s) => sum + (s.tax_amount || 0), 0);
+    const grandTotal = activeSlips.reduce((sum, s) => sum + (s.total || 0), 0);
 
     return { totalSubtotal, totalDiscount, totalTax, grandTotal };
   };
@@ -205,9 +231,10 @@ export default function TotalSalesReport() {
   const { totalSubtotal, totalDiscount, totalTax, grandTotal } = getOrderTotals();
 
   const exportToExcel = () => {
-    const exportData = slipData.map((slip) => {
+      const exportData = slipData.map((slip) => {
       const menusText = slip.menus.map(m => `${m.menu_name}${m.isSet ? ' (Set)' : ''} x${m.qty}`).join(", ");
-      const paymentText = slip.payment_type === "Cash" ? "Cash" : slip.payment_type === "Kpay" ? "Kpay" : "FOC";
+      const paymentText = slip.payment_type === "Cash" ? "Cash" : slip.payment_type === "Kpay" ? "Kpay" : slip.payment_type === "Coupon" ? "Coupon" : "FOC";
+      const completeText = slip.completed_by_name || slip.completed_by || "";
       const displayRemark = slip.remark || "";
       return {
         Slip_ID: slip.order_id,
@@ -218,6 +245,7 @@ export default function TotalSalesReport() {
         Tax: slip.tax_amount,
         Grand_Total: slip.total,
         Payment: paymentText,
+        Completed: completeText,
         Remark: displayRemark,
         Date: slip.created_at,
       };
@@ -319,16 +347,16 @@ export default function TotalSalesReport() {
 
           {/* Payment Type Filter */}
           <span className="text-sm font-medium text-gray-700 self-center">Payment:</span>
-          {["all", "Cash", "Kpay", "FOC"].map((p) => (
+          {["all", "Cash", "Kpay", "FOC", "Coupon"].map((p) => (
             <button
               key={p}
               onClick={() => {
                 setPaymentFilter(p);
                 setCurrentPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg capitalize ${
+                className={`px-3 py-1.5 rounded-lg capitalize ${
                 paymentFilter === p
-                  ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : "bg-blue-600 text-white"
+                  ? p === "Cash" ? "bg-green-600 text-white" : p === "Kpay" ? "bg-blue-600 text-white" : p === "FOC" ? "bg-purple-600 text-white" : p === "Coupon" ? "bg-yellow-600 text-white" : "bg-blue-600 text-white"
                   : "bg-white border"
               }`}
             >
@@ -383,17 +411,18 @@ export default function TotalSalesReport() {
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Grand Total</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Payment</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Remark</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Completed</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="10" className="text-center py-6">Loading...</td>
+                <td colSpan="12" className="text-center py-6">Loading...</td>
               </tr>
             ) : currentData.length === 0 ? (
               <tr>
-                <td colSpan="10" className="text-center py-6">No Data Found</td>
+                <td colSpan="12" className="text-center py-6">No Data Found</td>
               </tr>
             ) : (
               currentData.map((slip) => {
@@ -441,16 +470,28 @@ export default function TotalSalesReport() {
                   <td className="px-4 py-3 text-green-700 font-bold">{mmkFormatter.format(slip.total)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
+                      paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : paymentType === "Coupon" ? "bg-yellow-100 text-yellow-800" : "bg-purple-100 text-purple-800"
                     }`}>
-                      {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : "FOC"}
+                      {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : paymentType === "Coupon" ? "Coupon" : "FOC"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{displayRemark}</td>
+                  <td className="px-4 py-3 text-green-600">{slip.completed_by_name || slip.completed_by || '-'}</td>
                   <td className="px-4 py-3 text-gray-600">{new Date(slip.created_at).toLocaleDateString()}</td>
                 </tr>
               );
               })
+            )}
+            {/* Summary row for main table */}
+            {slipData.length > 0 && (
+              <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                <td colSpan="3" className="px-4 py-3 text-right text-slate-700">TOTAL</td>
+                <td className="px-4 py-3 text-right text-slate-700">{mmkFormatter.format(totalSubtotal)}</td>
+                <td className="px-4 py-3 text-right text-red-600">-{mmkFormatter.format(totalDiscount)}</td>
+                <td className="px-4 py-3 text-right text-blue-600">+{mmkFormatter.format(totalTax)}</td>
+                <td className="px-4 py-3 text-right text-green-700">{mmkFormatter.format(grandTotal)}</td>
+                <td colSpan="4"></td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -523,6 +564,7 @@ export default function TotalSalesReport() {
                         </head>
                         <body>
                           <div class="brand">Nosh POS</div>
+                          <div class="subtitle">Printed by: ${printedByName}</div>
                           ${printContent.innerHTML}
                           <script>window.onload = function() { window.print(); }</script>
                         </body>
@@ -541,9 +583,10 @@ export default function TotalSalesReport() {
             <div className="border border-slate-200 rounded-lg overflow-hidden flex-1 overflow-y-auto">
               <div id="print-sales-content" className="p-4">
                 <h1 className="text-lg font-bold text-slate-800 mb-1">Total Sales Report</h1>
-                <p className="text-sm text-slate-500 mb-4">
+                <p className="text-sm text-slate-500 mb-1">
                   Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
+                <p className="text-sm text-slate-500 mb-4">Printed by: {printedByName}</p>
 
                 {/* Table */}
                 <div className="overflow-x-auto">
@@ -583,9 +626,9 @@ export default function TotalSalesReport() {
                               <td className="px-4 py-3 text-right text-green-700 font-bold">{mmkFormatter.format(slip.total)}</td>
                               <td className="px-4 py-3 text-center">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
+                                  paymentType === "Cash" ? "bg-green-100 text-green-800" : paymentType === "Kpay" ? "bg-blue-100 text-blue-800" : paymentType === "Coupon" ? "bg-yellow-100 text-yellow-800" : "bg-purple-100 text-purple-800"
                                 }`}>
-                                  {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : "FOC"}
+                                  {paymentType === "Cash" ? "Cash" : paymentType === "Kpay" ? "Kpay" : paymentType === "Coupon" ? "Coupon" : "FOC"}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-slate-600">{slip.remark || "-"}</td>
