@@ -18,6 +18,7 @@ import TotalSalesReport from "./pages/TotalSalesReport";
 import UserCreate from "./pages/UserCreate";
 import InternalConsumption from "./pages/InternalConsumption";
 import DiscountType from "./pages/DiscountType";
+import CustomerService from "./pages/CustomerService";
 
 import PrivateRoute from "./pages/PrivateRoute";
 import Login from "./pages/ Login";
@@ -156,6 +157,7 @@ export default function App() {
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']}><UserCreate /></PrivateRoute>} />
             <Route path="/internal-consumption" element={<PrivateRoute user={user}><InternalConsumption inventory={inventory} setInventory={setInventory} /></PrivateRoute>} />
             <Route path="/discount-type" element={<PrivateRoute user={user} allowedRoles={['superadmin', 'admin']}><DiscountType /></PrivateRoute>} />
+            <Route path="/customer-service" element={<PrivateRoute user={user}><CustomerService /></PrivateRoute>} />
 
             {/* Unknown paths */}
             <Route path="*" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} />

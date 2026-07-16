@@ -128,6 +128,15 @@ export default function Sidebar({ isOpen }) {
           </NavLink>
         )}
 
+        <NavLink
+          to="/customer-service"
+          className={({ isActive }) =>
+            `${baseLink} ${isActive ? active : normal}`
+          }
+        >
+          Customer Service Request
+        </NavLink>
+
         {roleAccess.includes("report") && (
           <div>
             <button
