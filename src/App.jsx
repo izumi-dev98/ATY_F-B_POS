@@ -25,7 +25,7 @@ import InternalConsumption from "./pages/InternalConsumption";
 import DiscountType from "./pages/DiscountType";
 
 import PrivateRoute from "./pages/PrivateRoute";
-import Login from "./pages/ Login";
+import Login from "./pages/Login";
 import Logout from "./pages/Logout";
 
 import Supplier from "./pages/Supplier";

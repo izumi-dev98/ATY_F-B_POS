@@ -27,9 +27,6 @@ export default function Navbar({ toggleSidebar, theme, toggleTheme }) {
         <h1 className="text-base text-yellow-500 sm:text-lg font-bold  dark:text-yellow-500 glass:text-yellow-500">
          NOSH POS
         </h1>
-        <span className="hidden md:block text-sm ny-greeting">
-          🌼 နှစ်သစ်မှာ ရွှင်လန်း ချမ်းမြေ့ကြပါစေ
-        </span>
       </div>
 
       {/* Right: Theme toggle + Logged-in user */}

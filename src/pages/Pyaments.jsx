@@ -415,20 +415,22 @@ export default function Pyaments({ inventory, setInventory, user }) {
   };
 
   return (
-    <div className="min-h-screen p-6 bg-gray-100 grid grid-cols-1 lg:grid-cols-7 gap-8">
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-7">
       {/* Menu */}
-      <div className="bg-white rounded-2xl shadow-md p-6 lg:col-span-4">
-        <h2 className="text-3xl font-bold mb-5">Menu</h2>
-        <input
-          type="text"
-          placeholder="Search menu..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full p-3 mb-4 border rounded-xl"
-        />
+      <div className="bg-white rounded-2xl shadow-md p-6 lg:col-span-4 max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col">
+        <div className="sticky top-0 z-10 bg-white pb-4">
+          <h2 className="text-3xl font-bold mb-5">Menu</h2>
+          <input
+            type="text"
+            placeholder="Search menu..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full p-3 mb-4 border rounded-xl"
+          />
 
-        {/* Category Filter Tabs */}
-        <div className="mb-4 flex flex-wrap gap-2">
+          {/* Category Filter Tabs */}
+          <div className="mb-4 flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedCategory("all")}
             className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${
@@ -452,9 +454,11 @@ export default function Pyaments({ inventory, setInventory, user }) {
               {cat.name}
             </button>
           ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filteredMenu.map((item) => (
             <button
               key={`${item.id}-${item.isSet ? 'set' : 'menu'}`}
@@ -485,6 +489,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
               </div>
             </button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -496,7 +501,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
             {cart.length} item{cart.length === 1 ? "" : "s"}
           </span>
         </div>
-        <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto pr-1">
+          <div className="space-y-3">
           {cart.length === 0 ? (
             <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-slate-400">
               Your cart is empty
@@ -628,6 +634,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
             ))}
           </div>
         )}
+          </div>
         </div>
 
         {/* Discount Form */}
@@ -840,8 +847,8 @@ export default function Pyaments({ inventory, setInventory, user }) {
           </button>
         </div>
       </div>
+      </div>
     </div>
-    
   );
 }
 
