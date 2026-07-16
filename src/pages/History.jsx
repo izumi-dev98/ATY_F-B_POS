@@ -14,7 +14,10 @@ export default function History({ setInventory }) {
   const [endDate, setEndDate] = useState("");
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [fifoHistory, setFifoHistory] = useState({});
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const ordersPerPage = 8;
+  const initialBatchSize = 100;
 
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
     style: "currency",
@@ -69,45 +72,97 @@ export default function History({ setInventory }) {
     });
   };
 
-  // Fetch all orders, items, and menu
-  const fetchHistory = async () => {
+  const normalizeOrderId = (value) => String(value ?? "").trim();
+
+  // Fetch history in batches so large datasets do not overwhelm the page
+  const fetchHistory = async (loadMore = false) => {
     try {
+      if (loadMore) {
+        setLoadingMore(true);
+      }
+
+      const batchSize = loadMore ? 100 : initialBatchSize;
+      const offset = loadMore ? history.length : 0;
       const { data: orders, error: ordersErr } = await supabase
         .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (ordersErr) throw ordersErr;
+        .select("id, created_at, subtotal, discount_percent, discount_amount, tax_percent, tax_amount, total, status, payment_type, remark, discount_type, role, cancelled_by, completed_by, completed_at, cancelled_at, cancel_note")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + batchSize - 1);
 
-      const { data: orderItems, error: itemsErr } = await supabase
-        .from("order_items")
-        .select("*")
-        .order("id", { ascending: true });
-      if (itemsErr) throw itemsErr;
+      if (ordersErr) throw ordersErr;
+      if (!orders || orders.length === 0) {
+        setHasMore(false);
+        if (loadMore) {
+          setLoadingMore(false);
+        }
+        return;
+      }
+
+      const nextOrders = loadMore ? [...history, ...orders] : orders;
+      const allOrders = nextOrders;
+
+      if (allOrders.length === 0) {
+        setHistory([]);
+        setHasMore(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      const orderIds = allOrders.map((order) => order.id);
+      const chunkSize = 100;
+      let allOrderItems = [];
+
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: orderItemsChunk, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("id, order_id, menu_id, menu_set_id, qty, price, original_price")
+          .in("order_id", chunk)
+          .order("id", { ascending: true });
+
+        if (itemsErr) throw itemsErr;
+        allOrderItems = [...allOrderItems, ...(orderItemsChunk || [])];
+      }
+
+      const missingOrderIds = allOrders
+        .filter((order) => !allOrderItems.some((item) => normalizeOrderId(item.order_id) === normalizeOrderId(order.id)))
+        .map((order) => order.id);
+
+      if (missingOrderIds.length > 0) {
+        for (const orderId of missingOrderIds) {
+          const { data: fallbackItems, error: fallbackErr } = await supabase
+            .from("order_items")
+            .select("id, order_id, menu_id, menu_set_id, qty, price, original_price")
+            .eq("order_id", orderId)
+            .order("id", { ascending: true });
+
+          if (fallbackErr) throw fallbackErr;
+          allOrderItems = [...allOrderItems, ...(fallbackItems || [])];
+        }
+      }
 
       const { data: menuData, error: menuErr } = await supabase
         .from("menu")
-        .select("*");
+        .select("id, menu_name");
       if (menuErr) throw menuErr;
 
       const { data: menuSetsData, error: setsErr } = await supabase
         .from("menu_sets")
-        .select("*");
+        .select("id, set_name");
       if (setsErr) throw setsErr;
 
-      // Fetch users to resolve cancelled_by
       const { data: usersData } = await supabase.from("user").select("id, full_name");
       const userMap = {};
       (usersData || []).forEach((u) => { userMap[u.id] = u; });
 
       const { data: menuSetItemsData, error: setItemsErr } = await supabase
         .from("menu_set_items")
-        .select("*");
+        .select("set_id, menu_id");
       if (setItemsErr) throw setItemsErr;
 
-      const { data: ingData, error: ingErr } = await supabase.from("menu_ingredients").select("*");
+      const { data: ingData, error: ingErr } = await supabase.from("menu_ingredients").select("menu_id, inventory_id, qty");
       if (ingErr) throw ingErr;
 
-      // Build ingredients map
       const ingMap = {};
       ingData.forEach((ing) => {
         if (!ingMap[ing.menu_id]) ingMap[ing.menu_id] = [];
@@ -115,18 +170,15 @@ export default function History({ setInventory }) {
       });
       setIngredientsMap(ingMap);
 
-      // Build menu set items map
       const setItemsMap = {};
       menuSetItemsData.forEach((item) => {
         if (!setItemsMap[item.set_id]) setItemsMap[item.set_id] = [];
         setItemsMap[item.set_id].push(item);
       });
 
-      // Merge menu names
-      const historyData = orders.map((order) => {
-        const items = orderItems
-          .filter((i) => i.order_id === order.id)
-          .map((i) => {
+      const historyData = allOrders.map((order) => {
+        const matchedItems = allOrderItems.filter((i) => normalizeOrderId(i.order_id) === normalizeOrderId(order.id));
+        const items = matchedItems.map((i) => {
             if (i.menu_set_id) {
               const menuSet = menuSetsData.find((s) => s.id === i.menu_set_id);
               return {
@@ -135,14 +187,14 @@ export default function History({ setInventory }) {
                 isSet: true,
                 setItems: setItemsMap[i.menu_set_id] || [],
               };
-            } else {
-              return {
-                ...i,
-                menu_name: menuData.find((m) => m.id === i.menu_id)?.menu_name || "Unknown Menu",
-                isSet: false,
-              };
             }
+            return {
+              ...i,
+              menu_name: menuData.find((m) => m.id === i.menu_id)?.menu_name || "Unknown Menu",
+              isSet: false,
+            };
           });
+
         return {
           ...order,
           items,
@@ -152,14 +204,17 @@ export default function History({ setInventory }) {
       });
 
       setHistory(historyData);
+      setHasMore(orders.length === batchSize);
+      setLoadingMore(false);
     } catch (err) {
       console.error(err);
+      setLoadingMore(false);
       Swal.fire("Error", err.message || "Failed to fetch history", "error");
     }
   };
 
   useEffect(() => {
-    fetchHistory();
+    fetchHistory(false);
   }, []);
 
   // Filtered history based on search and date
@@ -744,7 +799,7 @@ export default function History({ setInventory }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedHistory.map((order , index) => {
               const statusBadge = getStatusBadge(order.status);
-              const subtotal = order.items.reduce((s, i) => s + ((i.original_price != null ? i.original_price : i.price) * i.qty), 0);
+              const subtotal = Number(order.subtotal ?? 0);
               const manualDiscount = order.items.reduce((s, i) => {
                 if (i.original_price != null && i.original_price > i.price) {
                   return s + (i.original_price - i.price) * i.qty;
@@ -758,7 +813,7 @@ export default function History({ setInventory }) {
                   <div className="mb-4">
                     <div className="flex justify-between items-center mb-2 cursor-pointer" onClick={() => toggleOrderDetails(order)}>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">Order #{index + 1}</span>
+                        <span className="text-sm">Order #{order.id}</span>
                         <span className="text-2xl text-gray-400">
                           {expandedOrder === order.id ? "−" : "+"}
                         </span>
@@ -774,7 +829,9 @@ export default function History({ setInventory }) {
                     </span>
 
                     <ul className="border-t border-b py-2 text-sm max-h-48 overflow-y-auto">
-                      {order.items.map((item, idx) => {
+                      {order.items.length === 0 ? (
+                        <li className="py-2 text-gray-400">No item data available for this order.</li>
+                      ) : order.items.map((item, idx) => {
                         const origTotal = item.original_price != null ? item.original_price * item.qty : item.price * item.qty;
                         const itemDisc = item.original_price != null ? (item.original_price - item.price) * item.qty : 0;
                         return (
@@ -933,11 +990,17 @@ export default function History({ setInventory }) {
             </button>
             <span className="text-sm text-slate-600">Page {page} of {totalPages}</span>
             <button
-              onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+              onClick={() => {
+                if (page < totalPages) {
+                  setPage((p) => Math.min(p + 1, totalPages));
+                } else if (hasMore) {
+                  fetchHistory(true);
+                }
+              }}
               className="px-3 py-1 rounded-lg bg-gray-200 hover:bg-gray-300 transition"
-              disabled={page === totalPages}
+              disabled={page === totalPages && !hasMore}
             >
-              Next
+              {loadingMore ? "Loading..." : "Next"}
             </button>
           </div>
         </>
