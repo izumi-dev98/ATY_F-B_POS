@@ -33,7 +33,7 @@ export default function Purchase({ setInventory }) {
     manual_credit: ""
   });
   const [lineItems, setLineItems] = useState([
-    { id: 1, item_name: "", qty: "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }
+    { id: 1, item_name: "", qty: "", buying_price : "", unit_price: "", total_price: "", type: "", inventory_id: "", foc_qty: "", expiry_date: "" }
   ]);
   const [nextItemId, setNextItemId] = useState(2);
   const [inventory, setInventoryLocal] = useState([]);
@@ -191,14 +191,25 @@ export default function Purchase({ setInventory }) {
           }
         }
 
-        // Recalculate total when qty, foc_qty, or unit_price changes
-        if (field === "qty" || field === "foc_qty" || field === "unit_price") {
-          const qty = field === "qty" ? parseFloat(value) || 0 : parseFloat(item.qty) || 0;
-          const focQty = field === "foc_qty" ? parseFloat(value) || 0 : parseFloat(item.foc_qty) || 0;
-          const price = field === "unit_price" ? parseFloat(value) || 0 : parseFloat(item.unit_price) || 0;
-          updated.total_price = calculateLineTotal(qty, focQty, price);
-        }
+       if (field === "qty" || field === "buying_price") {
 
+    const qty =
+        field === "qty"
+            ? parseFloat(value) || 0
+            : parseFloat(item.qty) || 0;
+
+    const buyingPrice =
+        field === "buying_price"
+            ? parseFloat(value) || 0
+            : parseFloat(item.buying_price) || 0;
+
+    updated.unit_price =
+        qty > 0
+            ? (buyingPrice / qty).toFixed(0)
+            : "";
+
+    updated.total_price = buyingPrice;
+}
         // If item_name changes, clear inventory_id (manual entry)
         if (field === "item_name") {
           updated.inventory_id = "";
@@ -215,8 +226,11 @@ export default function Purchase({ setInventory }) {
     const numericFocQty = parseFloat(focQty) || 0;
     const numericPrice = parseFloat(price) || 0;
     const billableQty = numericQty - numericFocQty;
-    return (billableQty * numericPrice).toFixed(2);
+    return ( numericPrice).toFixed(2);
   };
+
+
+
 
   const calculateSubTotal = () => {
     return lineItems.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
@@ -773,7 +787,8 @@ export default function Purchase({ setInventory }) {
                         <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">Qty</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-700 w-20">FOC</th>
                         <th className="px-3 py-2 text-left font-semibold text-slate-700 w-20">Unit</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Unit Price</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Buying Price</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Unit Per Price</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-700 w-36">Expiry Date</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-700 w-24">Total</th>
                         {canManage && <th className="px-3 py-2 w-10"></th>}
@@ -802,6 +817,9 @@ export default function Purchase({ setInventory }) {
                           </td>
                           <td className="px-3 py-2">
                             <input type="text" value={item.type} onChange={(e) => updateLineItem(item.id, "type", e.target.value)} placeholder="kg, pcs, box" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                          </td>
+                           <td className="px-3 py-2">
+                            <input type="number" value={item.buying_price} onChange={(e) => updateLineItem(item.id, "buying_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" value={item.unit_price} onChange={(e) => updateLineItem(item.id, "unit_price", e.target.value)} placeholder="0.00" min="0" step="0.01" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500" />

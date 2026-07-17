@@ -1092,7 +1092,7 @@ export default function InventoryReport() {
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Name</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Quantity</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Unit</th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Price</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Latest Buying Price</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Value</th>
                 </tr>
               </thead>
