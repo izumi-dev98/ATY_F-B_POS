@@ -191,7 +191,7 @@ ${reportData.map(row =>
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Usage Report</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Internal Usage Report</h1>
           <p className="text-sm text-slate-500 mt-1">View internal usage records only</p>
         </div>
         <div className="flex gap-2">
@@ -341,7 +341,6 @@ ${reportData.map(row =>
                                 return (
                                   <tr key={idx} className="border-t">
                                     <td className="py-2">{inv?.item_name || `Item ID: ${item.inventory_id}`}</td>
-                                    <td className="py-2">{categoryName}</td>
                                     <td className="py-2">{beforeQty}</td>
                                     <td className="py-2 text-red-600 font-medium">-{item.qty}</td>
                                     <td className="py-2 font-medium">{afterQty}</td>

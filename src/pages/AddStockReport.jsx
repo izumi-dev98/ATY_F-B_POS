@@ -16,6 +16,12 @@ export default function AddStockReport() {
   const itemsPerPage = 20;
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  const mmkFormatter = new Intl.NumberFormat("en-MM", {
+    style: "currency",
+    currency: "MMK",
+    maximumFractionDigits: 0,
+  });
+
   const user = JSON.parse(localStorage.getItem("user"));
 
   useEffect(() => {
@@ -127,6 +133,7 @@ export default function AddStockReport() {
 
   const exportToExcel = async () => {
     const reportData = [];
+    let grandTotal = 0;
     for (const record of filteredRecords) {
       const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
       for (const item of items.data || []) {
@@ -134,6 +141,9 @@ export default function AddStockReport() {
         const categoryName = categories.find((cat) => cat.id === item.add_stock_category_id)?.name || "-";
         const beforeQty = inv ? inv.qty - item.qty : item.qty;
         const afterQty = inv ? inv.qty : item.qty;
+        const unitPrice = Number(inv?.price || 0);
+        const lineTotal = unitPrice * (Number(item.qty) || 0);
+        grandTotal += lineTotal;
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
           "Record ID": record.id,
@@ -143,7 +153,8 @@ export default function AddStockReport() {
           "Added Qty": item.qty,
           "Closing Qty": afterQty,
           Unit: inv?.type || "-",
-          "User Name": record.user_name || user?.email || "Unknown",
+          "Unit Price": unitPrice,
+          "Line Total": lineTotal,
           Notes: record.notes || "-",
         });
       }
@@ -153,7 +164,7 @@ export default function AddStockReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>Closing Qty</td><td>Unit</td><td>Unit Price</td><td>Line Total</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
@@ -163,12 +174,15 @@ ${reportData.map(row =>
   <td>${row["Item Name"]}</td>
   <td>${row["Before Qty"]}</td>
   <td>${row["Added Qty"]}</td>
-  <td>${row["After Qty"]}</td>
+  <td>${row["Closing Qty"]}</td>
   <td>${row.Unit}</td>
+  <td>${mmkFormatter.format(row["Unit Price"])}</td>
+  <td>${mmkFormatter.format(row["Line Total"])}</td>
   <td>${row["User Name"]}</td>
   <td>${row.Notes}</td>
   </tr>`
 ).join("")}
+<tr style="font-weight:bold;"><td colspan="9">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td><td colspan="2"></td></tr>
 </table></body></html>`;
 
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
@@ -315,23 +329,45 @@ ${reportData.map(row =>
                                 <th className="pb-2">Added Qty</th>
                                 <th className="pb-2">Closing Qty</th>
                                 <th className="pb-2">Unit</th>
+                                <th className="pb-2">Unit Price</th>
+                                <th className="pb-2">Line Total</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {(recordItems[record.id] || []).map((item, idx) => {
-                                const inv = inventory.find((i) => i.id === item.inventory_id);
-                                const beforeQty = inv ? inv.qty - item.qty : item.qty;
-                                const afterQty = inv ? inv.qty : item.qty;
+                              {(() => {
+                                const items = recordItems[record.id] || [];
+                                const recordTotal = items.reduce((sum, item) => {
+                                  const inv = inventory.find((i) => i.id === item.inventory_id);
+                                  const unitPrice = Number(inv?.price || 0);
+                                  return sum + unitPrice * (Number(item.qty) || 0);
+                                }, 0);
                                 return (
-                                  <tr key={idx} className="border-t">
-                                    <td className="py-2">{inv?.item_name || `Item ID: ${item.inventory_id}`}</td>
-                                    <td className="py-2">{beforeQty}</td>
-                                    <td className="py-2 text-green-600 font-medium">+{item.qty}</td>
-                                    <td className="py-2 font-medium">{afterQty}</td>
-                                    <td className="py-2">{inv?.type || "-"}</td>
-                                  </tr>
+                                  <>
+                                    {items.map((item, idx) => {
+                                      const inv = inventory.find((i) => i.id === item.inventory_id);
+                                      const beforeQty = inv ? inv.qty - item.qty : item.qty;
+                                      const afterQty = inv ? inv.qty : item.qty;
+                                      const unitPrice = Number(inv?.price || 0);
+                                      const lineTotal = unitPrice * (Number(item.qty) || 0);
+                                      return (
+                                        <tr key={idx} className="border-t">
+                                          <td className="py-2">{inv?.item_name || `Item ID: ${item.inventory_id}`}</td>
+                                          <td className="py-2">{beforeQty}</td>
+                                          <td className="py-2 text-green-600 font-medium">+{item.qty}</td>
+                                          <td className="py-2 font-medium">{afterQty}</td>
+                                          <td className="py-2">{inv?.type || "-"}</td>
+                                          <td className="py-2">{mmkFormatter.format(unitPrice)}</td>
+                                          <td className="py-2">{mmkFormatter.format(lineTotal)}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                    <tr className="border-t bg-slate-100 font-semibold">
+                                      <td className="py-2" colSpan={6}>Record Total</td>
+                                      <td className="py-2">{mmkFormatter.format(recordTotal)}</td>
+                                    </tr>
+                                  </>
                                 );
-                              })}
+                              })()}
                             </tbody>
                           </table>
                         </td>

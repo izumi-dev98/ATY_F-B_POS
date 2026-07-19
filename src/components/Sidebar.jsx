@@ -132,19 +132,19 @@ export default function Sidebar({ isOpen }) {
                     Total Sales Report
                   </NavLink>
                 )}
+                {canAccess("report-add-stock") && (
+                  <NavLink to="/reports/add-stock" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
+                    Add Stock Report
+                  </NavLink>
+                )}
                 {canAccess("report-usage") && (
                   <NavLink to="/reports/usage" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
-                    Usage Report
+                    Internal Usage Report
                   </NavLink>
                 )}
                 {canAccess("report-sale-usage") && (
                   <NavLink to="/reports/sale-usage" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
                     Sale Usage Report
-                  </NavLink>
-                )}
-                {canAccess("report-add-stock") && (
-                  <NavLink to="/reports/add-stock" className={({ isActive }) => `${baseLink} text-xs ${isActive ? active : "text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 glass:text-slate-700 glass:hover:text-indigo-800 glass:hover:bg-white/35"}`}>
-                    Add Stock Report
                   </NavLink>
                 )}
                 {canAccess("report-purchase") && (
