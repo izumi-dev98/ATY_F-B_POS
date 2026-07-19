@@ -432,7 +432,7 @@ export default function TotalSalesReport() {
                     {m.menu_name}
                     {m.isSet && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">SET</span>}
                     {' x'}{m.qty}
-                    {slip.menus.indexOf(m) < slip.menus.length - 1 ? ', ' : ''}
+                    {slip.menus.indexOf(m) < slip.menus.length  ? ', ' : ''}
                   </span>
                 ));
                 const displayRemark = slip.remark || "-";
