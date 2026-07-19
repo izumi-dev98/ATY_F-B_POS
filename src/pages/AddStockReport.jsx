@@ -1,9 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import supabase from "../createClients";
 
 export default function AddStockReport() {
   const [records, setRecords] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [recordItemsMap, setRecordItemsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("all");
   const [customStart, setCustomStart] = useState("");
@@ -22,12 +25,27 @@ export default function AddStockReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [recordsRes, inventoryRes] = await Promise.all([
-        supabase.from("internal_consumption").select("*").eq("status", "add_stock").order("created_at", { ascending: false }),
-        supabase.from("inventory").select("*")
+      const [recordsRes, inventoryRes, categoriesRes] = await Promise.all([
+        supabase.from("internal_consumption").select("*").eq("status", "add_stock").order("created_at", { ascending: false }).range(0, 9999),
+        supabase.from("inventory").select("*").range(0, 9999),
+        supabase.from("add_stock_categories").select("*").order("id", { ascending: true }).range(0, 9999),
       ]);
+
+      const recordIds = (recordsRes.data || []).map((r) => r.id);
+      const itemsRes = recordIds.length > 0
+        ? await supabase.from("internal_consumption_items").select("*").in("consumption_id", recordIds).range(0, 9999)
+        : { data: [] };
+
+      const recordMap = {};
+      (itemsRes.data || []).forEach((item) => {
+        if (!recordMap[item.consumption_id]) recordMap[item.consumption_id] = [];
+        recordMap[item.consumption_id].push(item);
+      });
+
+      setRecordItemsMap(recordMap);
       setRecords(recordsRes.data || []);
       setInventory(inventoryRes.data || []);
+      setCategories(categoriesRes.data || []);
     } catch (err) {
       console.error("Error:", err);
     }
@@ -69,6 +87,12 @@ export default function AddStockReport() {
       if (startDate && recordDate < startDate) return false;
       if (endDate && recordDate > endDate) return false;
 
+      if (selectedCategory !== "all") {
+        const items = recordItemsMap[record.id] || [];
+        const matchesCategory = items.some((item) => item.add_stock_category_id === Number(selectedCategory));
+        if (!matchesCategory) return false;
+      }
+
       if (recordSearch) {
         const searchLower = recordSearch.toLowerCase();
         const matchesId = record.id.toString().includes(searchLower);
@@ -79,7 +103,7 @@ export default function AddStockReport() {
 
       return true;
     });
-  }, [records, dateFilter, customStart, customEnd, recordSearch]);
+  }, [records, dateFilter, customStart, customEnd, recordSearch, selectedCategory, recordItemsMap, inventory]);
 
   const [expandedRecords, setExpandedRecords] = useState({});
   const [recordItems, setRecordItems] = useState({});
@@ -107,11 +131,13 @@ export default function AddStockReport() {
       const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
       for (const item of items.data || []) {
         const inv = inventory.find((i) => i.id === item.inventory_id);
+        const categoryName = categories.find((cat) => cat.id === item.add_stock_category_id)?.name || "-";
         const beforeQty = inv ? inv.qty - item.qty : item.qty;
         const afterQty = inv ? inv.qty : item.qty;
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
           "Record ID": record.id,
+          "Category": categoryName,
           "Item Name": inv?.item_name || "Unknown",
           "Before Qty": beforeQty,
           "Added Qty": item.qty,
@@ -127,12 +153,13 @@ export default function AddStockReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
   <td>${row.Date}</td>
   <td>${row["Record ID"]}</td>
+  <td>${row.Category}</td>
   <td>${row["Item Name"]}</td>
   <td>${row["Before Qty"]}</td>
   <td>${row["Added Qty"]}</td>
@@ -201,6 +228,19 @@ ${reportData.map(row =>
               <option value="custom">Custom Date</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 border rounded-lg"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id.toString()}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
           {dateFilter === "custom" && (
             <>
               <div>
@@ -229,6 +269,7 @@ ${reportData.map(row =>
         </div>
       </div>
 
+
       {loading ? (
         <div className="text-center py-10">Loading...</div>
       ) : filteredRecords.length === 0 ? (
@@ -248,8 +289,8 @@ ${reportData.map(row =>
               </thead>
               <tbody>
                 {paginatedRecords.map((record) => (
-                  <>
-                    <tr key={record.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
+                  <Fragment key={record.id}>
+                    <tr className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
                       <td className="px-4 py-3">
                         <button
                           onClick={() => toggleRecord(record.id)}
@@ -296,7 +337,7 @@ ${reportData.map(row =>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -333,6 +374,9 @@ ${reportData.map(row =>
                 <h3 className="text-xl font-bold text-slate-800">Add Stock Report</h3>
                 <p className="text-sm text-slate-500">
                   Generated: {new Date().toLocaleDateString('en-MM', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Category filter: {selectedCategory === "all" ? "All Categories" : categories.find((cat) => cat.id.toString() === selectedCategory)?.name || "Unknown"}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -390,25 +434,32 @@ ${reportData.map(row =>
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredRecords.length === 0 ? (
-                        <tr><td colSpan="4" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
+                        <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
                       ) : (
-                        filteredRecords.map((record) => (
-                          <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
-                            <td className="px-4 py-3 font-medium text-slate-700">#{record.id}</td>
-                            <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
-                            <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
-                            <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
-                          </tr>
-                        ))
+                        filteredRecords.map((record) => {
+                          const categoryName = recordItemsMap[record.id]?.length
+                            ? categories.find((cat) => cat.id === recordItemsMap[record.id][0].add_stock_category_id)?.name || "-"
+                            : "-";
+                          return (
+                            <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                              <td className="px-4 py-3 font-medium text-slate-700">#{record.id}</td>
+                              <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-slate-600">{categoryName}</td>
+                              <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
+                              <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
+                            </tr>
+                          );
+                        })
                       )}
                       <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
-                        <td colSpan="4" className="px-4 py-3 text-left text-slate-700">
+                        <td colSpan="5" className="px-4 py-3 text-left text-slate-700">
                           Total: {filteredRecords.length} record(s)
                         </td>
                       </tr>

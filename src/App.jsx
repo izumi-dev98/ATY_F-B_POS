@@ -35,6 +35,7 @@ import PurchaseReport from "./pages/PurchaseReport";
 import PurchaseReturnReport from "./pages/PurchaseReturnReport";
 import ExpiredReport from "./pages/ExpiredReport";
 import SupplierOutstanding from "./pages/SupplierOutstanding";
+import SaleUsageReport from "./pages/SaleUsageReport";
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(window.innerWidth >= 768);
@@ -245,6 +246,7 @@ export default function App() {
             <Route path="/reports/total-sales" element={<PrivateRoute user={user} allowedFeatures={['report-total-sales']}><TotalSalesReport /></PrivateRoute>} />
             <Route path="/reports/usage" element={<PrivateRoute user={user} allowedFeatures={['report-usage']}><UsageReport /></PrivateRoute>} />
             <Route path="/reports/add-stock" element={<PrivateRoute user={user} allowedFeatures={['report-add-stock']}><AddStockReport /></PrivateRoute>} />
+            <Route path="/reports/sale-usage" element={<PrivateRoute user={user} allowedFeatures={['report-sale-usage']}><SaleUsageReport /></PrivateRoute>} />
             <Route path="/reports/profit-loss" element={<PrivateRoute user={user} allowedFeatures={['report-profit-loss']}><ProfitLossReport /></PrivateRoute>} />
             <Route path="/user-create" element={<PrivateRoute user={user} allowedRoles={['superadmin']} allowedFeatures={['user-create']}><UserCreate /></PrivateRoute>} />
             <Route path="/user-right" element={<PrivateRoute user={user} allowedRoles={['superadmin']} allowedFeatures={['user-right']}><UserRight /></PrivateRoute>} />

@@ -9,6 +9,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [selectedAddItems, setSelectedAddItems] = useState([]);
+  const [addStockCategories, setAddStockCategories] = useState([]);
+  const [usageStockCategories, setUsageStockCategories] = useState([]);
   const [formData, setFormData] = useState({
     notes: "",
   });
@@ -91,9 +93,39 @@ export default function InternalConsumption({ inventory, setInventory }) {
     }
   };
 
+  const fetchAddStockCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("add_stock_categories")
+        .select("*")
+        .order("id", { ascending: true });
+      if (error) throw error;
+      setAddStockCategories(data || []);
+    } catch (err) {
+      console.error("Error fetching add stock categories:", err);
+      setAddStockCategories([]);
+    }
+  };
+
+  const fetchUsageStockCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("usage_stock_categories")
+        .select("*")
+        .order("id", { ascending: true });
+      if (error) throw error;
+      setUsageStockCategories(data || []);
+    } catch (err) {
+      console.error("Error fetching usage stock categories:", err);
+      setUsageStockCategories([]);
+    }
+  };
+
   useEffect(() => {
     fetchRecords();
     fetchLatestPrices();
+    fetchAddStockCategories();
+    fetchUsageStockCategories();
   }, []);
 
   // Filter records by date
@@ -165,7 +197,8 @@ export default function InternalConsumption({ inventory, setInventory }) {
       if (exists) {
         return prev.filter((i) => i.id !== item.id);
       }
-      return [...prev, { ...item, usage_qty: "", reason: "" }];
+      const defaultUsageCategoryId = usageStockCategories?.[0]?.id ?? null;
+      return [...prev, { ...item, usage_qty: "", reason: "", usage_stock_category_id: defaultUsageCategoryId }];
     });
   };
 
@@ -185,6 +218,14 @@ export default function InternalConsumption({ inventory, setInventory }) {
     );
   };
 
+  const updateItemUsageCategory = (itemId, categoryId) => {
+    setSelectedItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, usage_stock_category_id: categoryId } : i,
+      ),
+    );
+  };
+
   // Add Stock Functions
   const toggleAddItemSelection = (item) => {
     setSelectedAddItems((prev) => {
@@ -194,7 +235,13 @@ export default function InternalConsumption({ inventory, setInventory }) {
       }
       const itemKey = item.item_name?.toLowerCase().trim();
       const autoLatestPrice = latestPrices[itemKey] ?? item.price ?? 0;
-      return [...prev, { ...item, add_qty: "", add_price: autoLatestPrice }];
+      const defaultCategoryId = addStockCategories?.[0]?.id ?? null;
+      return [...prev, {
+        ...item,
+        add_qty: "",
+        add_price: autoLatestPrice,
+        add_stock_category_id: defaultCategoryId,
+      }];
     });
   };
 
@@ -210,6 +257,14 @@ export default function InternalConsumption({ inventory, setInventory }) {
     setSelectedAddItems((prev) =>
       prev.map((i) =>
         i.id === itemId ? { ...i, add_price: price } : i,
+      ),
+    );
+  };
+
+  const updateItemAddCategory = (itemId, categoryId) => {
+    setSelectedAddItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, add_stock_category_id: categoryId } : i,
       ),
     );
   };
@@ -272,6 +327,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
               inventory_id: item.id,
               qty: addQty,
               unit_price: addPrice,
+              add_stock_category_id: item.add_stock_category_id || null,
             });
 
           if (result.error) {
@@ -421,6 +477,7 @@ export default function InternalConsumption({ inventory, setInventory }) {
           consumption_id: record.id,
           inventory_id: item.id,
           qty: usageQty,
+          usage_stock_category_id: item.usage_stock_category_id || null,
         });
 
         // Deduct inventory from current inventory
@@ -1023,11 +1080,30 @@ export default function InternalConsumption({ inventory, setInventory }) {
                   <div className="space-y-3">
                     {selectedItems.map((item) => (
                       <div key={item.id} className="p-3 bg-gray-50 rounded-xl">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{item.item_name}</p>
+                            <p className="text-sm text-gray-500">
+                              Stock: {item.qty} {item.unit}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2 min-w-45">
+                            <label className="text-xs font-medium text-slate-600">Usage Stock Category</label>
+                            <select
+                              value={item.usage_stock_category_id || ""}
+                              onChange={(e) => updateItemUsageCategory(item.id, e.target.value ? Number(e.target.value) : null)}
+                              className="w-full px-3 py-2 border rounded-xl text-sm"
+                            >
+                              <option value="">Select category</option>
+                              {usageStockCategories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="flex-1 text-sm font-medium">{item.item_name}</span>
-                          <span className="text-sm text-gray-500">
-                            Stock: {item.qty} {item.unit}
-                          </span>
                           <input
                             type="number"
                             step="any"
@@ -1216,14 +1292,34 @@ export default function InternalConsumption({ inventory, setInventory }) {
                       const latestPrice = latestPrices[item.item_name?.toLowerCase().trim()];
                       const displayPrice = latestPrice ?? item.price ?? 0;
                       return (
-                        <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-800 rounded-lg">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.item_name}</p>
-                            <p className="text-xs text-gray-500">
-                              Auto Price: {displayPrice ? mmkFormatter.format(displayPrice) : "-"}
-                            </p>
+                        <div key={item.id} className="flex flex-col gap-3 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.item_name}</p>
+                              <p className="text-xs text-gray-500">
+                                Auto Price: {displayPrice ? mmkFormatter.format(displayPrice) : "-"}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Current Stock: {item.qty} {item.type}
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-2 min-w-45">
+                              <label className="text-xs font-medium text-slate-600">Add Stock Category</label>
+                              <select
+                                value={item.add_stock_category_id || ""}
+                                onChange={(e) => updateItemAddCategory(item.id, e.target.value ? Number(e.target.value) : null)}
+                                className="w-full px-3 py-2 border rounded-xl text-sm"
+                              >
+                                <option value="">Select category</option>
+                                {addStockCategories.map((cat) => (
+                                  <option key={cat.id} value={cat.id}>
+                                    {cat.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                             <input
                               type="number"
                               step="any"

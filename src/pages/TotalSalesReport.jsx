@@ -37,64 +37,105 @@ export default function TotalSalesReport() {
     maximumFractionDigits: 0,
   });
 
+  const toNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch completed and cancelled orders for report (include cancelled so cancel info and totals show)
+      console.log("TotalSalesReport.fetchData: start");
+      // Fetch orders for report, then filter completed/cancelled locally to avoid case mismatch issues
       const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
         .select("*")
-        .in("status", ["completed", "cancelled"])
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(0, 9999);
       if (ordersErr) throw ordersErr;
 
-      const orderIds = ordersData.map(o => o.id);
+      const orderIds = (ordersData || []).map((o) => String(o.id));
 
-      // Fetch order items only for completed orders
-      let items;
+      // Fetch order items for selected orders in chunks (Supabase defaults to 100 rows)
+      let items = [];
       if (orderIds.length > 0) {
-        const { data } = await supabase
-          .from("order_items")
-          .select("*")
-          .in("order_id", orderIds);
-        items = data || [];
-      } else {
-        items = [];
+        const chunkSize = 100;
+        for (let i = 0; i < orderIds.length; i += chunkSize) {
+          const chunk = orderIds.slice(i, i + chunkSize).map((id) => Number(id));
+          const { data: chunkData, error: chunkErr } = await supabase
+            .from("order_items")
+            .select("*")
+            .in("order_id", chunk)
+            .order("id", { ascending: true })
+            .range(0, 9999);
+          if (chunkErr) throw chunkErr;
+          items = items.concat(chunkData || []);
+        }
       }
 
-      const { data: menuData, error: menuErr } = await supabase.from("menu").select("id, menu_name");
+      // Targeted debug: explicitly query order_items for slip 1296 if not present
+      try {
+        const has1296 = (items || []).some(it => Number(it.order_id) === 1296);
+        if (!has1296) {
+          const { data: single1296, error: singleErr } = await supabase
+            .from('order_items')
+            .select('*')
+            .eq('order_id', 1296);
+          console.log('TotalSalesReport: direct fetch for order_items where order_id=1296', { rows: (single1296 || []).length, error: singleErr, sample: (single1296 || []).slice(0,5) });
+        }
+      } catch (err) {
+        console.error('TotalSalesReport: direct fetch 1296 failed', err);
+      }
+
+      const { data: menuData, error: menuErr } = await supabase.from("menu").select("id, menu_name").range(0, 9999);
       if (menuErr) throw menuErr;
 
-      const { data: menuSetsData, error: setsErr } = await supabase.from("menu_sets").select("id, set_name");
+      const { data: menuSetsData, error: setsErr } = await supabase.from("menu_sets").select("id, set_name").range(0, 9999);
       if (setsErr) throw setsErr;
 
       // Fetch users to map cancelled_by and completed_by
-      const { data: usersData } = await supabase.from("user").select("id, full_name");
+      const { data: usersData } = await supabase.from("user").select("id, full_name").range(0, 9999);
       const uMap = {};
-      (usersData || []).forEach(u => { uMap[u.id] = u; });
+      (usersData || []).forEach((u) => {
+        uMap[u.id] = u;
+      });
       setUserMap(uMap);
 
       setOrders(ordersData || []);
       setMenus(menuData || []);
 
       const merged = (items || []).map((item) => {
-        const order = (ordersData || []).find((o) => o.id === item.order_id);
-        let menu_name = "Unknown";
+        const itemOrderId = Number(item.order_id);
+        const order = (ordersData || []).find((o) => o.id === itemOrderId);
+        let menu_name = item.menu_name || "Unknown";
         let isSet = false;
 
         if (item.menu_set_id) {
-          const menuSet = (menuSetsData || []).find((s) => s.id === item.menu_set_id);
-          menu_name = menuSet?.set_name || "Unknown Set";
+          const menuSet = (menuSetsData || []).find((s) => String(s.id) === String(item.menu_set_id));
+          menu_name = menu_name !== "Unknown" ? menu_name : menuSet?.set_name || "Unknown Set";
           isSet = true;
         } else {
-          const menu = (menuData || []).find((m) => m.id === item.menu_id);
-          menu_name = menu?.menu_name || "Unknown";
+          const menu = (menuData || []).find((m) => String(m.id) === String(item.menu_id));
+          menu_name = menu_name !== "Unknown" ? menu_name : menu?.menu_name || "Unknown";
+        }
+
+        const qty = toNumber(item.qty);
+        const price = toNumber(item.price);
+        const original_price = item.original_price != null ? toNumber(item.original_price, null) : null;
+
+        if (qty < 0) {
+          console.warn("Negative order item qty in TotalSalesReport:", item.order_id, item.menu_name, qty);
         }
 
         return {
           ...item,
-          total: order?.total || 0,
-          discount_percent: order?.discount_percent || 0,
+          order_id: itemOrderId,
+          qty,
+          price,
+          original_price,
+          status: order?.status || null,
+          total: toNumber(order?.total),
+          discount_percent: toNumber(order?.discount_percent),
           created_at: order?.created_at,
           menu_name,
           discount_type: order?.discount_type || null,
@@ -104,14 +145,26 @@ export default function TotalSalesReport() {
           cancel_note: order?.cancel_note || null,
           cancelled_by: order?.cancelled_by || null,
           cancelled_at: order?.cancelled_at || null,
-          cancelled_by_name: userMap[order?.cancelled_by]?.full_name || null,
+          cancelled_by_name: uMap[order?.cancelled_by]?.full_name || null,
           completed_by: order?.completed_by || null,
           completed_at: order?.completed_at || null,
-          completed_by_name: userMap[order?.completed_by]?.full_name || null,
+          completed_by_name: uMap[order?.completed_by]?.full_name || null,
         };
       });
 
       merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      // More visible logs
+      try {
+        console.log("TotalSalesReport: orders fetched", (ordersData || []).length, "orderItems fetched", (items || []).length);
+        console.log("TotalSalesReport: orderIds sample", (orderIds || []).slice(0, 20));
+        console.log("TotalSalesReport: order statuses sample", (ordersData || []).slice(0, 20).map(o => ({ id: o.id, status: o.status })));
+        console.log("TotalSalesReport: unique orderIds in items", new Set((items || []).map(it => String(it.order_id))).size);
+        console.log("TotalSalesReport: ordersData has 1296?", (ordersData || []).some(o => Number(o.id) === 1296));
+        console.log("TotalSalesReport: order_items has 1296?", (items || []).some(it => Number(it.order_id) === 1296));
+        console.log("TotalSalesReport: merged has 1296?", merged.some(m => Number(m.order_id) === 1296));
+      } catch (e) {
+        console.error("TotalSalesReport debug log failed", e);
+      }
       setOrderItems(merged);
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -126,85 +179,110 @@ export default function TotalSalesReport() {
 
   const now = new Date();
 
-  const filteredData = orderItems.filter((item) => {
-    const date = new Date(item.created_at);
+  const filteredOrders = orders
+    .filter((order) => String(order.status || "").toLowerCase() === "completed")
+    .filter((order) => {
+      const date = new Date(order.created_at);
 
-    // Custom filter has priority
-    if (customStart && customEnd) {
-      const start = new Date(customStart);
-      const end = new Date(customEnd);
-      end.setHours(23, 59, 59, 999);
-      return date >= start && date <= end;
-    }
-
-    // Preset filters
-    switch (presetFilter) {
-      case "day":
-        return (
-          date.getDate() === now.getDate() &&
-          date.getMonth() === now.getMonth() &&
-          date.getFullYear() === now.getFullYear()
-        );
-      case "week": {
-        const weekAgo = new Date();
-        weekAgo.setDate(now.getDate() - 7);
-        return date >= weekAgo;
+      // Custom filter has priority
+      if (customStart && customEnd) {
+        const start = new Date(customStart);
+        const end = new Date(customEnd);
+        end.setHours(23, 59, 59, 999);
+        return date >= start && date <= end;
       }
-      case "month":
-        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      case "year":
-        return date.getFullYear() === now.getFullYear();
-      default:
-        return true;
-    }
-  }).filter((item) => item.menu_name.toLowerCase().includes(search.toLowerCase()))
-  .filter((item) => {
-    if (paymentFilter === "all") return true;
-    const paymentType = item.payment_type || "Cash";
-    return paymentType === paymentFilter;
-  });
 
-  // Group order items by slip (order_id)
+      // Preset filters
+      switch (presetFilter) {
+        case "day":
+          return (
+            date.getDate() === now.getDate() &&
+            date.getMonth() === now.getMonth() &&
+            date.getFullYear() === now.getFullYear()
+          );
+        case "week": {
+          const weekAgo = new Date();
+          weekAgo.setDate(now.getDate() - 7);
+          return date >= weekAgo;
+        }
+        case "month":
+          return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+        case "year":
+          return date.getFullYear() === now.getFullYear();
+        default:
+          return true;
+      }
+    })
+    .filter((order) => {
+      if (paymentFilter === "all") return true;
+      return (order.payment_type || "Cash") === paymentFilter;
+    })
+    .filter((order) => {
+      const searchLower = search.toLowerCase().trim();
+      if (!searchLower) return true;
+
+      const orderMatches = String(order.id).includes(searchLower);
+      const itemMatches = orderItems.some(
+        (item) => String(item.order_id) === String(order.id) && item.menu_name?.toLowerCase().includes(searchLower)
+      );
+
+      return orderMatches || itemMatches;
+    });
+
+  const filteredOrderIds = new Set(filteredOrders.map((order) => String(order.id)));
+  const filteredItems = orderItems.filter((item) => filteredOrderIds.has(String(item.order_id)));
+
+  // Group orders by slip (order_id), including orders with no order items
   const groupedBySlip = () => {
     const groups = {};
-    filteredData.forEach((item) => {
-      if (!groups[item.order_id]) {
-        const order = orders.find((o) => o.id === item.order_id);
-        groups[item.order_id] = {
-          order_id: item.order_id,
-          menus: [],
-          qty: 0,
-          price: 0,
-          item_total: 0,
-          subtotal: 0,
-          item_discount: 0,
-          discount_amount: order?.discount_amount || 0,
-          discount_percent: order?.discount_percent || 0,
-          discount_type: order?.discount_type || null,
-          tax_amount: order?.tax_amount || 0,
-          total: order?.total || 0,
-          payment_type: item.payment_type || "Cash",
-          remark: item.remark || null,
-          created_at: item.created_at,
-          cancel_note: order?.cancel_note || null,
-          cancelled_by: order?.cancelled_by || null,
-          cancelled_at: order?.cancelled_at || null,
-          cancelled_by_name: userMap[order?.cancelled_by]?.full_name || null,
-          completed_by: order?.completed_by || null,
-          completed_at: order?.completed_at || null,
-          completed_by_name: userMap[order?.completed_by]?.full_name || null,
-        };
-      }
-      groups[item.order_id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, original_price: item.original_price, isSet: item.isSet });
-      groups[item.order_id].qty += item.qty;
-      groups[item.order_id].price += item.price;
-      if (item.original_price != null) {
-        groups[item.order_id].item_discount += (item.original_price - item.price) * item.qty;
-      }
-      groups[item.order_id].item_total += item.qty * item.price;
-      // Use original_price for subtotal if available, otherwise use current price
-      groups[item.order_id].subtotal += (item.original_price != null ? item.original_price : item.price) * item.qty;
+    const itemsByOrder = {};
+
+    filteredItems.forEach((item) => {
+      const orderId = Number(item.order_id);
+      if (!itemsByOrder[orderId]) itemsByOrder[orderId] = [];
+      itemsByOrder[orderId].push(item);
     });
+
+    filteredOrders.forEach((order) => {
+      const itemsForOrder = itemsByOrder[order.id] || [];
+      groups[order.id] = {
+        order_id: order.id,
+        menus: [],
+        qty: 0,
+        price: 0,
+        item_total: 0,
+        subtotal: 0,
+        item_discount: 0,
+        discount_amount: toNumber(order?.discount_amount),
+        discount_percent: toNumber(order?.discount_percent),
+        discount_type: order?.discount_type || null,
+        tax_amount: toNumber(order?.tax_amount),
+        total: toNumber(order?.total),
+        status: order?.status || null,
+        payment_type: order?.payment_type || "Cash",
+        remark: order?.remark || null,
+        created_at: order.created_at,
+        cancel_note: order?.cancel_note || null,
+        cancelled_by: order?.cancelled_by || null,
+        cancelled_at: order?.cancelled_at || null,
+        cancelled_by_name: userMap[order?.cancelled_by]?.full_name || null,
+        completed_by: order?.completed_by || null,
+        completed_at: order?.completed_at || null,
+        completed_by_name: userMap[order?.completed_by]?.full_name || null,
+      };
+
+      itemsForOrder.forEach((item) => {
+        groups[order.id].menus.push({ menu_name: item.menu_name, qty: item.qty, price: item.price, original_price: item.original_price, isSet: item.isSet });
+        groups[order.id].qty += toNumber(item.qty);
+        groups[order.id].price += toNumber(item.price);
+        if (item.original_price != null) {
+          groups[order.id].item_discount += (toNumber(item.original_price) - toNumber(item.price)) * toNumber(item.qty);
+        }
+        groups[order.id].item_total += toNumber(item.qty) * toNumber(item.price);
+        groups[order.id].subtotal += (item.original_price != null ? toNumber(item.original_price) : toNumber(item.price)) * toNumber(item.qty);
+      });
+    });
+
     return Object.values(groups).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
@@ -218,12 +296,13 @@ export default function TotalSalesReport() {
 
   // Calculate totals from slip data
   const getOrderTotals = () => {
-    // Exclude cancelled slips from totals
-    const activeSlips = slipData.filter((s) => !s.cancelled_at);
-    const totalSubtotal = activeSlips.reduce((sum, s) => sum + (s.subtotal || 0), 0);
-    const totalDiscount = activeSlips.reduce((sum, s) => sum + ((s.discount_amount || 0) + (s.item_discount || 0)), 0);
-    const totalTax = activeSlips.reduce((sum, s) => sum + (s.tax_amount || 0), 0);
-    const grandTotal = activeSlips.reduce((sum, s) => sum + (s.total || 0), 0);
+    // Totals are calculated for completed orders only
+    const totalSlips = slipData.filter((s) => s.status === "completed");
+
+    const totalSubtotal = totalSlips.reduce((sum, s) => sum + (s.subtotal || 0), 0);
+    const totalDiscount = totalSlips.reduce((sum, s) => sum + ((s.discount_amount || 0) + (s.item_discount || 0)), 0);
+    const totalTax = totalSlips.reduce((sum, s) => sum + (s.tax_amount || 0), 0);
+    const grandTotal = totalSlips.reduce((sum, s) => sum + (s.total || 0), 0);
 
     return { totalSubtotal, totalDiscount, totalTax, grandTotal };
   };
@@ -344,7 +423,7 @@ export default function TotalSalesReport() {
               </button>
             </>
           )}
-
+          {/* (Status filter removed - showing completed orders only) */}
           {/* Payment Type Filter */}
           <span className="text-sm font-medium text-gray-700 self-center">Payment:</span>
           {["all", "Cash", "Kpay", "FOC", "Coupon"].map((p) => (
@@ -427,12 +506,12 @@ export default function TotalSalesReport() {
             ) : (
               currentData.map((slip) => {
                 const paymentType = slip.payment_type || "Cash";
-                const menusText = slip.menus.map(m => (
-                  <span key={m.menu_name}>
+                const menusText = slip.menus.map((m, idx) => (
+                  <span key={`${slip.order_id}-${idx}`}>
                     {m.menu_name}
                     {m.isSet && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">SET</span>}
                     {' x'}{m.qty}
-                    {slip.menus.indexOf(m) < slip.menus.length  ? ', ' : ''}
+                    {idx < slip.menus.length - 1 ? ', ' : ''}
                   </span>
                 ));
                 const displayRemark = slip.remark || "-";

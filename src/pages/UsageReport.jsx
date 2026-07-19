@@ -4,7 +4,9 @@ import supabase from "../createClients";
 export default function UsageReport() {
   const [records, setRecords] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [orderUsageItemsMap, setOrderUsageItemsMap] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [internalRecordItemsMap, setInternalRecordItemsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("all");
   const [customStart, setCustomStart] = useState("");
@@ -23,20 +25,10 @@ export default function UsageReport() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [
-        recordsRes,
-        inventoryRes,
-        ordersRes,
-        orderItemsRes,
-        menuIngredientsRes,
-        menuSetItemsRes,
-      ] = await Promise.all([
-        supabase.from("internal_consumption").select("*").eq("status", "completed").order("created_at", { ascending: false }),
-        supabase.from("inventory").select("*"),
-        supabase.from("orders").select("*").eq("status", "completed").order("created_at", { ascending: false }),
-        supabase.from("order_items").select("*"),
-        supabase.from("menu_ingredients").select("*"),
-        supabase.from("menu_set_items").select("*"),
+      const [recordsRes, inventoryRes, categoriesRes] = await Promise.all([
+        supabase.from("internal_consumption").select("*").eq("status", "completed").order("created_at", { ascending: false }).range(0, 9999),
+        supabase.from("inventory").select("*").range(0, 9999),
+        supabase.from("usage_stock_categories").select("*").order("id", { ascending: true }).range(0, 9999),
       ]);
 
       const internalRecords = (recordsRes.data || []).map((r) => ({
@@ -45,73 +37,21 @@ export default function UsageReport() {
         display_id: `IC-${r.id}`,
       }));
 
-      const orderRecords = [];
-      const computedOrderItemsMap = {};
+      const internalRecordIds = (recordsRes.data || []).map((r) => r.id);
+      const internalItemsRes = internalRecordIds.length > 0
+        ? await supabase.from("internal_consumption_items").select("*").in("consumption_id", internalRecordIds).range(0, 9999)
+        : { data: [] };
 
-      const orderItemsByOrder = {};
-      (orderItemsRes.data || []).forEach((item) => {
-        if (!orderItemsByOrder[item.order_id]) orderItemsByOrder[item.order_id] = [];
-        orderItemsByOrder[item.order_id].push(item);
+      const internalRecordItemsMap = {};
+      (internalItemsRes.data || []).forEach((item) => {
+        if (!internalRecordItemsMap[item.consumption_id]) internalRecordItemsMap[item.consumption_id] = [];
+        internalRecordItemsMap[item.consumption_id].push(item);
       });
 
-      const ingredientsByMenu = {};
-      (menuIngredientsRes.data || []).forEach((ing) => {
-        if (!ingredientsByMenu[ing.menu_id]) ingredientsByMenu[ing.menu_id] = [];
-        ingredientsByMenu[ing.menu_id].push(ing);
-      });
-
-      const setItemsBySet = {};
-      (menuSetItemsRes.data || []).forEach((setItem) => {
-        if (!setItemsBySet[setItem.set_id]) setItemsBySet[setItem.set_id] = [];
-        setItemsBySet[setItem.set_id].push(setItem);
-      });
-
-      (ordersRes.data || []).forEach((order) => {
-        const recordId = `ORDER-${order.id}`;
-        const neededByInventoryId = {};
-
-        (orderItemsByOrder[order.id] || []).forEach((item) => {
-          const orderQty = parseFloat(item.qty) || 0;
-          if (orderQty <= 0) return;
-
-          if (item.menu_set_id) {
-            (setItemsBySet[item.menu_set_id] || []).forEach((setRow) => {
-              (ingredientsByMenu[setRow.menu_id] || []).forEach((ing) => {
-                const need = (parseFloat(ing.qty) || 0) * orderQty;
-                neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
-              });
-            });
-          } else if (item.menu_id) {
-            (ingredientsByMenu[item.menu_id] || []).forEach((ing) => {
-              const need = (parseFloat(ing.qty) || 0) * orderQty;
-              neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
-            });
-          }
-        });
-
-        const detailItems = Object.entries(neededByInventoryId).map(([inventory_id, qty]) => ({
-          inventory_id: Number(inventory_id),
-          qty: Number(qty),
-        }));
-
-        if (detailItems.length > 0) {
-          computedOrderItemsMap[recordId] = detailItems;
-          orderRecords.push({
-            id: recordId,
-            source_id: order.id,
-            created_at: order.created_at,
-            user_name: order.user_name || order.created_by || "-",
-            notes: `Auto reduce from completed Slip ID ${order.id}`,
-            status: "completed",
-            record_type: "order_auto",
-            display_id: `SLIP-${order.id}`,
-          });
-        }
-      });
-
-      setRecords([...orderRecords, ...internalRecords].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
-      setOrderUsageItemsMap(computedOrderItemsMap);
+      setRecords(internalRecords);
+      setInternalRecordItemsMap(internalRecordItemsMap);
       setInventory(inventoryRes.data || []);
+      setCategories(categoriesRes.data || []);
     } catch (err) {
       console.error("Error:", err);
     }
@@ -153,6 +93,12 @@ export default function UsageReport() {
       if (startDate && recordDate < startDate) return false;
       if (endDate && recordDate > endDate) return false;
 
+      if (selectedCategory !== "all") {
+        const items = internalRecordItemsMap[record.id] || [];
+        const matchesCategory = items.some((item) => item.usage_stock_category_id === Number(selectedCategory));
+        if (!matchesCategory) return false;
+      }
+
       if (recordSearch) {
         const searchLower = recordSearch.toLowerCase();
         const matchesId = record.id.toString().includes(searchLower);
@@ -163,7 +109,7 @@ export default function UsageReport() {
 
       return true;
     });
-  }, [records, dateFilter, customStart, customEnd, recordSearch]);
+  }, [records, dateFilter, customStart, customEnd, recordSearch, selectedCategory, internalRecordItemsMap, inventory]);
 
   const [expandedRecords, setExpandedRecords] = useState({});
   const [recordItems, setRecordItems] = useState({});
@@ -173,12 +119,8 @@ export default function UsageReport() {
     if (expandedRecords[recordId]) {
       setExpandedRecords(prev => ({ ...prev, [recordId]: false }));
     } else {
-      if (targetRecord?.record_type === "order_auto") {
-        setRecordItems(prev => ({ ...prev, [recordId]: orderUsageItemsMap[recordId] || [] }));
-      } else {
-        const { data } = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", recordId);
-        setRecordItems(prev => ({ ...prev, [recordId]: data || [] }));
-      }
+      const { data } = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", recordId);
+      setRecordItems(prev => ({ ...prev, [recordId]: data || [] }));
       setExpandedRecords(prev => ({ ...prev, [recordId]: true }));
     }
   };
@@ -193,22 +135,17 @@ export default function UsageReport() {
   const exportToExcel = async () => {
     const reportData = [];
     for (const record of filteredRecords) {
-      let itemsData = [];
-      if (record.record_type === "order_auto") {
-        itemsData = orderUsageItemsMap[record.id] || [];
-      } else {
-        const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
-        itemsData = items.data || [];
-      }
-
-      for (const item of itemsData) {
+      const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
+      for (const item of items.data || []) {
         const inv = inventory.find((i) => i.id === item.inventory_id);
         const beforeQty = inv ? inv.qty + item.qty : item.qty;
         const afterQty = inv ? inv.qty : 0;
+        const categoryName = inv ? categories.find((cat) => cat.id === inv.category_id)?.name || "-" : "-";
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
           "Record ID": record.display_id || record.id,
-          "Type": record.record_type === "order_auto" ? "Order Auto" : "Internal Usage",
+          "Type": "Internal Usage",
+          "Category": categoryName,
           "Item Name": inv?.item_name || "Unknown",
           "Before Qty": beforeQty,
           "Used Qty": item.qty,
@@ -224,13 +161,14 @@ export default function UsageReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Type</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Type</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
   <td>${row.Date}</td>
   <td>${row["Record ID"]}</td>
   <td>${row.Type}</td>
+  <td>${row.Category}</td>
   <td>${row["Item Name"]}</td>
   <td>${row["Before Qty"]}</td>
   <td>${row["Used Qty"]}</td>
@@ -254,7 +192,7 @@ ${reportData.map(row =>
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Usage Report</h1>
-          <p className="text-sm text-slate-500 mt-1">View internal usage + auto order reduction</p>
+          <p className="text-sm text-slate-500 mt-1">View internal usage records only</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -299,6 +237,19 @@ ${reportData.map(row =>
               <option value="custom">Custom Date</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 border rounded-lg"
+            >
+              <option value="all">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id.toString()}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
           {dateFilter === "custom" && (
             <>
               <div>
@@ -326,6 +277,7 @@ ${reportData.map(row =>
           </div>
         </div>
       </div>
+
 
       {loading ? (
         <div className="text-center py-10">Loading...</div>
@@ -359,8 +311,8 @@ ${reportData.map(row =>
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{record.display_id || `#${record.id}`}</td>
                       <td className="px-4 py-3 text-slate-600">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${record.record_type === "order_auto" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700"}`}>
-                          {record.record_type === "order_auto" ? "Order Auto" : "Internal"}
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                          Internal
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
@@ -385,9 +337,11 @@ ${reportData.map(row =>
                                 const inv = inventory.find((i) => i.id === item.inventory_id);
                                 const beforeQty = inv ? inv.qty + item.qty : item.qty;
                                 const afterQty = inv ? inv.qty : 0;
+                                const categoryName = categories.find((cat) => cat.id === item.usage_stock_category_id)?.name || "-";
                                 return (
                                   <tr key={idx} className="border-t">
                                     <td className="py-2">{inv?.item_name || `Item ID: ${item.inventory_id}`}</td>
+                                    <td className="py-2">{categoryName}</td>
                                     <td className="py-2">{beforeQty}</td>
                                     <td className="py-2 text-red-600 font-medium">-{item.qty}</td>
                                     <td className="py-2 font-medium">{afterQty}</td>
@@ -508,8 +462,8 @@ ${reportData.map(row =>
                           <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
                             <td className="px-4 py-3 font-medium text-slate-700">{record.display_id || `#${record.id}`}</td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${record.record_type === "order_auto" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700"}`}>
-                                {record.record_type === "order_auto" ? "Order Auto" : "Internal"}
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                                Internal
                               </span>
                             </td>
                             <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>

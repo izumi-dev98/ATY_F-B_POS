@@ -10,6 +10,7 @@ export default function History({ setInventory }) {
   const [search, setSearch] = useState("");
   const [ingredientsMap, setIngredientsMap] = useState({});
   const [dateFilter, setDateFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [expandedOrder, setExpandedOrder] = useState(null);
@@ -217,8 +218,11 @@ export default function History({ setInventory }) {
     fetchHistory(false);
   }, []);
 
-  // Filtered history based on search and date
+  // Filtered history based on search, date, and status
   const filteredHistory = filteredByDate(history).filter((order) => {
+    if (statusFilter !== "all" && order.status !== statusFilter) {
+      return false;
+    }
     const searchLower = search.toLowerCase();
     const matchOrderId = order.id.toString().includes(searchLower);
     const matchMenuItem = order.items.some((item) =>
@@ -738,16 +742,32 @@ export default function History({ setInventory }) {
 
       {/* Search and Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-3">
-        {/* Date Filter */}
-        <select
-          value={dateFilter}
-          onChange={(e) => {
-            setDateFilter(e.target.value);
-            setPage(1);
-          }}
-          className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* Status Filter */}
+          {['all', 'pending', 'completed', 'cancelled'].map((status) => {
+            const label = status === 'all' ? 'All' : status === 'pending' ? 'Pending' : status === 'completed' ? 'Completed' : 'Cancelled';
+            const active = statusFilter === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => { setStatusFilter(status); setPage(1); }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${active ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+
+          {/* Date Filter */}
+          <select
+            value={dateFilter}
+            onChange={(e) => {
+              setDateFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
           <option value="all">All Time</option>
           <option value="day">Today</option>
           <option value="week">This Week</option>
