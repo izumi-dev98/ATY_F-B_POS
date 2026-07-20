@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import supabase from "../createClients";
 
 export default function AddStockReport() {
@@ -16,6 +17,14 @@ export default function AddStockReport() {
   const itemsPerPage = 20;
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && showPreviewModal) setShowPreviewModal(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showPreviewModal]);
+
   const mmkFormatter = new Intl.NumberFormat("en-MM", {
     style: "currency",
     currency: "MMK",
@@ -25,6 +34,10 @@ export default function AddStockReport() {
   const user = JSON.parse(localStorage.getItem("user"));
 
   useEffect(() => {
+    // If a category is provided in the query string, set it
+    const params = new URLSearchParams(location.search);
+    const cat = params.get("category");
+    if (cat) setSelectedCategory(cat.toString());
     fetchData();
   }, []);
 
@@ -138,7 +151,7 @@ export default function AddStockReport() {
       const items = await supabase.from("internal_consumption_items").select("*").eq("consumption_id", record.id);
       for (const item of items.data || []) {
         const inv = inventory.find((i) => i.id === item.inventory_id);
-        const categoryName = categories.find((cat) => cat.id === item.add_stock_category_id)?.name || "-";
+        const categoryName = categories.find((cat) => cat.id === item.add_stock_category_id)?.name || "";
         const beforeQty = inv ? inv.qty - item.qty : item.qty;
         const afterQty = inv ? inv.qty : item.qty;
         const unitPrice = Number(inv?.price || 0);
@@ -155,6 +168,7 @@ export default function AddStockReport() {
           Unit: inv?.type || "-",
           "Unit Price": unitPrice,
           "Line Total": lineTotal,
+          "User Name": record.user_name || user?.email || "-",
           Notes: record.notes || "-",
         });
       }
@@ -164,7 +178,7 @@ export default function AddStockReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>Closing Qty</td><td>Unit</td><td>Unit Price</td><td>Line Total</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Added Qty</td><td>Closing Qty</td><td>Unit</td><td>Unit Price</td><td>Line Total</td><td>User Name</td><td>Notes</td><td>Status</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
@@ -180,9 +194,10 @@ ${reportData.map(row =>
   <td>${mmkFormatter.format(row["Line Total"])}</td>
   <td>${row["User Name"]}</td>
   <td>${row.Notes}</td>
+  <td>${row.Status || '-'}</td>
   </tr>`
 ).join("")}
-<tr style="font-weight:bold;"><td colspan="9">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td><td colspan="2"></td></tr>
+<tr style="font-weight:bold;"><td colspan="10">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td><td colspan="2"></td></tr>
 </table></body></html>`;
 
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
@@ -297,6 +312,7 @@ ${reportData.map(row =>
                   <th className="px-4 py-3 w-10"></th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
                 </tr>
@@ -315,12 +331,23 @@ ${reportData.map(row =>
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">#{record.id}</td>
                       <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {(() => {
+                          const items = recordItemsMap[record.id] || [];
+                          const categoryNames = [...new Set(items.map((it) => {
+                            const invRow = inventory.find((i) => i.id === it.inventory_id);
+                            const catId = invRow ? invRow.category_id : it.add_stock_category_id;
+                            return categories.find((c) => c.id === catId)?.name || '';
+                          }))].filter(Boolean).join(', ');
+                          return categoryNames || '';
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
                       <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
                     </tr>
                     {expandedRecords[record.id] && (
                       <tr className="bg-slate-50">
-                        <td colSpan={5} className="px-4 py-3">
+                        <td colSpan={6} className="px-4 py-3">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left border-b">
@@ -403,8 +430,8 @@ ${reportData.map(row =>
 
       {/* Preview & Print Modal */}
       {showPreviewModal && (
-        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div onClick={() => setShowPreviewModal(false)} className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl p-6 w-full max-w-6xl shadow-xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Add Stock Report</h3>
@@ -467,12 +494,13 @@ ${reportData.map(row =>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-100">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -480,17 +508,22 @@ ${reportData.map(row =>
                         <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-500">No data found</td></tr>
                       ) : (
                         filteredRecords.map((record) => {
-                          const categoryName = recordItemsMap[record.id]?.length
-                            ? categories.find((cat) => cat.id === recordItemsMap[record.id][0].add_stock_category_id)?.name || "-"
-                            : "-";
-                          return (
-                            <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
-                              <td className="px-4 py-3 font-medium text-slate-700">#{record.id}</td>
-                              <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-slate-600">{categoryName}</td>
-                              <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
-                              <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
-                            </tr>
+                          const items = recordItemsMap[record.id] || [];
+                          const categoryNames = [...new Set(items.map((it) => {
+                            const invRow = inventory.find((i) => i.id === it.inventory_id);
+                            const catId = invRow ? invRow.category_id : it.add_stock_category_id;
+                            return categories.find((c) => c.id === catId)?.name || '';
+                          }))].filter(Boolean).join(', ');
+                          const categoryName = categoryNames || '';
+                            return (
+                              <tr key={record.id} className="border-b border-slate-100 hover:bg-indigo-50 transition">
+                                <td className="px-4 py-3 font-medium text-slate-700">#{record.id}</td>
+                                <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
+                                <td className="px-4 py-3 text-slate-600">{categoryName}</td>
+                                <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
+                                <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
+                                <td className="px-4 py-3 text-slate-600">{record.status || '-'}</td>
+                              </tr>
                           );
                         })
                       )}

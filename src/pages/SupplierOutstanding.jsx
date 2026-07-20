@@ -19,6 +19,10 @@ export default function SupplierOutstanding() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [selectedPurchaseItems, setSelectedPurchaseItems] = useState([]);
+  const [purchaseItemsMap, setPurchaseItemsMap] = useState({});
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   // Preview modal state
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -89,12 +93,16 @@ export default function SupplierOutstanding() {
         }
       }
 
+      const total = parseFloat(p.total_amount) || 0;
+      const paidAmount = parseFloat(p.paid_amount) || 0;
+      const remaining = Math.max(total - paidAmount, 0);
+      const isFullyPaid = remaining <= 0;
       const matchesPaymentStatus =
         paymentStatusFilter === "all"
         ? true
         : paymentStatusFilter === "paid"
-          ? !!p.paid
-          : !p.paid;
+          ? isFullyPaid
+          : !isFullyPaid;
 
       return matchesDate && p.payment_type === "Credit" && p.status !== "cancelled" && matchesPaymentStatus;
     });
@@ -103,12 +111,25 @@ export default function SupplierOutstanding() {
 
     creditPurchases.forEach(p => {
       const supId = p.supplier_id;
+      const total = parseFloat(p.total_amount) || 0;
+      const paidAmount = parseFloat(p.paid_amount) || 0;
+      const remaining = Math.max(total - paidAmount, 0);
+
       if (!supplierData[supId]) {
-        supplierData[supId] = { name: getSupplierName(supId), total: 0, count: 0, purchases: [] };
+        supplierData[supId] = { name: getSupplierName(supId), total: 0, paid: 0, count: 0, purchases: [] };
       }
-      supplierData[supId].total += parseFloat(p.total_amount) || 0;
+      const invoicePaid = remaining <= 0;
+      supplierData[supId].total += remaining;
+      supplierData[supId].paid += paidAmount;
       supplierData[supId].count += 1;
-      supplierData[supId].purchases.push(p);
+      supplierData[supId].purchases.push({
+        ...p,
+        paid_amount: paidAmount,
+        remaining_amount: remaining,
+        total_amount: total,
+        invoicePaid,
+        invoiceStatus: invoicePaid ? 'Paid' : 'Unpaid'
+      });
     });
 
     return Object.entries(supplierData)
@@ -116,6 +137,7 @@ export default function SupplierOutstanding() {
         supplier_id: parseInt(id),
         supplier_name: data.name,
         total_payable: data.total,
+        total_paid: data.paid,
         purchase_count: data.count,
         purchases: data.purchases
       }))
@@ -128,18 +150,21 @@ export default function SupplierOutstanding() {
     s.supplier_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalOutstanding = filteredData.reduce((sum, s) => sum + s.total_payable, 0);
+  const totalOutstanding = filteredData.reduce((sum, s) => sum + (paymentStatusFilter === 'paid' ? s.total_paid : s.total_payable), 0);
   const totalLabel = paymentStatusFilter === "paid"
     ? "Total Paid"
-    : paymentStatusFilter === "all"
-      ? "Total Amount"
-      : "Total Outstanding";
+    : "Total Outstanding";
 
   const toggleExpand = (supplierId) => {
-    setExpandedSuppliers(prev => ({
-      ...prev,
-      [supplierId]: !prev[supplierId]
-    }));
+    setExpandedSuppliers(prev => {
+      const next = { ...prev, [supplierId]: !prev[supplierId] };
+      // if expanding, prefetch items for purchases of this supplier
+      const supplier = outstandingData.find(s => s.supplier_id === supplierId);
+      if (!prev[supplierId] && supplier) {
+        supplier.purchases.forEach(p => fetchPurchaseItems(p.id));
+      }
+      return next;
+    });
   };
 
   const viewDetails = async (purchase) => {
@@ -148,26 +173,82 @@ export default function SupplierOutstanding() {
     setSelectedPurchaseItems(items || []);
     setShowDetailModal(true);
   };
+  
+  const fetchPurchaseItems = async (purchaseId) => {
+    if (purchaseItemsMap[purchaseId]) return;
+    try {
+      const { data: items } = await supabase.from("purchase_items").select("*").eq("purchase_id", purchaseId).order("id", { ascending: true });
+      setPurchaseItemsMap((m) => ({ ...m, [purchaseId]: items || [] }));
+    } catch (err) {
+      console.error("Error fetching purchase items:", err);
+    }
+  };
 
   const handlePay = async (purchase) => {
-    const result = await Swal.fire({
-      title: "Pay Invoice?",
-      text: `Mark invoice ${purchase.invoice_number} as paid?`,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Yes, Pay",
-      cancelButtonText: "Cancel"
-    });
+    // open payment modal for partial/full payment
+    // ensure we normalize values for partial payments
+    const normalized = {
+      ...purchase,
+      paid_amount: Number(purchase.paid_amount) || 0,
+      total_amount: Number(purchase.total_amount) || 0,
+      paid: !!purchase.paid
+    };
+    setSelectedPurchase(normalized);
+    // ensure we have items for small inline preview
+    fetchPurchaseItems(purchase.id);
+    setPaymentAmount('');
+    setShowPaymentModal(true);
+  };
 
-    if (result.isConfirmed) {
-      try {
-        await supabase.from("purchases").update({ status: "received", paid: true }).eq("id", purchase.id);
-        Swal.fire("Success", "Invoice marked as paid!", "success");
-        fetchData();
-      } catch (err) {
-        console.error("Error:", err);
-        Swal.fire("Error", err.message || "Failed to process payment", "error");
+  const selectedPurchaseTotal = Number(selectedPurchase?.total_amount) || 0;
+  const selectedPurchasePaid = Number(selectedPurchase?.paid_amount) || 0;
+  const selectedPurchaseRemaining = Math.max(selectedPurchaseTotal - selectedPurchasePaid, 0);
+  const selectedPurchaseRemainingAfterPayment = Math.max(selectedPurchaseRemaining - (Number(paymentAmount) || 0), 0);
+
+  const processPayment = async () => {
+    if (!selectedPurchase) return;
+    const total = Number(selectedPurchase.total_amount) || 0;
+    const existingPaid = Number(selectedPurchase.paid_amount) || 0;
+    const pay = Number(paymentAmount) || 0;
+    if (pay <= 0) {
+      Swal.fire('Error', 'Enter a valid payment amount', 'error');
+      return;
+    }
+    if (pay + existingPaid > total) {
+      Swal.fire('Error', 'Payment exceeds invoice total', 'error');
+      return;
+    }
+    setPaymentProcessing(true);
+    try {
+      const newPaid = existingPaid + pay;
+      const remaining = total - newPaid;
+      const updatePayload = {
+        paid_amount: newPaid,
+        paid: remaining <= 0,
+        status: remaining <= 0 ? 'received' : selectedPurchase.status || 'pending'
+      };
+
+      const { data: updatedPurchase, error: updateError } = await supabase.from('purchases').update(updatePayload).eq('id', selectedPurchase.id).select().single();
+      if (updateError) {
+        throw updateError;
       }
+
+      setSelectedPurchase((prev) => ({
+        ...prev,
+        paid_amount: newPaid,
+        remaining_amount: remaining,
+        paid: remaining <= 0,
+        status: remaining <= 0 ? 'received' : 'pending'
+      }));
+
+      Swal.fire('Success', `Payment recorded. Remaining ${formatMMK(remaining)}`, 'success');
+      setShowPaymentModal(false);
+      fetchData();
+    } catch (err) {
+      console.error('Payment error:', err);
+      Swal.fire('Error', err.message || 'Failed to process payment', 'error');
+    } finally {
+      setPaymentProcessing(false);
     }
   };
 
@@ -180,8 +261,8 @@ export default function SupplierOutstanding() {
           "Invoice #": p.invoice_number,
           "Date": p.date,
           "Payment Term": p.credit_option || "-",
-          "Paid Status": p.paid ? "Paid" : "Unpaid",
-          "Amount": p.total_amount
+          "Paid Status": p.invoiceStatus,
+          "Remaining Amount": p.remaining_amount
         });
       });
       exportData.push({
@@ -331,7 +412,7 @@ export default function SupplierOutstanding() {
               <th className="px-4 py-3 w-10"></th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Supplier Name</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Orders</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Amount</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700">Remaining Pay</th>
               {!isReportOnlyView && <th className="px-4 py-3 text-right font-semibold text-slate-700">Actions</th>}
             </tr>
           </thead>
@@ -362,16 +443,28 @@ export default function SupplierOutstanding() {
                       <td className="px-4 py-2 pl-10 text-slate-600">
                         <button onClick={() => viewDetails(p)} className="font-medium text-indigo-600 hover:text-indigo-800 underline">{p.invoice_number}</button>
                         <span className="ml-2 text-slate-400">| {p.date}</span>
+                        {purchaseItemsMap[p.id] && purchaseItemsMap[p.id].length > 0 && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            {purchaseItemsMap[p.id].slice(0,3).map((it, i) => (
+                              <span key={it.id} className="mr-2">
+                                {it.item_name} x{it.qty} @ {formatMMK(it.unit_price)} = {formatMMK(it.total_price)}{i < Math.min(2, purchaseItemsMap[p.id].length - 1) ? ',' : ''}
+                              </span>
+                            ))}
+                            {purchaseItemsMap[p.id].length > 3 && <span> +{purchaseItemsMap[p.id].length - 3} more</span>}
+                            <div className="mt-1">Invoice Total: <span className="font-semibold">{formatMMK(p.total_amount)}</span></div>
+                            <div className="mt-1">Remaining Pay: <span className="font-semibold">{formatMMK(p.remaining_amount)}</span></div>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-center text-slate-600">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.paid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                          {p.paid ? "Paid" : "Unpaid"}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.invoicePaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          {p.invoiceStatus}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.total_amount)}</td>
+                      <td className="px-4 py-2 text-right font-medium text-slate-700">{formatMMK(p.remaining_amount)}</td>
                       {!isReportOnlyView && (
                         <td className="px-4 py-2 text-right">
-                          {!p.paid && (
+                          {!p.invoicePaid && (
                             <button
                               onClick={() => handlePay(p)}
                               className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
@@ -379,7 +472,7 @@ export default function SupplierOutstanding() {
                               Pay
                             </button>
                           )}
-                          {p.paid && <span className="text-emerald-600 text-xs font-medium">Completed</span>}
+                          {p.invoicePaid && <span className="text-emerald-600 text-xs font-medium">Completed</span>}
                         </td>
                       )}
                     </tr>
@@ -388,16 +481,6 @@ export default function SupplierOutstanding() {
               ))
             )}
           </tbody>
-          {filteredData.length > 0 && (
-            <tfoot className="bg-slate-50">
-              <tr>
-                <td colSpan={isReportOnlyView ? 3 : 4} className="px-4 py-3 text-right font-bold text-slate-800">
-                  {totalLabel}
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatMMK(totalOutstanding)}</td>
-              </tr>
-            </tfoot>
-          )}
         </table>
       </div>
 
@@ -458,6 +541,52 @@ export default function SupplierOutstanding() {
               </table>
             </div>
             {selectedPurchase?.notes && <div className="mt-4 text-sm"><span className="text-slate-500">Notes:</span><p className="text-slate-700 mt-1">{selectedPurchase.notes}</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal (partial/full payments) */}
+      {showPaymentModal && selectedPurchase && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Pay Invoice {selectedPurchase.invoice_number}</h3>
+              <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-slate-600">X</button>
+            </div>
+
+            <div className="mb-4 text-sm">
+              <div className="flex justify-between"><div className="text-slate-500">Invoice Total</div><div className="font-semibold">{formatMMK(selectedPurchase.total_amount)}</div></div>
+              <div className="flex justify-between mt-2"><div className="text-slate-500">Already Paid</div><div className="font-semibold">{formatMMK(Number(selectedPurchase.paid_amount) || 0)}</div></div>
+              <div className="flex justify-between mt-2"><div className="text-slate-500">Remaining</div><div className="font-semibold">{formatMMK((Number(selectedPurchase.total_amount) || 0) - (Number(selectedPurchase.paid_amount) || 0))}</div></div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-sm text-slate-600">Amount to Pay</label>
+              <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="w-full mt-2 px-3 py-2 border border-slate-300 rounded-lg" />
+              <div className="flex justify-between mt-2 text-sm text-slate-600">
+                <div>Remaining after payment</div>
+                <div className="font-semibold">{formatMMK(selectedPurchaseRemainingAfterPayment)}</div>
+              </div>
+            </div>
+
+            {/* small items preview if available */}
+            {purchaseItemsMap[selectedPurchase.id] && purchaseItemsMap[selectedPurchase.id].length > 0 && (
+              <div className="border border-slate-200 rounded-lg p-2 mb-4 text-sm">
+                <div className="text-slate-500 mb-1">Items</div>
+                {purchaseItemsMap[selectedPurchase.id].slice(0,5).map((it) => (
+                  <div key={it.id} className="flex justify-between text-slate-700">
+                    <div>{it.item_name} x{it.qty} {it.type ? `(${it.type})` : ''}</div>
+                    <div className="font-medium">{formatMMK(it.unit_price)}</div>
+                  </div>
+                ))}
+                {purchaseItemsMap[selectedPurchase.id].length > 5 && <div className="text-xs text-slate-400 mt-1">{purchaseItemsMap[selectedPurchase.id].length - 5} more items...</div>}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm">Cancel</button>
+              <button onClick={processPayment} disabled={paymentProcessing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm">{paymentProcessing ? 'Processing...' : 'Confirm Payment'}</button>
+            </div>
           </div>
         </div>
       )}
@@ -564,12 +693,12 @@ export default function SupplierOutstanding() {
                                 <td className="px-4 py-3 text-slate-600">{p.date}</td>
                                 <td className="px-4 py-3 text-center">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    p.paid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                    p.invoicePaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                                   }`}>
-                                    {p.paid ? 'Paid' : 'Unpaid'}
+                                    {p.invoiceStatus}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-right text-slate-700 font-medium">{formatMMK(p.total_amount)}</td>
+                                <td className="px-4 py-3 text-right text-slate-700 font-medium">{formatMMK(p.remaining_amount)}</td>
                               </tr>
                             ))}
                           </Fragment>

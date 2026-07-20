@@ -21,6 +21,14 @@ export default function SaleUsageReport() {
   const [selectedSlipId, setSelectedSlipId] = useState(null);
   const rowsPerPage = 15;
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && showPreviewModal) setShowPreviewModal(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showPreviewModal]);
+
   const currentUser = JSON.parse(localStorage.getItem("user") || "null");
   const printedByName = currentUser?.full_name || currentUser?.username || currentUser?.id || "Unknown";
 
@@ -240,6 +248,23 @@ export default function SaleUsageReport() {
       .map((slip) => {
         const itemNames = Array.from(slip.usage_items);
         const preview = itemNames.length <= 3 ? itemNames.join(", ") : `${itemNames.slice(0, 3).join(", ")}, ...`;
+        // build menu summary from orderItems (sum qty per menu_name for this slip)
+        const menuMap = {};
+        (orderItems || []).filter(it => Number(it.order_id) === Number(slip.order_id)).forEach(mi => {
+          let mname = '';
+          if (mi.menu_set_id) {
+            const set = (menuSets || []).find(s => String(s.id) === String(mi.menu_set_id));
+            mname = mi.menu_name && mi.menu_name !== 'Unknown' ? mi.menu_name : (set?.set_name ? `Set: ${set.set_name}` : (mi.menu_name || 'Unknown'));
+          } else {
+            const menuRow = (menus || []).find(m => String(m.id) === String(mi.menu_id));
+            mname = mi.menu_name && mi.menu_name !== 'Unknown' ? mi.menu_name : (menuRow?.menu_name || mi.menu_name || 'Unknown');
+          }
+          menuMap[mname] = (menuMap[mname] || 0) + (Number(mi.qty) || 0);
+        });
+        const menuNames = Object.entries(menuMap).map(([n,q]) => `${n} x${q}`);
+        const menuPreview = menuNames.length <= 3 ? menuNames.join(', ') : `${menuNames.slice(0,3).join(', ')}, ...`;
+        const menuDetails = menuNames.join('; ') || '-';
+
         return {
           order_id: slip.order_id,
           order_created_at: slip.order_created_at,
@@ -248,6 +273,8 @@ export default function SaleUsageReport() {
           usage_total_items: slip.total_items,
           usage_total_price: slip.total_price,
           usage_row_id: `slip-${slip.order_id}`,
+          menu_preview: menuPreview || '-',
+          menu_details: menuDetails,
         };
       })
       .sort((a, b) => {
@@ -282,12 +309,12 @@ export default function SaleUsageReport() {
   const exportToExcel = () => {
     const reportData = aggregatedSlipRows.map((item) => ({
       "Slip ID": item.order_id,
+      "Menus": item.menu_preview,
       "Usage Items": item.usage_item_preview,
       "Usage Details": item.usage_item_details,
       "Total Price": mmkFormatter.format(item.usage_total_price),
     }));
-
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Slip ID</td><td>Usage Items</td><td>Usage Details</td><td>Total Price</td></tr>${reportData.map((row) => `<tr><td>${row["Slip ID"]}</td><td>${row["Usage Items"]}</td><td>${row["Usage Details"]}</td><td>${row["Total Price"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="3">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td></tr></table></body></html>`;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><table border="1"><tr style="background:#ddd;font-weight:bold;"><td>Slip ID</td><td>Menus</td><td>Usage Items</td><td>Usage Details</td><td>Total Price</td></tr>${reportData.map((row) => `<tr><td>${row["Slip ID"]}</td><td>${row["Menus"]}</td><td>${row["Usage Items"]}</td><td>${row["Usage Details"]}</td><td>${row["Total Price"]}</td></tr>`).join("")}<tr style="font-weight:bold;"><td colspan="4">Grand Total</td><td>${mmkFormatter.format(grandTotal)}</td></tr></table></body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -380,6 +407,7 @@ export default function SaleUsageReport() {
           <thead className="bg-slate-100">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Slip ID</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Menus</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Usage Items</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Item Count</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Total Price</th>
@@ -395,6 +423,7 @@ export default function SaleUsageReport() {
               paginatedItems.map((item) => (
                 <tr key={item.usage_row_id} className="border-b border-slate-100 hover:bg-slate-100 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-700">#{item.order_id}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.menu_preview}</td>
                   <td className="px-4 py-3 text-slate-600">{item.usage_item_preview}</td>
                   <td className="px-4 py-3 text-slate-600">{item.usage_total_items}</td>
                   <td className="px-4 py-3 text-slate-600">{mmkFormatter.format(item.usage_total_price)}</td>
@@ -435,53 +464,125 @@ export default function SaleUsageReport() {
       </div>
 
       {showPreviewModal && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-6xl overflow-hidden shadow-2xl">
+        <div onClick={() => setShowPreviewModal(false)} className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl w-full max-w-6xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-slate-200">
               <div>
-                <h3 className="text-xl font-semibold">Sale Usage Report Preview</h3>
+                <h3 className="text-xl font-semibold">Sale Usage Report</h3>
                 <p className="text-sm text-slate-500">Printed by {printedByName} on {new Date().toLocaleDateString()}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => window.print()} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">Print</button>
-                <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button>
+                <button
+                  onClick={() => {
+                    const printContent = document.getElementById('print-saleusage-content');
+                    if (!printContent) return;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Sale Usage Report</title>
+                          <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            h1 { font-size: 18px; margin-bottom: 4px; }
+                            .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+                            .brand { font-size: 14px; color: #4f46e5; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                            th { background: #f1f5f9; font-weight: 600; }
+                            .summary { margin-top: 12px; font-size: 12px; }
+                            .summary span { margin-right: 20px; }
+                            @page { size: auto; margin: 10mm; }
+                            @media print { body { padding: 0; } }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="brand">Nosh POS</div>
+                          ${printContent.innerHTML}
+                          <script>window.onload = function() { window.print(); }</script>
+                        </body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                  }}
+                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm"
+                >
+                  Print
+                </button>
+                <button onClick={() => setShowPreviewModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">X</button>
               </div>
             </div>
-            <div className="p-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Slip ID</th>
-                    <th className="px-4 py-3 text-left">Item</th>
-                    <th className="px-4 py-3 text-left">Usage Qty</th>
-                    <th className="px-4 py-3 text-left">Unit</th>
-                    <th className="px-4 py-3 text-left">Unit Price</th>
-                    <th className="px-4 py-3 text-left">Total Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No sale usage data available.</td></tr>
-                  ) : (
-                    filteredItems.map((item) => (
-                      <tr key={item.usage_row_id} className="border-b border-slate-100">
-                        <td className="px-4 py-3">#{item.order_id}</td>
-                        <td className="px-4 py-3">{item.usage_item_name}</td>
-                        <td className="px-4 py-3">{item.usage_qty}</td>
-                        <td className="px-4 py-3">{item.usage_unit}</td>
-                        <td className="px-4 py-3">{mmkFormatter.format(item.item_price)}</td>
-                        <td className="px-4 py-3">{mmkFormatter.format(item.usage_total_price)}</td>
+            <div className="flex-1 p-4 overflow-x-auto overflow-y-auto">
+              <div id="print-saleusage-content" className="min-w-full">
+                {/* Summary table: aggregated slips with Menus */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold mb-2">Summary</h4>
+                  <table className="w-full text-sm mb-2">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Slip ID</th>
+                        <th className="px-4 py-2 text-left">Menus</th>
+                        <th className="px-4 py-2 text-left">Usage Items</th>
+                        <th className="px-4 py-2 text-left">Item Count</th>
+                        <th className="px-4 py-2 text-left">Total Price</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-              {filteredItems.length > 0 && (
-                <div className="flex justify-end mt-4 text-sm font-semibold text-slate-700">
-                  <span>Grand Total:</span>
-                  <span className="ml-2">{mmkFormatter.format(filteredItems.reduce((sum, item) => sum + Number(item.usage_total_price || 0), 0))}</span>
+                    </thead>
+                    <tbody>
+                      {aggregatedSlipRows.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-4 text-center text-slate-500">No summary data</td></tr>
+                      ) : (
+                        aggregatedSlipRows.map((r) => (
+                          <tr key={`sum-${r.order_id}`} className="border-b">
+                            <td className="px-4 py-2">#{r.order_id}</td>
+                            <td className="px-4 py-2">{r.menu_preview}</td>
+                            <td className="px-4 py-2">{r.usage_item_preview}</td>
+                            <td className="px-4 py-2">{r.usage_total_items}</td>
+                            <td className="px-4 py-2">{mmkFormatter.format(r.usage_total_price)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              )}
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Slip ID</th>
+                      <th className="px-4 py-3 text-left">Item</th>
+                      <th className="px-4 py-3 text-left">Usage Qty</th>
+                      <th className="px-4 py-3 text-left">Unit</th>
+                      <th className="px-4 py-3 text-left">Unit Price</th>
+                      <th className="px-4 py-3 text-left">Total Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.length === 0 ? (
+                      <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No sale usage data available.</td></tr>
+                    ) : (
+                      filteredItems.map((item) => (
+                        <tr key={item.usage_row_id} className="border-b border-slate-100">
+                          <td className="px-4 py-3">#{item.order_id}</td>
+                          <td className="px-4 py-3">{item.usage_item_name}</td>
+                          <td className="px-4 py-3">{item.usage_qty}</td>
+                          <td className="px-4 py-3">{item.usage_unit}</td>
+                          <td className="px-4 py-3">{mmkFormatter.format(item.item_price)}</td>
+                          <td className="px-4 py-3">{mmkFormatter.format(item.usage_total_price)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {filteredItems.length > 0 && (
+                  <div className="flex justify-end mt-4 text-sm font-semibold text-slate-700">
+                    <span>Grand Total:</span>
+                    <span className="ml-2">{mmkFormatter.format(filteredItems.reduce((sum, item) => sum + Number(item.usage_total_price || 0), 0))}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end p-4">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>
             </div>
           </div>
         </div>

@@ -378,6 +378,17 @@ export default function Category() {
                         >
                           Edit
                         </button>
+                        {activeTab === "add_stock" && (
+                          <button
+                            onClick={() => {
+                              // navigate to add stock report filtered by this category
+                              window.location.href = `/reports/add-stock?category=${item.id}`;
+                            }}
+                            className="px-3 py-1 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
+                          >
+                            View Report
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(item.id)}
                           className="px-3 py-1 text-sm bg-rose-600 text-white rounded-md hover:bg-rose-700"

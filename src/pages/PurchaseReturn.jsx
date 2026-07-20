@@ -126,6 +126,7 @@ export default function PurchaseReturn({ setInventory }) {
       const invItem = inventory?.find(i => i.item_name.toLowerCase() === item.item_name.toLowerCase());
       const currentInventoryQty = invItem ? invItem.qty : 0;
       const originalQty = parseFloat(item.qty) || 0;
+      const defaultReturnQty = 0;
       return {
         ...item,
         invoice_number: purchase.invoice_number,
@@ -135,16 +136,13 @@ export default function PurchaseReturn({ setInventory }) {
         supplier_name: getSupplierName(purchase.supplier_id),
         original_qty: originalQty,
         current_inventory_qty: currentInventoryQty,
-        return_qty: 0
+        // Default return quantity set to original invoice qty (validation occurs on save)
+        return_qty: defaultReturnQty
       };
     });
 
-    // Add to return list
-    setReturnList(prev => {
-      const existingIds = new Set(prev.map(i => i.id));
-      const newItems = itemsWithQty.filter(i => !existingIds.has(i.id));
-      return [...prev, ...newItems];
-    });
+    // Replace return list with items from the selected invoice (show same-invoice items only)
+    setReturnList(itemsWithQty);
 
     setShowReturnListModal(true);
   };
@@ -187,7 +185,6 @@ export default function PurchaseReturn({ setInventory }) {
     if (itemsToReturn.length === 0) {
       return Swal.fire("Error", "Please enter return quantities for at least one item", "error");
     }
-
     const result = await Swal.fire({
       title: "Save Return?",
       text: `This will save ${itemsToReturn.length} item(s) as pending return.`,
@@ -532,7 +529,6 @@ export default function PurchaseReturn({ setInventory }) {
     if (itemsToReturn.length === 0) {
       return Swal.fire("Error", "Please enter return quantities for at least one item", "error");
     }
-
     const result = await Swal.fire({
       title: "Add Items to Return?",
       text: `This will add ${itemsToReturn.length} item(s) to the existing return and reduce inventory using FIFO.`,

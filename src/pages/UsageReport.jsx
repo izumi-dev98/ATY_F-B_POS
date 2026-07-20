@@ -141,6 +141,8 @@ export default function UsageReport() {
         const beforeQty = inv ? inv.qty + item.qty : item.qty;
         const afterQty = inv ? inv.qty : 0;
         const categoryName = inv ? categories.find((cat) => cat.id === inv.category_id)?.name || "-" : "-";
+        const unitPrice = Number(inv?.price ?? item.unit_price ?? 0) || 0;
+        const lineTotal = unitPrice * Number(item.qty || 0);
         reportData.push({
           Date: new Date(record.created_at).toLocaleDateString(),
           "Record ID": record.display_id || record.id,
@@ -151,6 +153,8 @@ export default function UsageReport() {
           "Used Qty": item.qty,
           "After Qty": afterQty,
           Unit: inv?.type || "-",
+          "Unit Price": unitPrice,
+          "Line Total": lineTotal,
           "User Name": record.user_name || user?.email || "Unknown",
           Notes: record.notes || "-",
         });
@@ -161,7 +165,7 @@ export default function UsageReport() {
 <head><meta charset="utf-8"></head><body>
 <table border="1">
 <tr style="background:#ddd;font-weight:bold;">
-<td>Date</td><td>Record ID</td><td>Type</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>User Name</td><td>Notes</td>
+<td>Date</td><td>Record ID</td><td>Type</td><td>Category</td><td>Item Name</td><td>Before Qty</td><td>Used Qty</td><td>After Qty</td><td>Unit</td><td>Unit Price</td><td>Line Total</td><td>User Name</td><td>Notes</td>
 </tr>
 ${reportData.map(row =>
   `<tr>
@@ -174,6 +178,8 @@ ${reportData.map(row =>
   <td>${row["Used Qty"]}</td>
   <td>${row["After Qty"]}</td>
   <td>${row.Unit}</td>
+  <td>${Number(row["Unit Price"]).toFixed(2)}</td>
+  <td>${Number(row["Line Total"]).toFixed(2)}</td>
   <td>${row["User Name"]}</td>
   <td>${row.Notes}</td>
   </tr>`
@@ -291,7 +297,7 @@ ${reportData.map(row =>
                 <tr>
                   <th className="px-4 py-3 w-10"></th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Record ID</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Type</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Category</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
@@ -311,9 +317,15 @@ ${reportData.map(row =>
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{record.display_id || `#${record.id}`}</td>
                       <td className="px-4 py-3 text-slate-600">
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                          Internal
-                        </span>
+                        {(() => {
+                          const itemsForRecord = internalRecordItemsMap[record.id] || [];
+                          const names = [...new Set(itemsForRecord.map((it) => {
+                            const invRow = inventory.find((i) => i.id === it.inventory_id);
+                            const catId = invRow ? invRow.category_id : it.usage_stock_category_id;
+                            return categories.find((c) => c.id === catId)?.name || '-';
+                          }))].filter(Boolean).join(', ');
+                          return names || '-';
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
                       <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
@@ -330,6 +342,8 @@ ${reportData.map(row =>
                                 <th className="pb-2">Used Qty</th>
                                 <th className="pb-2">After Qty</th>
                                 <th className="pb-2">Unit</th>
+                                <th className="pb-2">Unit Price</th>
+                                <th className="pb-2">Line Total</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -338,6 +352,8 @@ ${reportData.map(row =>
                                 const beforeQty = inv ? inv.qty + item.qty : item.qty;
                                 const afterQty = inv ? inv.qty : 0;
                                 const categoryName = categories.find((cat) => cat.id === item.usage_stock_category_id)?.name || "-";
+                                const unitPrice = Number(inv?.price ?? item.unit_price ?? 0) || 0;
+                                const lineTotal = unitPrice * Number(item.qty || 0);
                                 return (
                                   <tr key={idx} className="border-t">
                                     <td className="py-2">{inv?.item_name || `Item ID: ${item.inventory_id}`}</td>
@@ -345,9 +361,22 @@ ${reportData.map(row =>
                                     <td className="py-2 text-red-600 font-medium">-{item.qty}</td>
                                     <td className="py-2 font-medium">{afterQty}</td>
                                     <td className="py-2">{inv?.type || "-"}</td>
+                                    <td className="py-2">{unitPrice.toFixed(2)}</td>
+                                    <td className="py-2">{lineTotal.toFixed(2)}</td>
                                   </tr>
                                 );
                               })}
+                              {/* Grand total for this record */}
+                              <tr className="border-t">
+                                <td colSpan={6} className="py-2 text-right font-semibold">Grand Total:</td>
+                                <td className="py-2 font-semibold">{
+                                  ((recordItems[record.id] || []).reduce((s, it) => {
+                                    const invRow = inventory.find((i) => i.id === it.inventory_id);
+                                    const unitP = Number(invRow?.price ?? it.unit_price ?? 0) || 0;
+                                    return s + unitP * Number(it.qty || 0);
+                                  }, 0)).toFixed(2)
+                                }</td>
+                              </tr>
                             </tbody>
                           </table>
                         </td>
@@ -451,6 +480,7 @@ ${reportData.map(row =>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Date</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Notes</th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Grand Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -468,6 +498,13 @@ ${reportData.map(row =>
                             <td className="px-4 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
                             <td className="px-4 py-3 text-slate-600">{record.user_name || "-"}</td>
                             <td className="px-4 py-3 text-slate-600">{record.notes || "-"}</td>
+                            <td className="px-4 py-3 text-right font-semibold">{
+                              ((internalRecordItemsMap[record.id] || []).reduce((s, it) => {
+                                const invRow = inventory.find((i) => i.id === it.inventory_id);
+                                const unitP = Number(invRow?.price ?? it.unit_price ?? 0) || 0;
+                                return s + unitP * Number(it.qty || 0);
+                              }, 0)).toFixed(2)
+                            }</td>
                           </tr>
                         ))
                       )}
