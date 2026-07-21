@@ -178,7 +178,17 @@ export default function TotalSalesReport() {
   const exportToExcel = () => {
     const exportData = slipData.map((slip) => {
       const menusText = slip.menus.map(m => `${m.menu_name} x${m.qty}`).join(", ");
-      const paymentText = slip.payment_type === "Cash" ? "Cash" : slip.payment_type === "Kpay" ? "Kpay" : "FOC";
+      const normalizedPaymentType = (slip.payment_type || "Cash").toString().trim().toLowerCase();
+      const paymentText =
+        normalizedPaymentType === "cash"
+          ? "Cash"
+          : normalizedPaymentType === "kpay"
+          ? "Kpay"
+          : normalizedPaymentType === "coupon"
+          ? "COUPON"
+          : normalizedPaymentType === "foc"
+          ? "FOC"
+          : slip.payment_type || "FOC";
       const displayRemark = slip.remark || "";
       return {
         Slip_ID: slip.order_id,
