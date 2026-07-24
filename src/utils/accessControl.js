@@ -40,6 +40,7 @@ export const ROLE_ACCESS_RIGHTS = {
     "btn-report-export",
     "history-complete",
     "history-cancel",
+    "btn-history-edit",
   ],
   admin: [
     "dashboard",
@@ -111,6 +112,7 @@ export const FUNCTION_OPTIONS = [
   { key: "btn-purchase-add", label: "Button: Add Purchase", group: "Buttons" },
   { key: "btn-purchase-edit", label: "Button: Edit Purchase", group: "Buttons" },
   { key: "btn-purchase-delete", label: "Button: Delete Purchase", group: "Buttons" },
+  { key: "btn-history-edit", label: "Button: Edit History", group: "Buttons" },
   { key: "btn-report-export", label: "Button: Export Reports", group: "Buttons" },
   { key: "history-complete", label: "History Complete Button", group: "History" },
   { key: "history-cancel", label: "History Cancel Button", group: "History" },

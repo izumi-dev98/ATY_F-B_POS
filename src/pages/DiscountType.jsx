@@ -7,7 +7,7 @@ export default function DiscountType() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ name: "", discount_percent: 0, description: "" });
+  const [formData, setFormData] = useState({ name: "", discount_type: "percent", discount_percent: 0, discount_amount: 0, description: "" });
 
   const fetchDiscountTypes = async () => {
     setLoading(true);
@@ -29,7 +29,7 @@ export default function DiscountType() {
   }, []);
 
   const openAddModal = () => {
-    setFormData({ name: "", discount_percent: 0, description: "" });
+    setFormData({ name: "", discount_type: "percent", discount_percent: 0, discount_amount: 0, description: "" });
     setIsEditing(null);
     setShowModal(true);
   };
@@ -37,7 +37,9 @@ export default function DiscountType() {
   const openEditModal = (item) => {
     setFormData({
       name: item.name,
-      discount_percent: item.discount_percent,
+      discount_type: item.discount_amount > 0 ? "amount" : "percent",
+      discount_percent: item.discount_amount > 0 ? 0 : item.discount_percent,
+      discount_amount: item.discount_amount || 0,
       description: item.description || "",
     });
     setIsEditing(item.id);
@@ -47,31 +49,30 @@ export default function DiscountType() {
   const closeModal = () => {
     setShowModal(false);
     setIsEditing(null);
-    setFormData({ name: "", discount_percent: 0, description: "" });
+    setFormData({ name: "", discount_type: "percent", discount_percent: 0, discount_amount: 0, description: "" });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      name: formData.name,
+      discount_percent: formData.discount_type === "percent" ? Number(formData.discount_percent) : 0,
+      discount_amount: formData.discount_type === "amount" ? Number(formData.discount_amount) : 0,
+      description: formData.description,
+    };
+
     try {
       if (isEditing) {
         const { error } = await supabase
           .from("discount_types")
-          .update({
-            name: formData.name,
-            discount_percent: Number(formData.discount_percent),
-            description: formData.description,
-          })
+          .update(payload)
           .eq("id", isEditing);
         if (error) throw error;
         Swal.fire("Success", "Discount type updated!", "success");
       } else {
         const { error } = await supabase
           .from("discount_types")
-          .insert([{
-            name: formData.name,
-            discount_percent: Number(formData.discount_percent),
-            description: formData.description,
-          }]);
+          .insert([payload]);
         if (error) throw error;
         Swal.fire("Success", "Discount type added!", "success");
       }
@@ -124,7 +125,7 @@ export default function DiscountType() {
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">ID</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Name</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Discount (%)</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700">Discount</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Description</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Actions</th>
             </tr>
@@ -139,7 +140,11 @@ export default function DiscountType() {
                 <tr key={item.id} className="border-t border-slate-100 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
                   <td className="px-4 py-3 text-slate-500">#{item.id}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800">{item.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{item.discount_percent}%</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {item.discount_amount > 0
+                      ? `${item.discount_amount}`
+                      : `${item.discount_percent}%`}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{item.description || "-"}</td>
                   <td className="px-4 py-3">
                     <button onClick={() => openEditModal(item)} className="text-indigo-600 hover:text-indigo-800 font-medium mr-3">Edit</button>
@@ -177,17 +182,58 @@ export default function DiscountType() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (%)</label>
-                <input
-                  type="number"
-                  value={formData.discount_percent}
-                  onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
-                  className="w-full border border-slate-300 px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  min="0"
-                  max="100"
-                  required
-                />
+                  <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount Type</label>
+                <div className="flex flex-wrap gap-3 mb-3">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="discount_type"
+                      value="percent"
+                      checked={formData.discount_type === "percent"}
+                      onChange={() => setFormData({ ...formData, discount_type: "percent", discount_amount: 0 })}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    Percent
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="discount_type"
+                      value="amount"
+                      checked={formData.discount_type === "amount"}
+                      onChange={() => setFormData({ ...formData, discount_type: "amount", discount_percent: 0 })}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    Fixed Price
+                  </label>
+                </div>
+                {formData.discount_type === "percent" ? (
+                  <>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (%)</label>
+                    <input
+                      type="number"
+                      value={formData.discount_percent}
+                      onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
+                      className="w-full border border-slate-300 px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      min="0"
+                      max="100"
+                      required
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Discount (Price)</label>
+                    <input
+                      type="number"
+                      value={formData.discount_amount}
+                      onChange={(e) => setFormData({ ...formData, discount_amount: e.target.value })}
+                      className="w-full border border-slate-300 px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      min="0"
+                      required
+                    />
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Description</label>

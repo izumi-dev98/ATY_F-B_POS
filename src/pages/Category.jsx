@@ -8,6 +8,7 @@ export default function Category() {
   const [inventoryCategories, setInventoryCategories] = useState([]);
   const [addStockCategories, setAddStockCategories] = useState([]);
   const [usageStockCategories, setUsageStockCategories] = useState([]);
+  const [cancelReasonCategories, setCancelReasonCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -34,6 +35,8 @@ export default function Category() {
         return { label: "Add Stock", color: "violet", heading: "Add Stock Category", placeholder: "Add Stock Category Name" };
       case "usage_stock":
         return { label: "Usage Stock", color: "orange", heading: "Usage Stock Category", placeholder: "Usage Stock Category Name" };
+      case "cancel_reason":
+        return { label: "Cancel Reason", color: "rose", heading: "Cancel Reason Category", placeholder: "Cancel Reason Category Name" };
       default:
         return { label: "Category", color: "slate", heading: "Category", placeholder: "Category Name" };
     }
@@ -65,6 +68,12 @@ export default function Category() {
       headerBg: "bg-orange-100",
       headerText: "text-orange-800",
       inputFocus: "focus:ring-orange-500",
+    },
+    rose: {
+      button: "bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500",
+      headerBg: "bg-rose-100",
+      headerText: "text-rose-800",
+      inputFocus: "focus:ring-rose-500",
     },
     slate: {
       button: "bg-slate-600 hover:bg-slate-700 text-white focus:ring-slate-500",
@@ -134,11 +143,26 @@ export default function Category() {
     }
   };
 
+  const fetchCancelReasonCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("cancel_reason_categories")
+        .select("*")
+        .order("id", { ascending: true });
+      if (error) throw error;
+      setCancelReasonCategories(data || []);
+    } catch (err) {
+      Swal.fire("Error", err.message || "Failed to load cancel reason categories", "error");
+      setCancelReasonCategories([]);
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
     fetchInventoryCategories();
     fetchAddStockCategories();
     fetchUsageStockCategories();
+    fetchCancelReasonCategories();
   }, []);
 
   const openAddModal = () => {
@@ -173,7 +197,9 @@ export default function Category() {
       ? "inventory_categories"
       : activeTab === "add_stock"
       ? "add_stock_categories"
-      : "usage_stock_categories";
+      : activeTab === "usage_stock"
+      ? "usage_stock_categories"
+      : "cancel_reason_categories";
 
     try {
       if (isEditing && editItem) {
@@ -200,8 +226,10 @@ export default function Category() {
         fetchInventoryCategories();
       } else if (activeTab === "add_stock") {
         fetchAddStockCategories();
-      } else {
+      } else if (activeTab === "usage_stock") {
         fetchUsageStockCategories();
+      } else {
+        fetchCancelReasonCategories();
       }
     } catch (err) {
       Swal.fire("Error", err.message || "Failed to save category", "error");
@@ -215,12 +243,16 @@ export default function Category() {
       ? "inventory_categories"
       : activeTab === "add_stock"
       ? "add_stock_categories"
-      : "usage_stock_categories";
+      : activeTab === "usage_stock"
+      ? "usage_stock_categories"
+      : "cancel_reason_categories";
     const relatedTable = activeTab === "menu" ? "menu" : activeTab === "inventory" ? "inventory" : null;
     const warningText = activeTab === "menu"
       ? "Menu items in this category will be uncategorized."
       : activeTab === "inventory"
       ? "Inventory items in this category will have no category."
+      : activeTab === "cancel_reason"
+      ? "This cancel reason category will be deleted."
       : "This category will be deleted.";
 
     const result = await Swal.fire({
@@ -251,8 +283,10 @@ export default function Category() {
           fetchInventoryCategories();
         } else if (activeTab === "add_stock") {
           fetchAddStockCategories();
-        } else {
+        } else if (activeTab === "usage_stock") {
           fetchUsageStockCategories();
+        } else {
+          fetchCancelReasonCategories();
         }
       } catch (err) {
         Swal.fire("Error", err.message || "Failed to delete", "error");
@@ -267,7 +301,9 @@ export default function Category() {
       ? inventoryCategories
       : activeTab === "add_stock"
       ? addStockCategories
-      : usageStockCategories;
+      : activeTab === "usage_stock"
+      ? usageStockCategories
+      : cancelReasonCategories;
 
   const filteredCategories = currentCategories.filter((c) =>
     (c.name || "").toLowerCase().includes(searchTerm.toLowerCase())
@@ -278,7 +314,7 @@ export default function Category() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Category Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage menu, inventory, add stock, and usage stock categories</p>
+          <p className="text-sm text-slate-500 mt-1">Manage menu, inventory, add stock, usage stock, and cancel reason categories</p>
         </div>
         <button
           onClick={openAddModal}
@@ -330,6 +366,16 @@ export default function Category() {
           }`}
         >
           Usage Stock Categories
+        </button>
+        <button
+          onClick={() => { setActiveTab("cancel_reason"); setSearchTerm(""); }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            activeTab === "cancel_reason"
+              ? "bg-indigo-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          Cancel Reason Categories
         </button>
       </div>
 
@@ -450,7 +496,7 @@ export default function Category() {
                 </button>
                 <button
                   type="submit"
-                  className={`px-4 py-2.5 text-white rounded-lg text-sm font-medium ${activeTab === "menu" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-teal-600 hover:bg-teal-700"}`}
+                  className={`px-4 py-2.5 text-white rounded-lg text-sm font-medium ${theme.button}`}
                 >
                   {isEditing ? "Update" : "Save"}
                 </button>

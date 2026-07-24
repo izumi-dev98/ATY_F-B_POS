@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import supabase from "../createClients";
 import Swal from "sweetalert2";
-import { buildFifoList, deductFromFifo } from "../utils/fifoService";
+import { buildFifoList, deductFromFifo, restoreToFifo } from "../utils/fifoService";
 import { hasFeature } from "../utils/accessControl";
 
 export default function History({ setInventory }) {
@@ -15,6 +15,7 @@ export default function History({ setInventory }) {
   const [endDate, setEndDate] = useState("");
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [fifoHistory, setFifoHistory] = useState({});
+  const [cancelReasons, setCancelReasons] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const ordersPerPage = 8;
@@ -28,6 +29,14 @@ export default function History({ setInventory }) {
   const localUser = JSON.parse(localStorage.getItem("user") || "null");
   const canComplete = hasFeature(localUser, "history-complete");
   const canCancel = hasFeature(localUser, "history-cancel");
+  const canEditHistory = hasFeature(localUser, "btn-history-edit");
+
+  const [editOrder, setEditOrder] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    payment_type: "",
+    status: "",
+  });
 
   // Get date range based on filter type
   const getDateRange = () => {
@@ -74,6 +83,190 @@ export default function History({ setInventory }) {
   };
 
   const normalizeOrderId = (value) => String(value ?? "").trim();
+
+  const handleOpenEdit = (order) => {
+    setEditOrder(order);
+    setEditForm({
+      payment_type: order.payment_type || "",
+      status: order.status || "pending",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const buildOrderInventoryRequirements = (order) => {
+    const neededByInventoryId = {};
+    for (const item of order.items) {
+      if (item.isSet) {
+        for (const setItem of item.setItems || []) {
+          const ingredients = ingredientsMap[setItem.menu_id] || [];
+          for (const ing of ingredients) {
+            const need = (parseFloat(ing.qty) || 0) * (parseFloat(item.qty) || 0);
+            neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+          }
+        }
+      } else {
+        const ingredients = ingredientsMap[item.menu_id] || [];
+        for (const ing of ingredients) {
+          const need = (parseFloat(ing.qty) || 0) * (parseFloat(item.qty) || 0);
+          neededByInventoryId[ing.inventory_id] = (neededByInventoryId[ing.inventory_id] || 0) + need;
+        }
+      }
+    }
+    return neededByInventoryId;
+  };
+
+  const deductOrderInventory = async (order) => {
+    const { data: inventoryData, error: inventoryErr } = await supabase
+      .from("inventory")
+      .select("*");
+    if (inventoryErr) throw inventoryErr;
+
+    const inventoryList = (inventoryData || []).map((i) => ({ ...i }));
+    const neededByInventoryId = buildOrderInventoryRequirements(order);
+    const warnings = [];
+
+    for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+      const inv = inventoryList.find((i) => i.id === Number(inventoryId));
+      const currentQty = parseFloat(inv?.qty) || 0;
+      const newQty = currentQty - neededQty;
+
+      const { error: invUpdateErr } = await supabase
+        .from("inventory")
+        .update({ qty: newQty })
+        .eq("id", Number(inventoryId));
+      if (invUpdateErr) throw invUpdateErr;
+
+      if (inv) inv.qty = newQty;
+
+      const fifoList = await buildFifoList(
+        Number(inventoryId),
+        inv?.item_name,
+        inv?.type || inv?.unit,
+        { includePurchase: true, includeAddStock: true, onlyWithRemainingQty: true }
+      );
+
+      const deductResult = await deductFromFifo(fifoList, neededQty);
+      if (!deductResult.success) {
+        warnings.push(`${inv?.item_name || inventoryId} (remaining ${deductResult.remaining})`);
+      }
+    }
+
+    if (setInventory) setInventory(inventoryList);
+    return warnings;
+  };
+
+  const restoreOrderInventory = async (order) => {
+    const { data: inventoryData, error: inventoryErr } = await supabase
+      .from("inventory")
+      .select("*");
+    if (inventoryErr) throw inventoryErr;
+
+    const inventoryList = (inventoryData || []).map((i) => ({ ...i }));
+    const neededByInventoryId = buildOrderInventoryRequirements(order);
+    const warnings = [];
+
+    for (const [inventoryId, neededQty] of Object.entries(neededByInventoryId)) {
+      const inv = inventoryList.find((i) => i.id === Number(inventoryId));
+      const currentQty = parseFloat(inv?.qty) || 0;
+      const newQty = currentQty + neededQty;
+
+      const { error: invUpdateErr } = await supabase
+        .from("inventory")
+        .update({ qty: newQty })
+        .eq("id", Number(inventoryId));
+      if (invUpdateErr) throw invUpdateErr;
+
+      if (inv) inv.qty = newQty;
+
+      const fifoList = await buildFifoList(
+        Number(inventoryId),
+        inv?.item_name,
+        inv?.type || inv?.unit,
+        { includePurchase: true, includeAddStock: true, onlyWithRemainingQty: false }
+      );
+
+      const restoreResult = await restoreToFifo(fifoList, neededQty);
+      if (!restoreResult.success) {
+        warnings.push(`${inv?.item_name || inventoryId} (remaining ${restoreResult.remaining})`);
+      }
+    }
+
+    if (setInventory) setInventory(inventoryList);
+    return warnings;
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editOrder) return;
+
+    const previousStatus = editOrder.status || "pending";
+    const newStatus = editForm.status || "pending";
+    const paymentType = editForm.payment_type || null;
+
+    const statusPayload = {
+      status: newStatus,
+      payment_type: paymentType,
+    };
+
+    if (previousStatus !== newStatus) {
+      if (newStatus === "completed") {
+        statusPayload.completed_by = localUser?.id || null;
+        statusPayload.completed_at = new Date().toISOString();
+        statusPayload.cancelled_by = null;
+        statusPayload.cancelled_at = null;
+        statusPayload.cancel_note = null;
+      } else if (newStatus === "cancelled") {
+        statusPayload.cancelled_by = localUser?.id || null;
+        statusPayload.cancelled_at = new Date().toISOString();
+        statusPayload.cancel_note = editOrder.cancel_note || null;
+        statusPayload.completed_by = null;
+        statusPayload.completed_at = null;
+      } else {
+        statusPayload.completed_by = null;
+        statusPayload.completed_at = null;
+        statusPayload.cancelled_by = null;
+        statusPayload.cancelled_at = null;
+        statusPayload.cancel_note = null;
+      }
+    }
+
+    try {
+      const updateOrderStatus = async () => {
+        const { error } = await supabase
+          .from("orders")
+          .update(statusPayload)
+          .eq("id", editOrder.id);
+        if (error) throw error;
+      };
+
+      if (previousStatus === "completed" && newStatus !== "completed") {
+        await restoreOrderInventory(editOrder);
+      }
+
+      if (previousStatus !== "completed" && newStatus === "completed") {
+        await deductOrderInventory(editOrder);
+      }
+
+      await updateOrderStatus();
+
+      setHistory((prev) =>
+        prev.map((order) =>
+          order.id === editOrder.id ? { ...order, ...statusPayload } : order
+        )
+      );
+      setShowEditModal(false);
+      setEditOrder(null);
+      Swal.fire("Success", "Order history updated", "success");
+      fetchHistory();
+    } catch (err) {
+      Swal.fire("Error", err.message || "Failed to update order", "error");
+    }
+  };
 
   // Fetch history in batches so large datasets do not overwhelm the page
   const fetchHistory = async (loadMore = false) => {
@@ -214,8 +407,23 @@ export default function History({ setInventory }) {
     }
   };
 
+  const fetchCancelReasons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("cancel_reason_categories")
+        .select("*")
+        .order("id", { ascending: true });
+      if (error) throw error;
+      setCancelReasons(data || []);
+    } catch (err) {
+      console.error("Failed to load cancel reasons:", err);
+      setCancelReasons([]);
+    }
+  };
+
   useEffect(() => {
     fetchHistory(false);
+    fetchCancelReasons();
   }, []);
 
   // Filtered history based on search, date, and status
@@ -247,13 +455,19 @@ export default function History({ setInventory }) {
     const discountAmount = order.discount_amount || 0;
     const taxPercent = order.tax_percent || 0;
     const taxAmount = order.tax_amount || 0;
+    const manualDiscount = (order.items || []).reduce((sum, item) => {
+      if (item.original_price != null && item.original_price > item.price) {
+        return sum + (item.original_price - item.price) * item.qty;
+      }
+      return sum;
+    }, 0);
     const printedByName = localUser?.full_name || localUser?.username || localUser?.id || 'Unknown';
     const receiptContent = `
       <html>
         <head><title>Order #${order.id}</title></head>
         <body style="font-family: monospace; width: 300px; padding: 10px;">
-          <h1 style="text-align:center;">F&B ATY SLIP</h1>
-          <p>Slip ID: ${order.id}</p>
+          <h1 style="text-align:center;">F&B ATY PRINT SLIP</h1>
+          <p>Print Slip ID: ${order.id}</p>
           <p>Date: ${date}</p>
           <table style="width:100%; border-collapse: collapse;">
             <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
@@ -269,6 +483,7 @@ export default function History({ setInventory }) {
           <hr/>
           <div style="text-align:right;">
             <p>Subtotal: ${mmkFormatter.format(subtotal)}</p>
+            ${manualDiscount > 0 ? `<p style="color:black;">Sub Discount: -${mmkFormatter.format(manualDiscount)}</p>` : ''}
             ${discountAmount > 0 ? `<p style="color:black;">Discount (${discountPercent}%): -${mmkFormatter.format(discountAmount)}</p>` : ''}
             ${taxAmount > 0 ? `<p style="color:black;">Tax (${taxPercent}%): +${mmkFormatter.format(taxAmount)}</p>` : ''}
             <p style="font-weight:bold; font-size:1.2em;">Total: ${mmkFormatter.format(order.total)}</p>
@@ -669,11 +884,17 @@ export default function History({ setInventory }) {
       return Swal.fire("Not allowed", "You do not have permission to cancel orders", "error");
     }
 
+    const inputOptions = cancelReasons.reduce((options, reason) => {
+      options[reason.id] = reason.name;
+      return options;
+    }, { "": "No reason selected" });
+
     const result = await Swal.fire({
       title: "Cancel Order",
-      input: "textarea",
-      inputLabel: "Reason for cancellation (optional)",
-      inputPlaceholder: "Enter note for cancellation...",
+      input: "select",
+      inputLabel: "Select cancel reason (optional)",
+      inputOptions,
+      inputPlaceholder: "Select a reason",
       showCancelButton: true,
       confirmButtonText: "Cancel Order",
       cancelButtonText: "Back",
@@ -682,7 +903,7 @@ export default function History({ setInventory }) {
 
     if (!result.isConfirmed) return;
 
-    const note = (result.value || "").trim();
+    const note = result.value ? inputOptions[result.value] : "";
 
     try {
       // Try to set a cancel_note, cancelled_by and cancelled_at columns if they exist; also update status.
@@ -838,10 +1059,26 @@ export default function History({ setInventory }) {
                           {expandedOrder === order.id ? "−" : "+"}
                         </span>
                       </div>
-                      <span className=" text-sm">Slip :{order.id}</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge.bg} ${statusBadge.text}`}>
-                        {statusBadge.label}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {manualDiscount === 0 && (
+                          <span className="text-sm">Slip :{order.id}</span>
+                        )}
+                        <span className={
+                          `rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${
+                            order.payment_type === 'Kapy' ? 'bg-blue-600 text-white' :
+                            order.payment_type === 'Cash' ? 'bg-emerald-600 text-white' :
+                            order.payment_type === 'FOC' ? 'bg-orange-500 text-white' :
+                            order.payment_type && order.payment_type.toLowerCase().includes('coupon') ? 'bg-fuchsia-600 text-white' :
+                            'bg-slate-100 text-slate-800'
+                          }
+                        `}
+                        >
+                          {order.payment_type || 'N/A'}
+                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge.bg} ${statusBadge.text}`}>
+                          {statusBadge.label}
+                        </span>
+                      </div>
                     </div>
                     <span className="text-sm text-gray-500">
                       {new Date(order.created_at).toLocaleDateString()}<br/>
@@ -925,7 +1162,7 @@ export default function History({ setInventory }) {
                       </div>
                       {manualDiscount > 0 && (
                         <div className="flex justify-between text-red-500">
-                          <span>Manual Discount:</span>
+                          <span>Sub Discount:</span>
                           <span>-{mmkFormatter.format(manualDiscount)}</span>
                         </div>
                       )}
@@ -941,38 +1178,48 @@ export default function History({ setInventory }) {
                           <span>+{mmkFormatter.format(taxAmount)}</span>
                         </div>
                       )}
-                      {order.status === 'completed' && (
-                        <div className="mt-2 p-2 rounded bg-green-50 border border-green-100 text-sm">
-                          <div className="flex justify-between">
-                            <span className="font-semibold text-green-500">Completed</span>
-                            <span className="text-xs text-gray-500">{order.completed_at ? new Date(order.completed_at).toLocaleString() : ''}</span>
-                          </div>
-                          <div className="mt-1 text-sm text-slate-700">By: {order.completed_by_name || order.completed_by || '-'}</div>
-                        </div>
-                      )}
-                      {order.status === 'cancelled' && (
-                        <div className="mt-2 p-3 rounded border border-red-200  text-sm">
-                          <div className="font-semibold text-red-700">Cancelled</div>
-                          <div className="text-xs text-gray-600 mt-1">{order.cancelled_at ? new Date(order.cancelled_at).toLocaleString() : ''}</div>
-                          <div className="mt-2 text-sm text-slate-700">By: {order.cancelled_by_name || order.cancelled_by || '-'}</div>
-                          {order.cancel_note && <div className="mt-1 text-sm text-slate-700">Note: {order.cancel_note}</div>}
-                        </div>
-                      )}
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-4">
                     <span className="font-bold text-lg">Total: {mmkFormatter.format(order.total)}</span>
                   </div>
+                  {order.status === 'completed' && (
+                    <div className="mt-2 p-2 rounded bg-green-50 border border-green-100 text-sm">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-green-500">Completed</span>
+                        <span className="text-xs text-gray-500">{order.completed_at ? new Date(order.completed_at).toLocaleString() : ''}</span>
+                      </div>
+                      <div className="mt-1 text-sm text-slate-700">By: {order.completed_by_name || order.completed_by || '-'}</div>
+                    </div>
+                  )}
+                  {order.status === 'cancelled' && (
+                    <div className="mt-2 p-3 rounded border border-red-200 text-sm">
+                      <div className="font-semibold text-red-700">Cancelled</div>
+                      <div className="text-xs text-gray-600 mt-1">{order.cancelled_at ? new Date(order.cancelled_at).toLocaleString() : ''}</div>
+                      <div className="mt-2 text-sm text-slate-700">By: {order.cancelled_by_name || order.cancelled_by || '-'}</div>
+                      {order.cancel_note && <div className="mt-1 text-sm text-slate-700">Note: {order.cancel_note}</div>}
+                    </div>
+                  )}
 
                   {/* Action Buttons */}
                   <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => printReceipt(order)}
-                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-xl hover:bg-blue-700 transition"
-                    >
-                      Print
-                    </button>
+                    {canEditHistory && (
+                      <button
+                        onClick={() => handleOpenEdit(order)}
+                        className="flex-1 bg-indigo-600 text-white px-3 py-2 rounded-xl hover:bg-indigo-700 transition"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {order.status === 'completed' && (
+                      <button
+                        onClick={() => printReceipt(order)}
+                        className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-xl hover:bg-blue-700 transition"
+                      >
+                        Print
+                      </button>
+                    )}
                     {order.status === 'pending' && (
                       <>
                         {canComplete && (
@@ -1024,6 +1271,62 @@ export default function History({ setInventory }) {
             </button>
           </div>
         </>
+      )}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit Order History</h3>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Payment Type
+              </label>
+              <select
+                name="payment_type"
+                value={editForm.payment_type}
+                onChange={handleEditFormChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select payment type</option>
+                <option value="Kapy">Kapy</option>
+                <option value="Cash">Cash</option>
+                <option value="FOC">FOC</option>
+                <option value="Coupon">Coupon</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Status
+              </label>
+              <select
+                name="status"
+                value={editForm.status}
+                onChange={handleEditFormChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

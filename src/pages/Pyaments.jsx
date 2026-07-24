@@ -35,6 +35,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
 
   const [editQty, setEditQty] = useState({});
   const [itemDiscounts, setItemDiscounts] = useState({}); // { "id-isSet": discount amount }
+  const [itemDiscountTypeSelections, setItemDiscountTypeSelections] = useState({}); // { "id-isSet": discountTypeId }
   const fetchMenu = async () => {
     try {
       const { data: menuData, error: menuErr } = await supabase
@@ -245,7 +246,10 @@ export default function Pyaments({ inventory, setInventory, user }) {
   const itemDiscountedSubtotal = subtotal - itemDiscountAmount;
   const discountPercent = Number(discount) || 0;
   const taxPercent = Number(tax) || 0;
-  const orderDiscountAmount = itemDiscountedSubtotal * (discountPercent / 100);
+  const fixedDiscountAmount = selectedDiscountType?.discount_amount ? Number(selectedDiscountType.discount_amount) : 0;
+  const orderDiscountAmount = fixedDiscountAmount > 0
+    ? Math.min(fixedDiscountAmount, itemDiscountedSubtotal)
+    : itemDiscountedSubtotal * (discountPercent / 100);
   const totalDiscountAmount = itemDiscountAmount + orderDiscountAmount;
   // Coupon: percent coupons are applied on the original subtotal (origin amount)
   const couponDiscount = appliedCoupon
@@ -579,51 +583,45 @@ export default function Pyaments({ inventory, setInventory, user }) {
                 </div>
 
                 {/* Per-item discount */}
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Discount:</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={itemDiscounts[`${item.id}-${item.isSet}`] ?? ""}
+                <div className="mt-2">
+                  <label className="block text-xs text-slate-500 mb-1">Discount Type</label>
+                  <select
+                    value={itemDiscountTypeSelections[`${item.id}-${item.isSet}`] || ""}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "");
-                      setItemDiscounts((prev) => ({ ...prev, [`${item.id}-${item.isSet}`]: val }));
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "");
-                      const num = parseInt(val, 10);
                       const key = `${item.id}-${item.isSet}`;
-                      if (!isNaN(num) && num > 0) {
-                        setItemDiscounts((prev) => ({ ...prev, [key]: num }));
-                      } else {
+                      const selectedId = e.target.value;
+                      if (!selectedId) {
+                        setItemDiscountTypeSelections((prev) => {
+                          const n = { ...prev };
+                          delete n[key];
+                          return n;
+                        });
                         setItemDiscounts((prev) => {
                           const n = { ...prev };
                           delete n[key];
                           return n;
                         });
+                        return;
                       }
+
+                      const selectedType = discountTypes.find((dt) => String(dt.id) === selectedId);
+                      if (!selectedType) return;
+
+                      setItemDiscountTypeSelections((prev) => ({ ...prev, [key]: selectedId }));
+                      const discountValue = selectedType.discount_amount > 0
+                        ? Number(selectedType.discount_amount)
+                        : Math.round((item.price * Number(selectedType.discount_percent)) / 100);
+                      setItemDiscounts((prev) => ({ ...prev, [key]: discountValue }));
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.target.blur();
-                    }}
-                    className="w-24 px-2 py-1 text-sm text-right font-semibold text-slate-800 outline-none bg-white border border-slate-300 rounded-lg"
-                    placeholder="0"
-                  />
-                  {itemDiscounts[`${item.id}-${item.isSet}`] != null && Number(itemDiscounts[`${item.id}-${item.isSet}`]) > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setItemDiscounts((prev) => {
-                          const n = { ...prev };
-                          delete n[`${item.id}-${item.isSet}`];
-                          return n;
-                        });
-                      }}
-                      className="text-xs text-slate-400 hover:text-slate-600"
-                    >
-                      clear
-                    </button>
-                  )}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">Select discount</option>
+                    {discountTypes.map((dt) => (
+                      <option key={dt.id} value={dt.id}>
+                        {dt.name} {dt.discount_amount > 0 ? `(${mmkFormatter.format(dt.discount_amount)})` : `(${dt.discount_percent}%)`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {itemDiscounts[`${item.id}-${item.isSet}`] != null && Number(itemDiscounts[`${item.id}-${item.isSet}`]) > 0 && (
                   <p className="text-xs text-red-500 mt-1">
@@ -634,6 +632,76 @@ export default function Pyaments({ inventory, setInventory, user }) {
             ))}
           </div>
         )}
+          </div>
+        </div>
+
+        {/* Payment Type Selection */}
+        <div className="mt-4 border-t pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Payment Type
+          </label>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                if (paymentType === "FOC") {
+                  setDiscount(0);
+                }
+                setPaymentType("Kpay");
+                setAppliedCoupon(null);
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Kpay"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Kpay
+            </button>
+            <button
+              onClick={() => {
+                if (paymentType === "FOC") {
+                  setDiscount(0);
+                }
+                setPaymentType("Cash");
+                setAppliedCoupon(null);
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Cash"
+                  ? "bg-green-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Cash
+            </button>
+            <button
+              onClick={() => {
+                if (paymentType === "FOC") {
+                  setDiscount(0);
+                }
+                setPaymentType("Coupon");
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "Coupon"
+                  ? "bg-yellow-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Coupon
+            </button>
+            <button
+              onClick={() => {
+                setPaymentType("FOC");
+                setDiscount(100);
+                setAppliedCoupon(null);
+              }}
+              className={`flex-1 py-3 rounded-xl font-medium transition ${
+                paymentType === "FOC"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              FOC
+            </button>
           </div>
         </div>
 
@@ -665,7 +733,12 @@ export default function Pyaments({ inventory, setInventory, user }) {
                     type="button"
                     onClick={() => {
                       setSelectedDiscountType(dt);
-                      setDiscount(dt.discount_percent);
+                      if (dt.discount_amount > 0) {
+                        setDiscount(0);
+                      } else {
+                        setDiscount(dt.discount_percent);
+                      }
+                      setAppliedCoupon(null);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                       selectedDiscountType?.id === dt.id
@@ -673,7 +746,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
-                    {dt.name} ({dt.discount_percent}%)
+                    {dt.name} {dt.discount_amount > 0 ? `(${mmkFormatter.format(dt.discount_amount)})` : `(${dt.discount_percent}%)`}
                   </button>
                 ))}
               </div>
@@ -728,9 +801,13 @@ export default function Pyaments({ inventory, setInventory, user }) {
               )}
             </span>
           </div>
-          {discountPercent > 0 && (
+          {(discountPercent > 0 || fixedDiscountAmount > 0) && (
             <div className="flex justify-between text-sm mb-1 text-red-500">
-              <span>Discount ({discountPercent}%):</span>
+              <span>
+                {selectedDiscountType
+                  ? `Discount (${selectedDiscountType.name}${selectedDiscountType.discount_amount > 0 ? "" : ` ${selectedDiscountType.discount_percent}%`})`
+                  : `Discount (${discountPercent}%)`}
+              </span>
               <span>-{mmkFormatter.format(orderDiscountAmount)}</span>
             </div>
           )}
@@ -749,71 +826,6 @@ export default function Pyaments({ inventory, setInventory, user }) {
           <div className="flex justify-between font-bold text-xl mt-2">
             <span>Total</span>
             <span>{mmkFormatter.format(total)}</span>
-          </div>
-        </div>
-
-        {/* Payment Type Selection */}
-        <div className="mt-4 border-t pt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Payment Type
-          </label>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setPaymentType("Kpay");
-                setDiscount(0);
-                setAppliedCoupon(null);
-              }}
-              className={`flex-1 py-3 rounded-xl font-medium transition ${
-                paymentType === "Kpay"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Kpay
-            </button>
-            <button
-              onClick={() => {
-                setPaymentType("Cash");
-                setDiscount(0);
-                setAppliedCoupon(null);
-              }}
-              className={`flex-1 py-3 rounded-xl font-medium transition ${
-                paymentType === "Cash"
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Cash
-            </button>
-            <button
-              onClick={() => {
-                // Enter coupon payment mode (no other side-effects)
-                setPaymentType("Coupon");
-                setDiscount(0);
-              }}
-              className={`flex-1 py-3 rounded-xl font-medium transition ${
-                paymentType === "Coupon"
-                  ? "bg-yellow-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Coupon
-            </button>
-            <button
-              onClick={() => {
-                setPaymentType("FOC");
-                setDiscount(100);
-                setAppliedCoupon(null);
-              }}
-              className={`flex-1 py-3 rounded-xl font-medium transition ${
-                paymentType === "FOC"
-                  ? "bg-purple-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              FOC
-            </button>
           </div>
         </div>
 
@@ -837,7 +849,7 @@ export default function Pyaments({ inventory, setInventory, user }) {
             onClick={clearCart}
             className="flex-1 bg-red-500 text-white py-3 rounded-2xl hover:bg-red-600"
           >
-            Cancel
+            Clear Cart
           </button>
           <button
             onClick={completeOrder}
